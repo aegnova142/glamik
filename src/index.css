@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-serif: 'Cormorant Garamond', 'Playfair Display', Georgia, serif;
+    --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-cinzel: 'Plus Jakarta Sans', sans-serif;
+
+    /* Official Glamirk Color Palette */
+    --color-primary-black: #0B0B0B;
+    --color-charcoal: #171717;
+    --color-luxury-gold: #C9972B;
+    --color-champagne-gold: #E3B84B;
+    --color-glam-pink: #F05A7E;
+    --color-blush-pink: #FCE8ED;
+    --color-pure-white: #FFFFFF;
+    --color-warm-white: #FAF9F6;
+    --color-text-rich-black: #121212;
+    --color-text-grey: #6B6B6B;
+    --color-border-soft-gold: #E8D5A8;
+
+    /* Legacy mapping helpers */
+    --color-pink-primary: #F05A7E;
+    --color-pink-strong: #F05A7E;
+    --color-pink-light: #FCE8ED;
+    --color-pink-secondary: #FCE8ED;
+    --color-pink-border: #E8D5A8;
+    --color-pink-muted: #FCE8ED;
+    --color-pink-lightest: #FAF9F6;
+    --color-text-primary: #121212;
+    --color-text-secondary: #6B6B6B;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: #121212;
+    background-color: #FAF9F6;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, .font-serif {
+    font-family: var(--font-sans);
+    font-weight: 700;
+  }
+
+  .font-display {
+    font-family: var(--font-sans);
+  }
+
+  .font-cinzel {
+    font-family: var(--font-sans);
+  }
+
+  .font-sans {
+    font-family: var(--font-sans);
+  }
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #FAF9F6;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #E8D5A8;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #C9972B;
+}
+
+/* Official Glamirk Utility Classes */
+.bg-glam-black {
+  background-color: #0B0B0B;
+}
+
+.bg-glam-charcoal {
+  background-color: #171717;
+}
+
+.bg-glam-gold {
+  background-color: #C9972B;
+}
+
+.bg-glam-gold-hover:hover {
+  background-color: #E3B84B;
+}
+
+.text-glam-gold {
+  color: #C9972B;
+}
+
+.border-glam-gold {
+  border-color: #E8D5A8;
+}
+
+.bg-glam-pink {
+  background-color: #F05A7E;
+}
+
+.bg-glam-pink-hover:hover {
+  background-color: #0B0B0B;
+}
+
+.text-glam-pink {
+  color: #F05A7E;
+}
+
+.border-glam-pink {
+  border-color: #E8D5A8;
+}
+
+.bg-glam-soft {
+  background-color: #FCE8ED;
+}
+
+.bg-glam-secondary {
+  background-color: #FCE8ED;
+}
+
+.bg-glam-muted {
+  background-color: #FAF9F6;
+}
+
+.luxury-card-hover {
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.luxury-card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px -5px rgba(201, 151, 43, 0.12), 0 8px 10px -6px rgba(11, 11, 11, 0.04);
+  border-color: #C9972B;
+}
+
+.editorial-overlay {
+  background: linear-gradient(180deg, rgba(11, 11, 11, 0.02) 0%, rgba(11, 11, 11, 0.5) 100%);
+}
+
+

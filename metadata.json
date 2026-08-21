@@ -1,0 +1,6 @@
+{
+  "name": "Glamirk Beauty",
+  "description": "Luxury beauty atelier featuring AI beauty consultation, Find My Shade undertone diagnostics, Virtual Try-On, The Glamirk Journal, and social commerce for Glamirk Beauty Private Limited.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

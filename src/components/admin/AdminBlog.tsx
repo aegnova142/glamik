@@ -6,45 +6,58 @@
 import React, { useState } from 'react';
 import { useCMS } from '../../context/CMSContext';
 import { JournalArticle } from '../../types';
-import { Layers, Plus, Trash2, Edit2, Save, Check, ArrowLeft, BookOpen } from 'lucide-react';
+import { Plus, Trash2, Save, Check, ArrowLeft } from 'lucide-react';
+import { ImageCropUploadModal } from './ImageCropUploadModal';
+
+const CATEGORY_OPTIONS = ['BEAUTY GUIDES', 'MAKEUP', 'SKIN', 'NAILS', 'GLAMIRK STORIES', 'TRENDS'];
 
 export const AdminBlog: React.FC = () => {
   const { journalArticles, saveArticle, deleteArticle } = useCMS();
   const [editingArticle, setEditingArticle] = useState<JournalArticle | null>(null);
+  const [contentDraft, setContentDraft] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+
+  const openEditor = (art: JournalArticle) => {
+    setEditingArticle(art);
+    setContentDraft((art.content || []).join('\n\n'));
+  };
 
   const handleCreateArticle = () => {
     const newArt: JournalArticle = {
       id: 'article-' + Date.now(),
       slug: 'new-editorial-study',
       title: 'The Chemistry of Warm Lip Pigmentation',
-      category: 'Ingredient Science',
+      subtitle: '',
+      category: 'BEAUTY GUIDES',
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       readTime: '4 min read',
       author: 'Glamirk Atelier Formulation Lab',
+      authorRole: '',
       excerpt: 'Exploring how micronized red iron oxides interact with melanin undertones.',
       image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=1200&q=80',
+      isEditorsPick: false,
+      isHero: false,
+      isTrending: false,
       content: [
         'When formulating velvet lip colors for melanin-rich complexions, standard titanium dioxide ratios often cause ashen cast.',
-        'At Glamirk, our chemists hand-balance yellow and warm ochre undertones with cold red iron oxides to ensure vibrant payoff on every skin tone.',
-      ],
-      sections: [
-        {
-          heading: 'Balancing the Base Matrix',
-          paragraphs: [
-            'Our proprietary wax matrix maintains moisture while binding intense pigments to prevent feathering.',
-          ],
-        },
       ],
     };
-    setEditingArticle(newArt);
+    openEditor(newArt);
   };
 
   const handleSave = async () => {
     if (!editingArticle) return;
     setIsSaving(true);
-    const ok = await saveArticle(editingArticle);
+    const articleToSave: JournalArticle = {
+      ...editingArticle,
+      content: contentDraft
+        .split(/\n\s*\n/)
+        .map((p) => p.trim())
+        .filter(Boolean),
+    };
+    const ok = await saveArticle(articleToSave);
     setIsSaving(false);
     if (ok) {
       setSaveSuccess(true);
@@ -52,6 +65,12 @@ export const AdminBlog: React.FC = () => {
         setSaveSuccess(false);
         setEditingArticle(null);
       }, 700);
+    }
+  };
+
+  const handleDelete = (art: JournalArticle) => {
+    if (window.confirm(`Delete "${art.title}"? This cannot be undone.`)) {
+      deleteArticle(art.id);
     }
   };
 
@@ -92,17 +111,32 @@ export const AdminBlog: React.FC = () => {
             />
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+              Subtitle
+            </label>
+            <input
+              type="text"
+              value={editingArticle.subtitle || ''}
+              onChange={(e) => setEditingArticle({ ...editingArticle, subtitle: e.target.value })}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
                 Category
               </label>
-              <input
-                type="text"
+              <select
                 value={editingArticle.category}
                 onChange={(e) => setEditingArticle({ ...editingArticle, category: e.target.value })}
                 className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
-              />
+              >
+                {CATEGORY_OPTIONS.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
@@ -117,16 +151,83 @@ export const AdminBlog: React.FC = () => {
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                Author
+              </label>
+              <input
+                type="text"
+                value={editingArticle.author}
+                onChange={(e) => setEditingArticle({ ...editingArticle, author: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                Author Role
+              </label>
+              <input
+                type="text"
+                value={editingArticle.authorRole || ''}
+                onChange={(e) => setEditingArticle({ ...editingArticle, authorRole: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-              Cover Image URL
+              Publish Date
             </label>
             <input
               type="text"
-              value={editingArticle.image}
-              onChange={(e) => setEditingArticle({ ...editingArticle, image: e.target.value })}
+              value={editingArticle.date}
+              onChange={(e) => setEditingArticle({ ...editingArticle, date: e.target.value })}
               className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+              Cover Image <span className="normal-case text-[#6B6B6B]">(locked to 4:3 — matches the Journal card)</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={editingArticle.image}
+                onChange={(e) => setEditingArticle({ ...editingArticle, image: e.target.value })}
+                placeholder="https://... or use Upload & Crop"
+                className="flex-1 px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+              />
+              <button
+                type="button"
+                onClick={() => setIsUploadOpen(true)}
+                className="px-3 py-2 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] transition-colors cursor-pointer whitespace-nowrap"
+              >
+                Upload &amp; Crop
+              </button>
+            </div>
+            {editingArticle.image && (
+              <div className="mt-2 w-full h-28 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B]">
+                <img src={editingArticle.image} alt="Cover" className="w-full h-full object-cover" />
+              </div>
+            )}
+            {isUploadOpen && (
+              <ImageCropUploadModal
+                isOpen
+                onClose={() => setIsUploadOpen(false)}
+                title="Upload Article Cover Image"
+                aspectRatio={4 / 3}
+                minWidth={600}
+                minHeight={450}
+                recommendedWidth={1200}
+                recommendedHeight={900}
+                outputWidth={1200}
+                outputHeight={900}
+                onUploaded={({ url }) => setEditingArticle((prev) => (prev ? { ...prev, image: url } : prev))}
+              />
+            )}
           </div>
 
           <div>
@@ -139,6 +240,48 @@ export const AdminBlog: React.FC = () => {
               onChange={(e) => setEditingArticle({ ...editingArticle, excerpt: e.target.value })}
               className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+              Full Article Content <span className="normal-case text-[#6B6B6B]">(separate paragraphs with a blank line)</span>
+            </label>
+            <textarea
+              rows={8}
+              value={contentDraft}
+              onChange={(e) => setContentDraft(e.target.value)}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-[#E8D5A8]/10">
+            <label className="flex items-center gap-2 text-xs text-[#FAF9F6] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!editingArticle.isEditorsPick}
+                onChange={(e) => setEditingArticle({ ...editingArticle, isEditorsPick: e.target.checked })}
+                className="accent-[#C9972B]"
+              />
+              Editor's Pick
+            </label>
+            <label className="flex items-center gap-2 text-xs text-[#FAF9F6] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!editingArticle.isHero}
+                onChange={(e) => setEditingArticle({ ...editingArticle, isHero: e.target.checked })}
+                className="accent-[#C9972B]"
+              />
+              Featured Hero Story
+            </label>
+            <label className="flex items-center gap-2 text-xs text-[#FAF9F6] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!editingArticle.isTrending}
+                onChange={(e) => setEditingArticle({ ...editingArticle, isTrending: e.target.checked })}
+                className="accent-[#C9972B]"
+              />
+              Trending
+            </label>
           </div>
         </div>
       </div>
@@ -172,27 +315,32 @@ export const AdminBlog: React.FC = () => {
           >
             <div className="h-44 relative bg-[#0B0B0B]">
               <img src={art.image} alt={art.title} className="w-full h-full object-cover" />
-              <span className="absolute top-3 left-3 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#0B0B0B]/80 text-[#C9972B] border border-[#C9972B]/30">
-                {art.category}
-              </span>
+              <div className="absolute top-2 left-2 flex gap-1.5">
+                {art.isHero && (
+                  <span className="px-2 py-0.5 bg-[#F05A7E] text-white text-[9px] font-bold uppercase tracking-wider rounded-full">Hero</span>
+                )}
+                {art.isEditorsPick && (
+                  <span className="px-2 py-0.5 bg-[#C9972B] text-[#0B0B0B] text-[9px] font-bold uppercase tracking-wider rounded-full">Editor's Pick</span>
+                )}
+              </div>
             </div>
 
             <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
               <div>
-                <span className="text-[10px] text-[#6B6B6B] font-mono">{art.date} · {art.readTime}</span>
+                <span className="text-[10px] text-[#6B6B6B] font-mono">{art.date} · {art.readTime} · {art.category}</span>
                 <h3 className="font-serif text-base text-[#FAF9F6] mt-1">{art.title}</h3>
                 <p className="text-xs text-[#6B6B6B] line-clamp-2 mt-2">{art.excerpt}</p>
               </div>
 
               <div className="pt-3 border-t border-[#E8D5A8]/10 flex items-center justify-end gap-2">
                 <button
-                  onClick={() => setEditingArticle(art)}
+                  onClick={() => openEditor(art)}
                   className="px-3 py-1.5 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-xs font-semibold transition-colors cursor-pointer"
                 >
                   Edit
                 </button>
                 <button
-                  onClick={() => deleteArticle(art.id)}
+                  onClick={() => handleDelete(art)}
                   className="p-1.5 hover:bg-[#F05A7E]/20 text-[#F05A7E] rounded transition-colors cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />

@@ -1,23 +1,17 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
-import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import apiRouter from './server/routes';
+import commerceRouter from './server/commerce';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Body parsing middlewares
   app.use(express.json({ limit: '20mb' }));
   app.use(express.urlencoded({ extended: true, limit: '20mb' }));
-
-  // Static uploads directory
-  const uploadsDir = path.join(process.cwd(), 'uploads');
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
-  app.use('/uploads', express.static(uploadsDir));
 
   // Health check route
   app.get('/api/health', (req, res) => {
@@ -26,6 +20,7 @@ async function startServer() {
 
   // API routes
   app.use('/api', apiRouter);
+  app.use('/api/customer', commerceRouter);
 
   // Vite middleware for development vs static serve for production
   if (process.env.NODE_ENV !== 'production') {

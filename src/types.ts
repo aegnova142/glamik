@@ -63,6 +63,7 @@ export interface Product {
   benefits: string[];
   isVerified?: boolean;
   inStock: boolean;
+  stock: number;
   rating?: number;
   reviewCount?: number;
   finish?: 'Matte' | 'Velvet' | 'Natural Melting' | 'Glossy' | 'Satin' | string;
@@ -72,6 +73,8 @@ export interface Product {
   details: ProductDetails;
   relatedProductIds: string[];
   completeTheLookProductIds: string[];
+  enableQuickView?: boolean;
+  enableTryOn?: boolean;
 }
 
 export interface CartItem {
@@ -84,12 +87,13 @@ export interface CartItem {
 export interface FilterState {
   category?: string | null;
   subCategory?: string | null;
-  finish?: string[];
-  undertone?: string[];
-  skinTone?: string[];
-  coverage?: string[];
-  priceRange?: [number, number];
-  inStockOnly?: boolean;
+  priceRanges: string[];
+  undertones: string[];
+  finishes: string[];
+  skinTypes: string[];
+  coverages: string[];
+  shades: string[];
+  inStockOnly: boolean;
 }
 
 export type SortOption =
@@ -283,6 +287,7 @@ export interface QuizResult {
 
 export type PageRoute =
   | { page: 'home' }
+  | { page: 'about' }
   | { page: 'shop'; category?: string | null; subCategory?: string | null }
   | { page: 'product'; productId: string }
   | { page: 'shop-the-look'; lookId?: string }
@@ -463,6 +468,26 @@ export type OrderStatus =
   | 'DELIVERED'
   | 'CANCELLED'
   | 'RETURN_REQUESTED';
+
+export interface CustomerUser {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  createdAt: string;
+}
+
+export interface ServerCartItem {
+  id: string;
+  productId: string;
+  variantId: string | null;
+  quantity: number;
+  product: Product;
+  selectedShade?: Shade;
+  lineTotal: number;
+  unavailable?: boolean;
+  maxAvailable?: number;
+}
 
 export interface OrderItem {
   productId: string;
@@ -662,6 +687,7 @@ export interface CMSFooterLink {
 export interface CMSFooterColumn {
   id: string;
   title: string;
+  icon?: string;
   order: number;
   links: CMSFooterLink[];
 }
@@ -693,6 +719,8 @@ export interface CMSFooterConfig {
   copyright?: string;
   legalLinks: { id: string; label: string; url: string; policyKey?: string }[];
   legalPolicies?: Record<string, CMSLegalPolicyContent>;
+  paymentMethods?: string[];
+  trustBadges?: { id: string; icon: string; title: string; subtitle: string }[];
 }
 
 export interface CMSOffer {
@@ -744,6 +772,7 @@ export interface CMSMediaItem {
   altText: string;
   dimensions?: string;
   uploadedAt: string;
+  publicId?: string;
 }
 
 export interface CMSAnnouncementMessage {
@@ -805,6 +834,148 @@ export interface CMSUser {
   createdAt: string;
 }
 
+export interface CMSAboutAccordionItem {
+  id: string;
+  label: string;
+  content: string;
+}
+
+export interface CMSAboutFounder {
+  id: string;
+  name: string;
+  title: string;
+  focus: string;
+  image: string;
+  imagePublicId?: string;
+}
+
+export interface CMSAboutFactCard {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface CMSAboutValue {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+}
+
+export interface CMSAboutPremiumCard {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface CMSAboutDifferentiator {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface CMSAboutNeverItem {
+  id: string;
+  text: string;
+}
+
+export interface CMSAboutContent {
+  statementParagraphs: string[];
+  brandSnapshot: CMSAboutFactCard[];
+  founders: CMSAboutFounder[];
+  founderStoryAccordion: CMSAboutAccordionItem[];
+  ourStoryAccordion: CMSAboutAccordionItem[];
+  mission: string;
+  vision: string;
+  values: CMSAboutValue[];
+  premiumStandardIntro: string;
+  premiumStandardCards: CMSAboutPremiumCard[];
+  differentiators: CMSAboutDifferentiator[];
+  neverBecome: CMSAboutNeverItem[];
+  futureVisionAccordion: CMSAboutAccordionItem[];
+  elevatorPitchQuote: string;
+  primaryCtaText: string;
+  secondaryCtaText: string;
+}
+
+export interface CMSBenefit {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  imageUrl?: string;
+  imagePublicId?: string;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CMSHeroTrustItem {
+  id: string;
+  icon: string;
+  text: string;
+}
+
+export interface CMSHeroTrustBarItem {
+  id: string;
+  icon: string;
+  title: string;
+  subtitle: string;
+}
+
+export interface CMSHeroSlide {
+  id: string;
+  badgeText: string;
+  headingLine1: string;
+  headingPrefix: string;
+  headingHighlight: string;
+  description: string;
+  primaryCtaText: string;
+  secondaryCtaText: string;
+  image: string;
+  imageBadgeLabel: string;
+  imageProductName: string;
+  imagePrice: string;
+}
+
+export interface CMSHeroContent {
+  badgeText: string;
+  headingLine1: string;
+  headingPrefix: string;
+  headingHighlight: string;
+  description: string;
+  primaryCtaText: string;
+  secondaryCtaText: string;
+  trustIndicators: CMSHeroTrustItem[];
+  image: string;
+  imageBadgeLabel: string;
+  imageProductName: string;
+  imagePrice: string;
+  trustBar: CMSHeroTrustBarItem[];
+  slides?: CMSHeroSlide[];
+}
+
+export interface CMSJourneyStep {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+}
+
+export interface CMSShadeJourney {
+  eyebrow: string;
+  title: string;
+  titleHighlight: string;
+  steps: CMSJourneyStep[];
+}
+
+export interface CMSBenefitsSection {
+  eyebrow: string;
+  title: string;
+  titleHighlight: string;
+}
+
 export interface CMSDatabaseSchema {
   users: CMSUser[];
   pages: CMSPage[];
@@ -818,5 +989,11 @@ export interface CMSDatabaseSchema {
   media: CMSMediaItem[];
   globalSettings: CMSGlobalSettings;
   auditLogs: CMSAuditLog[];
+  heroContent: CMSHeroContent;
+  aboutContent: CMSAboutContent;
+  benefits: CMSBenefit[];
+  benefitsSection: CMSBenefitsSection;
+  looks: Look[];
+  shadeJourney: CMSShadeJourney;
 }
 

@@ -1,5 +1,4 @@
-import fs from 'fs';
-import path from 'path';
+import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
 import {
   CMSDatabaseSchema,
@@ -12,10 +11,16 @@ import {
   CMSMediaItem,
   CMSGlobalSettings,
   CMSAuditLog,
+  CMSHeroContent,
+  CMSAboutContent,
+  CMSBenefit,
+  CMSBenefitsSection,
+  CMSShadeJourney,
   Product,
   JournalArticle,
   SupportFaq,
 } from '../src/types';
+import { GLAMIRK_LOOKS } from '../src/data/looks';
 
 // Initial seed data imports
 import { GLAMIRK_PRODUCTS } from '../src/data/products';
@@ -25,12 +30,109 @@ import {
 } from '../src/data/editorial';
 import { SUPPORT_FAQS } from '../src/data/commerce';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_FILE = path.join(DATA_DIR, 'cms-database.json');
+// Neon Postgres connection. DATABASE_URL must be a Neon connection string
+// (postgresql://user:pass@ep-xxxx.neon.tech/dbname?sslmode=require).
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error(
+    'DATABASE_URL is not set. Add your Neon Postgres connection string to .env (see .env.example).'
+  );
+}
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+const pool = new Pool({
+  connectionString,
+  ssl: { rejectUnauthorized: false },
+});
+
+// Neon suspends/drops idle connections; without this handler an idle
+// client's ECONNRESET crashes the whole process (unhandled 'error' event).
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle Postgres client:', err);
+});
+
+const STATE_ROW_ID = 'main';
+
+let schemaReady: Promise<void> | null = null;
+
+function ensureSchema(): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = pool.query(`
+      CREATE TABLE IF NOT EXISTS cms_state (
+        id TEXT PRIMARY KEY,
+        data JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS customers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        phone TEXT,
+        password_hash TEXT NOT NULL,
+        reset_token TEXT,
+        reset_token_expiry TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS reset_token TEXT;
+      ALTER TABLE customers ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMPTZ;
+
+      CREATE TABLE IF NOT EXISTS wishlist_items (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        product_id TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (user_id, product_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS cart_items (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        product_id TEXT NOT NULL,
+        variant_id TEXT,
+        quantity INTEGER NOT NULL CHECK (quantity > 0),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (user_id, product_id, variant_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS orders (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES customers(id),
+        order_number TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'CONFIRMED',
+        subtotal NUMERIC NOT NULL,
+        total NUMERIC NOT NULL,
+        shipping_address JSONB,
+        idempotency_key TEXT UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS order_items (
+        id TEXT PRIMARY KEY,
+        order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        product_id TEXT NOT NULL,
+        variant_id TEXT,
+        product_name TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        price NUMERIC NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `).then(() => undefined);
+  }
+  return schemaReady;
+}
+
+export { pool };
+
+// Simple in-process mutex so concurrent checkout requests never race on
+// reading/decrementing the same product's stock (cachedDb is shared across
+// requests in this single Node process).
+let stockLockChain: Promise<any> = Promise.resolve();
+export function withStockLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = stockLockChain.then(fn, fn);
+  stockLockChain = run.catch(() => undefined);
+  return run;
 }
 
 // User with hashed password storage (internal)
@@ -183,43 +285,42 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
         title: 'Shop',
         order: 1,
         links: [
-          { id: 'l1', label: 'Matte Liquid Lipsticks', url: '/shop?category=Makeup&sub=Lips', actionKey: 'shop-lips' },
-          { id: 'l2', label: 'Luxury Sindoor', url: '/shop?category=Makeup&sub=Face', actionKey: 'shop-sindoor' },
-          { id: 'l3', label: 'Balm To Water Cleanser', url: '/shop?category=Skin&sub=Cleansing', actionKey: 'shop-cleanser' },
-          { id: 'l4', label: 'Shop All Creations', url: '/shop', actionKey: 'shop-all' },
+          { id: 'l1', label: 'All Products', url: '/shop', actionKey: 'shop-all' },
+          { id: 'l2', label: 'Best Sellers', url: '/shop', actionKey: 'shop-all' },
+          { id: 'l3', label: 'New Arrivals', url: '/shop', actionKey: 'shop-all' },
+          { id: 'l4', label: 'Personalized Kit', url: '/find-my-shade', actionKey: 'shade-finder' },
         ],
       },
       {
-        id: 'col-editorial',
-        title: 'Editorial & Journal',
+        id: 'col-about',
+        title: 'About',
         order: 2,
         links: [
-          { id: 'l5', label: 'The Glamirk Journal', url: '/journal', actionKey: 'journal' },
-          { id: 'l6', label: 'Beauty Guides & Rituals', url: '/beauty-guides', actionKey: 'guides' },
-          { id: 'l7', label: 'Glamirk On You (Social)', url: '/social-commerce', actionKey: 'social' },
-          { id: 'l8', label: 'Sovereign Velvet Campaign', url: '/campaign/sovereign-velvet-festive', actionKey: 'campaign' },
+          { id: 'l5', label: 'Our Story', url: '/about', actionKey: 'about' },
+          { id: 'l6', label: 'Our Mission', url: '/about', actionKey: 'about' },
+          { id: 'l7', label: 'Our Values', url: '/about', actionKey: 'about' },
         ],
       },
       {
-        id: 'col-discovery',
-        title: 'Discovery & AI',
+        id: 'col-help',
+        title: 'Help',
         order: 3,
         links: [
-          { id: 'l9', label: 'Find Your Shade Diagnostic', url: '/find-my-shade', actionKey: 'shade-finder' },
-          { id: 'l10', label: 'Shop The Look', url: '/looks', actionKey: 'looks' },
-          { id: 'l11', label: 'Glamirk Privé Loyalty', url: '/my-glam', actionKey: 'loyalty' },
-          { id: 'l12', label: 'Atelier Philosophy', url: '/#philosophy', actionKey: 'philosophy' },
+          { id: 'l8', label: 'FAQ', url: '/support', actionKey: 'support' },
+          { id: 'l9', label: 'Contact', url: '/support', actionKey: 'support' },
+          { id: 'l10', label: 'Shipping', url: '/legal?policy=shipping', actionKey: 'legal-shipping' },
+          { id: 'l11', label: 'Returns', url: '/legal?policy=returns', actionKey: 'legal-returns' },
+          { id: 'l12', label: 'Track Order', url: '/order-tracking', actionKey: 'tracking' },
         ],
       },
       {
-        id: 'col-care',
-        title: 'Client Care',
+        id: 'col-legal',
+        title: 'Legal',
         order: 4,
         links: [
-          { id: 'l13', label: 'Concierge Support & FAQ', url: '/support', actionKey: 'support' },
-          { id: 'l14', label: 'Track Your Order', url: '/order-tracking', actionKey: 'tracking' },
-          { id: 'l15', label: 'Shipping & Returns', url: '/legal?policy=shipping', actionKey: 'legal-shipping' },
-          { id: 'l16', label: 'My Glam Account', url: '/my-glam', actionKey: 'my-glam' },
+          { id: 'l13', label: 'Privacy Policy', url: '/legal?policy=privacy', actionKey: 'legal-privacy' },
+          { id: 'l14', label: 'Terms of Use', url: '/legal?policy=terms', actionKey: 'legal-terms' },
+          { id: 'l15', label: 'Refund Policy', url: '/legal?policy=returns', actionKey: 'legal-returns' },
         ],
       },
     ],
@@ -230,13 +331,19 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
     ],
     contactEmail: 'care@glamirk.com',
     contactPhone: '+91 800 452 6475',
-    copyrightText: '© 2026 Glamirk Beauty Private Limited. All rights reserved.',
-    copyright: '© 2026 Glamirk Beauty Private Limited. All rights reserved.',
+    copyrightText: '© 2026 Glamirk Luxury Beauty. All rights reserved.',
+    copyright: '© 2026 Glamirk Luxury Beauty. All rights reserved.',
     legalLinks: [
       { id: 'leg-priv', label: 'Privacy Policy', url: '/legal?policy=privacy', policyKey: 'privacy' },
       { id: 'leg-term', label: 'Terms of Service', url: '/legal?policy=terms', policyKey: 'terms' },
       { id: 'leg-ship', label: 'Shipping Policy', url: '/legal?policy=shipping', policyKey: 'shipping' },
       { id: 'leg-cook', label: 'Cookie Policy', url: '/legal?policy=cookies', policyKey: 'cookies' },
+    ],
+    paymentMethods: ['Visa', 'Mastercard', 'RuPay', 'UPI', 'Amex'],
+    trustBadges: [
+      { id: 'tb-secure', icon: 'ShieldCheck', title: '100% Secure', subtitle: 'Payments' },
+      { id: 'tb-returns', icon: 'RotateCcw', title: 'Easy Returns', subtitle: 'Hassle-free' },
+      { id: 'tb-support', icon: 'Headphones', title: 'Customer Support', subtitle: 'Mon - Sat | 10AM - 7PM' },
     ],
     legalPolicies: {
       privacy: {
@@ -667,6 +774,123 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
     },
   ];
 
+  const initialHeroContent: CMSHeroContent = {
+    badgeText: 'Radiate Confidence Every Day',
+    headingLine1: 'Beauty & Radiance',
+    headingPrefix: 'for a ',
+    headingHighlight: 'Better You',
+    description: 'Discover premium beauty essentials and shade-matching formulations engineered to amplify your natural glow.',
+    primaryCtaText: 'Shop Now',
+    secondaryCtaText: 'Find My Shade',
+    trustIndicators: [
+      { id: 'ti-1', icon: 'ShieldCheck', text: 'Dermatologist Approved' },
+      { id: 'ti-2', icon: 'Sparkles', text: 'Formulated for Indian Skin' },
+      { id: 'ti-3', icon: 'ShieldCheck', text: '100% Vegan & Cruelty-Free' },
+    ],
+    image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1000&q=85',
+    imageBadgeLabel: 'SIGNATURE COLLECTION',
+    imageProductName: 'Matte Liquid & Cleansing Balm',
+    imagePrice: '₹299+',
+    trustBar: [
+      { id: 'tb-1', icon: 'ShieldCheck', title: '100% Authentic', subtitle: 'Certified original beauty' },
+      { id: 'tb-2', icon: 'Sparkles', title: 'Expert Approved', subtitle: 'Dermatologically safe' },
+      { id: 'tb-3', icon: 'Truck', title: 'Fast Delivery', subtitle: 'Express pan-India transit' },
+    ],
+  };
+
+  const initialAboutContent: CMSAboutContent = {
+    statementParagraphs: [
+      "At Glamirk, we believe that true beauty shouldn't demand a compromise between instant impact and long-term skin health. We are a team of Beauty Advisors, creators, strategists, and beauty enthusiasts united by a single conviction: everyday routines should feel effortless, ethical, and deeply transformative.",
+      'Bare skin should look better after you take your makeup off than before you put it on. By combining active botanical extracts, bio-fermented ingredients, and zero-irritation pigments, Glamirk delivers instant aesthetic impact paired with active skin therapy as a makeup brand.',
+    ],
+    brandSnapshot: [
+      { id: 'bs-1', title: 'Brand Name', description: 'Glamirk' },
+      { id: 'bs-2', title: 'One-Line Description', description: 'Radiance without compromise. Amplify your beauty.' },
+      { id: 'bs-3', title: 'What We Sell', description: 'Premium, affordable, multi-use color cosmetics and tailored personal care formulations.' },
+      { id: 'bs-4', title: 'Overall Philosophy', description: 'Beauty should be effortless, ethical, and effective&mdash;bridging clinical-grade ingredients with luxurious self-care.' },
+    ],
+    founders: [
+      { id: 'f-1', name: 'Digangana Suryavanshi', title: 'Chief Customer Officer', focus: "Champions every client's journey — from first shade match to lifelong loyalty.", image: 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?auto=format&fit=crop&w=400&q=80' },
+      { id: 'f-2', name: 'Aqueel Ahmed', title: 'Chief Financial Officer', focus: 'Stewards sustainable growth, from ethical sourcing to accessible pricing.', image: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80' },
+      { id: 'f-3', name: 'Vijay Laxmi Sharma', title: 'Chief Growth Officer', focus: "Drives Glamirk's expansion into new markets and beauty rituals.", image: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=400&q=80' },
+      { id: 'f-4', name: 'Poonam Dadhich', title: 'Chief Marketing Officer', focus: 'Shapes the Glamirk voice — editorial storytelling rooted in inclusivity.', image: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=400&q=80' },
+    ],
+    founderStoryAccordion: [
+      { id: 'founder-story', label: 'The Founder Story', content: "After years of navigating sensitive skin reactions while working in fast-paced creative environments, we partnered with leading cosmetic chemists to create high-performing, skin-first makeup. As someone who lived in high-stress, fast-paced creative spaces, my skin was constantly paying the price. Heavy studio makeup and long hours kept triggering reactions, but 'gentle' alternatives just couldn't last through the day. That frustration became Glamirk. We partnered with leading cosmetic chemists to create a new standard: makeup that delivers vibrant, high-impact results while actively respecting and supporting sensitive skin." },
+      { id: 'founder-why', label: 'Why Glamirk Was Created', content: 'Glamirk was founded to eliminate the compromise between instant cosmetic impact and long-term skin health. It answers the need for high-performance makeup infused with clinical-grade skincare.' },
+      { id: 'founder-problem', label: 'The Problem Solved', content: 'Traditional cosmetics often act as a mask that clogs pores and degrades skin quality over time, forcing consumers into a cycle of using more makeup to cover skin damage caused by their makeup.' },
+      { id: 'founder-exist', label: 'Why Glamirk Needs to Exist', content: 'Most beauty brands fall into one of two extremes: "clean" natural products that lack vibrancy and longevity, or high-pigment cosmetics packed with harsh synthetic fillers. Glamirk exists as the bio-compatible bridge where high pigment meets active dermal repair.' },
+      { id: 'founder-name', label: 'What "Glamirk" Means', content: 'A blend of Glamour (expressive, high-impact aesthetics) and Smirk (a smile which you have when you are pleased with yourself).' },
+      { id: 'founder-pitch', label: 'The Elevator Pitch', content: 'Glamirk is the hybrid beauty brand that gives you immediate editorial-level color while actively repairing your skin barrier.' },
+    ],
+    ourStoryAccordion: [
+      { id: 'story-start', label: 'How It Started', content: 'Born in a small laboratory setting out of a passion for functional aesthetics, Glamirk began as an answer to overly complicated, multi-step routines that yielded minimal results.' },
+      { id: 'story-why', label: 'Why It Was Created', content: 'To strip away unnecessary fillers and toxic additives, replacing them with concentrated, bio-compatible ingredients.' },
+      { id: 'story-problem', label: 'The Problem Solved', content: 'The market was divided between high-performing chemicals that irritated the skin barrier and "clean" natural products that lacked visible results. Glamirk offers the sweet spot: active performance with gentle ingredients.' },
+      { id: 'story-milestones', label: 'Milestones', content: 'Formulated the flagship barrier-repair serum; sold more than 100,000 products; transitioned to 100% post-consumer recycled glass packaging.' },
+    ],
+    mission: 'To empower individuals through simple, highly effective beauty rituals that nurture skin health, enhance confidence, and celebrate individuality.',
+    vision: 'To become a global icon in sustainable luxury, setting new standards for clean science and skin inclusivity worldwide.',
+    values: [
+      { id: 'v-1', icon: 'ShieldCheck', title: 'Quality', description: 'Medical-grade purity in every batch, rigorously batch-tested for potency.' },
+      { id: 'v-2', icon: 'Eye', title: 'Transparency', description: 'Full ingredient lists with explicit percentages for key actives.' },
+      { id: 'v-3', icon: 'Users', title: 'Inclusivity', description: 'Formulations designed to perform across diverse skin tones, textures, and age groups.' },
+      { id: 'v-4', icon: 'Leaf', title: 'Sustainability', description: 'Sourcing ethically, minimizing plastic, and prioritizing refillable designs.' },
+      { id: 'v-5', icon: 'FlaskConical', title: 'Innovation', description: 'Utilizing bio-fermented actives and micro-encapsulation for deep delivery.' },
+      { id: 'v-6', icon: 'Heart', title: 'Customer-First', description: 'Responsive formulation updates directly driven by community feedback.' },
+    ],
+    premiumStandardIntro: 'Glamirk achieves its premium status through uncompromising ingredient integrity and tactile design. Rapid-absorbing silk textures of our formulas, every touchpoint delivers a sensory, high-performance experience.',
+    premiumStandardCards: [
+      { id: 'ps-1', title: 'Ingredients & Formulation', description: 'Key Actives: Niacinamide, bio-fermented hyaluronic acid, squalane, and botanical peptides. Free-From: 0% parabens, phthalates, synthetic fragrance, sulfates, or mineral oil.' },
+      { id: 'ps-2', title: 'Quality, Safety & Sustainability', description: 'Testing: Clinical third-party testing, dermatologist-approved, non-irritating certification. Eco-Footprint: 100% recyclable glass containers, soy-based inks, FSC-certified paper cartons, and an active refill scheme.' },
+      { id: 'ps-3', title: 'Inclusivity', description: 'Skin Tones: Non-ashy mineral pigments for rich color payoff on deep skin tones. Skin Types: Adaptive formulas for oil-control, dry barrier repair, and balanced hydration.' },
+    ],
+    differentiators: [
+      { id: 'd-1', title: 'Active-Infused Pigments', description: 'Every color product contains therapeutic percentages of skincare actives (e.g., niacinamide, ceramide complexes, peptides) rather than token trace amounts.' },
+      { id: 'd-2', title: 'Skin Barrier First', description: 'Formulated without common sensitizers, synthetic heavy fragrances, or silicones that trap impurities.' },
+      { id: 'd-3', title: 'Zero-G Texture Technology', description: 'Formulations engineered to feel weightless on the skin while providing buildable, full-spectrum coverage.' },
+    ],
+    neverBecome: [
+      { id: 'nb-1', text: 'A trend-chasing brand dropping low-quality products every month that end up in landfills.' },
+      { id: 'nb-2', text: 'A brand using buzzword ingredients at non-functional levels just for marketing claims.' },
+      { id: 'nb-3', text: 'An exclusive club that over-complicates routines or prices out consumers seeking genuine quality and skin inclusivity.' },
+    ],
+    futureVisionAccordion: [
+      { id: 'future-vision', label: 'Product Innovation, Digital Dominance & Retention', content: 'Executing this vision requires focusing on three fundamental pillars: product innovation, digital dominance, and customer retention. Digitally, growth relies on optimizing direct-to-consumer channels with AI-driven recommendations and immersive try-on experiences, while tapping into social commerce and creator partnerships on platforms like Facebook and Instagram. Customer retention then ties the ecosystem together through VIP loyalty structures, exclusive perks, and tailored lifecycle marketing that converts casual buyers into brand advocates.' },
+    ],
+    elevatorPitchQuote: 'Glamirk is the hybrid beauty brand that gives you immediate editorial-level color while actively repairing your skin barrier.',
+    primaryCtaText: 'Shop Glamirk',
+    secondaryCtaText: 'Contact Us',
+  };
+
+  const nowIso = new Date().toISOString();
+  const initialBenefits: CMSBenefit[] = [
+    { id: 'ben-1', title: 'Thoughtfully Crafted', description: 'Carefully calibrated cosmetic formulations designed for weightless, comfortable daily wear.', icon: 'Feather', displayOrder: 1, isActive: true, createdAt: nowIso, updatedAt: nowIso },
+    { id: 'ben-2', title: 'Beauty Meets Technology', description: 'Personalized shade intelligence engineered specifically around Indian skin tones and undertones.', icon: 'Sparkles', displayOrder: 2, isActive: true, createdAt: nowIso, updatedAt: nowIso },
+    { id: 'ben-3', title: 'Premium Experience', description: 'Sensorial textures, enduring pigments, and seamless ritual luxury from packaging to application.', icon: 'Shield', displayOrder: 3, isActive: true, createdAt: nowIso, updatedAt: nowIso },
+  ];
+
+  const initialShadeJourney: CMSShadeJourney = {
+    eyebrow: 'YOUR BEAUTY JOURNEY',
+    title: 'Find Your Match in ',
+    titleHighlight: '7 Simple Steps',
+    steps: [
+      { id: 'step-1', icon: 'Sparkles', title: 'Discover Yourself', description: 'Tell us about your skin, preferences & style' },
+      { id: 'step-2', icon: 'Palette', title: 'Beauty Consultation', description: 'We analyze your skin, undertone, concerns & goals' },
+      { id: 'step-3', icon: 'Camera', title: 'Skin & Undertone Detection', description: 'Smart analysis for accurate results' },
+      { id: 'step-4', icon: 'Wand2', title: 'Personalized Recommendations', description: 'We handpick the best matches for you' },
+      { id: 'step-5', icon: 'ShoppingBag', title: 'Your Complete Beauty Kit', description: 'All your essentials, perfectly curated' },
+      { id: 'step-6', icon: 'Settings2', title: 'Customize Every Product', description: 'Change shades, replace or remove' },
+      { id: 'step-7', icon: 'Heart', title: 'See Total & Savings', description: 'Add your complete kit to cart & glow!' },
+    ],
+  };
+
+  const initialBenefitsSection: CMSBenefitsSection = {
+    eyebrow: 'OUR PROMISE',
+    title: 'Beauty you can ',
+    titleHighlight: 'trust.',
+  };
+
   const initialAuditLogs: CMSAuditLog[] = [
     {
       id: 'log-1',
@@ -694,17 +918,25 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
     media: initialMedia,
     globalSettings: initialGlobalSettings,
     auditLogs: initialAuditLogs,
+    heroContent: initialHeroContent,
+    aboutContent: initialAboutContent,
+    benefits: initialBenefits,
+    benefitsSection: initialBenefitsSection,
+    looks: GLAMIRK_LOOKS,
+    shadeJourney: initialShadeJourney,
   };
 }
 
-export function loadDatabase(): InternalCMSDatabaseSchema {
+export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
   if (cachedDb) return cachedDb;
 
-  if (fs.existsSync(DB_FILE)) {
-    try {
-      const raw = fs.readFileSync(DB_FILE, 'utf8');
-      cachedDb = JSON.parse(raw);
-      
+  await ensureSchema();
+
+  try {
+    const result = await pool.query('SELECT data FROM cms_state WHERE id = $1', [STATE_ROW_ID]);
+    if (result.rows.length > 0) {
+      cachedDb = result.rows[0].data as InternalCMSDatabaseSchema;
+
       // Ensure footer and legalPolicies have robust structure if upgrading
       const initial = getInitialDatabase();
       if (!cachedDb?.footer || !cachedDb.footer.columns || cachedDb.footer.columns.length === 0) {
@@ -717,23 +949,53 @@ export function loadDatabase(): InternalCMSDatabaseSchema {
           cachedDb.footer.legalPolicies = initial.footer.legalPolicies;
         }
       }
+      if (!cachedDb.heroContent) {
+        cachedDb.heroContent = initial.heroContent;
+      }
+      if (!cachedDb.aboutContent) {
+        cachedDb.aboutContent = initial.aboutContent;
+      }
+      if (!cachedDb.benefits || cachedDb.benefits.length === 0) {
+        cachedDb.benefits = initial.benefits;
+      }
+      if (!cachedDb.shadeJourney) {
+        cachedDb.shadeJourney = initial.shadeJourney;
+      }
+      if (!cachedDb.benefitsSection) {
+        cachedDb.benefitsSection = initial.benefitsSection;
+      }
+      if (!cachedDb.looks || cachedDb.looks.length === 0) {
+        cachedDb.looks = initial.looks;
+      }
+      // Backfill stock on products persisted before the stock field existed
+      cachedDb.products = cachedDb.products.map((p) => {
+        if (typeof p.stock === 'number') return p;
+        const seedMatch = initial.products.find((sp) => sp.id === p.id);
+        return { ...p, stock: seedMatch ? seedMatch.stock : p.inStock ? 50 : 0 };
+      });
       return cachedDb!;
-    } catch (err) {
-      console.error('Error reading CMS database file, reinitializing:', err);
     }
+  } catch (err) {
+    console.error('Error reading CMS database from Postgres, reinitializing:', err);
   }
 
   const initial = getInitialDatabase();
-  saveDatabase(initial);
+  await saveDatabase(initial);
   return initial;
 }
 
-export function saveDatabase(data: InternalCMSDatabaseSchema): void {
+export async function saveDatabase(data: InternalCMSDatabaseSchema): Promise<void> {
   cachedDb = data;
+  await ensureSchema();
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+    await pool.query(
+      `INSERT INTO cms_state (id, data, updated_at) VALUES ($1, $2, now())
+       ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = now()`,
+      [STATE_ROW_ID, JSON.stringify(data)]
+    );
   } catch (err) {
-    console.error('Failed to write CMS database to disk:', err);
+    console.error('Failed to write CMS database to Postgres:', err);
+    throw err;
   }
 }
 

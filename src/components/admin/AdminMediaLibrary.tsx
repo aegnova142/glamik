@@ -159,8 +159,8 @@ export const AdminMediaLibrary: React.FC = () => {
                 >
                   {copiedId === m.id ? (
                     <>
-                      <Check className="w-3 h-3 text-emerald-400" />
-                      <span className="text-emerald-400">Copied</span>
+                      <Check className="w-3 h-3 text-[#E3B84B]" />
+                      <span className="text-[#E3B84B]">Copied</span>
                     </>
                   ) : (
                     <>

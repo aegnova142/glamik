@@ -2,8 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+import { v2 as cloudinary } from 'cloudinary';
 import {
   loadDatabase,
   saveDatabase,
@@ -24,32 +23,19 @@ import {
   Product,
   JournalArticle,
   SupportFaq,
+  CMSBenefit,
+  Look,
 } from '../src/types';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'glamirk_luxury_atelier_jwt_secret_2026';
 
-// Media uploads directory setup
-const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
+// Cloudinary configuration for durable media storage (reads CLOUDINARY_URL automatically)
+cloudinary.config();
 
-// Multer storage config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOADS_DIR);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const baseName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e4);
-    cb(null, `${baseName}-${uniqueSuffix}${ext}`);
-  },
-});
-
+// Multer holds the upload in memory; it is streamed to Cloudinary, never written to local disk
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB limit
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
@@ -59,6 +45,19 @@ const upload = multer({
     }
   },
 });
+
+function uploadBufferToCloudinary(buffer: Buffer): Promise<{ url: string; publicId: string }> {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: 'glamirk-beauty' },
+      (err, result) => {
+        if (err || !result) return reject(err || new Error('Cloudinary upload failed'));
+        resolve({ url: result.secure_url, publicId: result.public_id });
+      }
+    );
+    stream.end(buffer);
+  });
+}
 
 // ==========================================
 // AUTHENTICATION & RBAC MIDDLEWARE
@@ -93,7 +92,7 @@ export function requireAdmin(req: AuthenticatedRequest, res: Response, next: Nex
 }
 
 // Helper: Record an audit action
-function logAudit(
+async function logAudit(
   req: AuthenticatedRequest,
   action: string,
   objectType: string,
@@ -101,7 +100,7 @@ function logAudit(
   objectTitle: string,
   details?: string
 ) {
-  const db = loadDatabase();
+  const db = await loadDatabase();
   const log: CMSAuditLog = {
     id: 'log-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
     userId: req.user?.id || 'system',
@@ -119,14 +118,14 @@ function logAudit(
   if (db.auditLogs.length > 300) {
     db.auditLogs = db.auditLogs.slice(0, 300);
   }
-  saveDatabase(db);
+  await saveDatabase(db);
 }
 
 // ==========================================
 // REAL-TIME SERVER-SENT EVENTS (SSE)
 // ==========================================
 
-router.get('/events', (req: Request, res: Response) => {
+router.get('/events', async (req: Request, res: Response) => {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -148,14 +147,14 @@ router.get('/events', (req: Request, res: Response) => {
 // AUTH ROUTES
 // ==========================================
 
-router.post('/auth/login', (req: Request, res: Response) => {
+router.post('/auth/login', async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
-  const db = loadDatabase();
+  const db = await loadDatabase();
   const user = db.users.find((u) => u.email.toLowerCase() === email.toLowerCase().trim());
 
   if (!user) {
@@ -185,8 +184,8 @@ router.post('/auth/login', (req: Request, res: Response) => {
   });
 });
 
-router.get('/auth/me', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.get('/auth/me', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const user = db.users.find((u) => u.id === req.user?.id);
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
@@ -195,13 +194,13 @@ router.get('/auth/me', requireAdmin, (req: AuthenticatedRequest, res: Response) 
   res.json({ user: safeUser });
 });
 
-router.post('/auth/change-password', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+router.post('/auth/change-password', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword || newPassword.length < 5) {
     return res.status(400).json({ error: 'New password must be at least 5 characters' });
   }
 
-  const db = loadDatabase();
+  const db = await loadDatabase();
   const userIndex = db.users.findIndex((u) => u.id === req.user?.id);
   if (userIndex === -1) {
     return res.status(404).json({ error: 'User not found' });
@@ -214,9 +213,9 @@ router.post('/auth/change-password', requireAdmin, (req: AuthenticatedRequest, r
 
   const salt = bcrypt.genSaltSync(10);
   db.users[userIndex].passwordHash = bcrypt.hashSync(newPassword, salt);
-  saveDatabase(db);
+  await saveDatabase(db);
 
-  logAudit(req, 'CHANGE_PASSWORD', 'USER', user.id, user.email, 'Admin password successfully updated');
+  await logAudit(req, 'CHANGE_PASSWORD', 'USER', user.id, user.email, 'Admin password successfully updated');
   res.json({ success: true, message: 'Password updated successfully' });
 });
 
@@ -224,8 +223,8 @@ router.post('/auth/change-password', requireAdmin, (req: AuthenticatedRequest, r
 // PUBLIC CMS CONTENT ROUTES
 // ==========================================
 
-router.get('/cms/content', (req: Request, res: Response) => {
-  const db = loadDatabase();
+router.get('/cms/content', async (req: Request, res: Response) => {
+  const db = await loadDatabase();
   const evaluatedOffers = evaluateOffers(db.offers);
 
   // Return public safe dataset
@@ -239,14 +238,22 @@ router.get('/cms/content', (req: Request, res: Response) => {
     journalArticles: db.journalArticles,
     faqs: db.faqs.filter((f) => f.isVisible !== false),
     globalSettings: db.globalSettings,
+    heroContent: db.heroContent,
+    aboutContent: db.aboutContent,
+    benefits: (db.benefits || [])
+      .filter((b) => b.isActive)
+      .sort((a, b) => a.displayOrder - b.displayOrder),
+    looks: db.looks || [],
+    shadeJourney: db.shadeJourney,
+    benefitsSection: db.benefitsSection,
     serverTime: new Date().toISOString(),
   };
 
   res.json(publicData);
 });
 
-router.get('/cms/page/:slug', (req: Request, res: Response) => {
-  const db = loadDatabase();
+router.get('/cms/page/:slug', async (req: Request, res: Response) => {
+  const db = await loadDatabase();
   const slug = req.params.slug === 'home' || req.params.slug === '_' ? '' : req.params.slug;
   const page = db.pages.find((p) => p.slug === slug && p.status === 'published');
 
@@ -257,8 +264,8 @@ router.get('/cms/page/:slug', (req: Request, res: Response) => {
   res.json(page);
 });
 
-router.get('/cms/offers/active', (req: Request, res: Response) => {
-  const db = loadDatabase();
+router.get('/cms/offers/active', async (req: Request, res: Response) => {
+  const db = await loadDatabase();
   const evaluatedOffers = evaluateOffers(db.offers);
   const activeOffers = evaluatedOffers.filter((o) => o.status === 'active');
   res.json({
@@ -267,12 +274,45 @@ router.get('/cms/offers/active', (req: Request, res: Response) => {
   });
 });
 
+// --- Benefits & Optimization (public) ---
+router.get('/benefits', async (req: Request, res: Response) => {
+  const db = await loadDatabase();
+  const benefits = (db.benefits || [])
+    .filter((b) => b.isActive)
+    .sort((a, b) => a.displayOrder - b.displayOrder);
+  res.json({ benefits });
+});
+
+router.get('/benefits/:id', async (req: Request, res: Response) => {
+  const db = await loadDatabase();
+  const benefit = (db.benefits || []).find((b) => b.id === req.params.id && b.isActive);
+  if (!benefit) {
+    return res.status(404).json({ error: 'Benefit not found' });
+  }
+  res.json({ benefit });
+});
+
+// --- Shop The Look (public) ---
+router.get('/looks', async (req: Request, res: Response) => {
+  const db = await loadDatabase();
+  res.json({ looks: db.looks || [] });
+});
+
+router.get('/looks/:id', async (req: Request, res: Response) => {
+  const db = await loadDatabase();
+  const look = (db.looks || []).find((l) => l.id === req.params.id);
+  if (!look) {
+    return res.status(404).json({ error: 'Look not found' });
+  }
+  res.json({ look });
+});
+
 // ==========================================
 // PROTECTED ADMIN CMS ROUTES
 // ==========================================
 
-router.get('/admin/overview', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.get('/admin/overview', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const evaluatedOffers = evaluateOffers(db.offers);
 
   const stats = {
@@ -292,8 +332,8 @@ router.get('/admin/overview', requireAdmin, (req: AuthenticatedRequest, res: Res
   res.json(stats);
 });
 
-router.get('/admin/full-state', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.get('/admin/full-state', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const evaluatedOffers = evaluateOffers(db.offers);
   const { users, ...rest } = db;
   const safeUsers = users.map(({ passwordHash, ...u }) => u);
@@ -307,8 +347,8 @@ router.get('/admin/full-state', requireAdmin, (req: AuthenticatedRequest, res: R
 });
 
 // --- Pages Management ---
-router.post('/admin/pages', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.post('/admin/pages', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const newPage: CMSPage = {
     ...req.body,
     id: req.body.id || 'page-' + Date.now(),
@@ -317,15 +357,15 @@ router.post('/admin/pages', requireAdmin, (req: AuthenticatedRequest, res: Respo
   };
 
   db.pages.push(newPage);
-  saveDatabase(db);
-  logAudit(req, 'CREATE_PAGE', 'PAGE', newPage.id, newPage.title);
+  await saveDatabase(db);
+  await logAudit(req, 'CREATE_PAGE', 'PAGE', newPage.id, newPage.title);
   broadcastEvent('CMS_UPDATE', 'pages', newPage);
 
   res.json(newPage);
 });
 
-router.put('/admin/pages/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.put('/admin/pages/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const idx = db.pages.findIndex((p) => p.id === req.params.id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Page not found' });
@@ -337,15 +377,15 @@ router.put('/admin/pages/:id', requireAdmin, (req: AuthenticatedRequest, res: Re
     updatedAt: new Date().toISOString(),
   };
 
-  saveDatabase(db);
-  logAudit(req, 'UPDATE_PAGE', 'PAGE', db.pages[idx].id, db.pages[idx].title);
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_PAGE', 'PAGE', db.pages[idx].id, db.pages[idx].title);
   broadcastEvent('CMS_UPDATE', 'pages', db.pages[idx]);
 
   res.json(db.pages[idx]);
 });
 
-router.delete('/admin/pages/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.delete('/admin/pages/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const page = db.pages.find((p) => p.id === req.params.id);
   if (!page) {
     return res.status(404).json({ error: 'Page not found' });
@@ -355,31 +395,31 @@ router.delete('/admin/pages/:id', requireAdmin, (req: AuthenticatedRequest, res:
   }
 
   db.pages = db.pages.filter((p) => p.id !== req.params.id);
-  saveDatabase(db);
-  logAudit(req, 'DELETE_PAGE', 'PAGE', page.id, page.title);
+  await saveDatabase(db);
+  await logAudit(req, 'DELETE_PAGE', 'PAGE', page.id, page.title);
   broadcastEvent('CMS_UPDATE', 'pages', { deletedId: page.id });
 
   res.json({ success: true, id: req.params.id });
 });
 
 // --- Products Management ---
-router.post('/admin/products', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.post('/admin/products', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const newProduct: Product = {
     ...req.body,
     id: req.body.id || 'prod-' + Date.now(),
   };
 
   db.products.push(newProduct);
-  saveDatabase(db);
-  logAudit(req, 'CREATE_PRODUCT', 'PRODUCT', newProduct.id, newProduct.name);
+  await saveDatabase(db);
+  await logAudit(req, 'CREATE_PRODUCT', 'PRODUCT', newProduct.id, newProduct.name);
   broadcastEvent('CMS_UPDATE', 'products', newProduct);
 
   res.json(newProduct);
 });
 
-router.put('/admin/products/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.put('/admin/products/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const idx = db.products.findIndex((p) => p.id === req.params.id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Product not found' });
@@ -390,15 +430,15 @@ router.put('/admin/products/:id', requireAdmin, (req: AuthenticatedRequest, res:
     ...req.body,
   };
 
-  saveDatabase(db);
-  logAudit(req, 'UPDATE_PRODUCT', 'PRODUCT', db.products[idx].id, db.products[idx].name);
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_PRODUCT', 'PRODUCT', db.products[idx].id, db.products[idx].name);
   broadcastEvent('CMS_UPDATE', 'products', db.products[idx]);
 
   res.json(db.products[idx]);
 });
 
-router.post('/admin/products/duplicate/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.post('/admin/products/duplicate/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const original = db.products.find((p) => p.id === req.params.id);
   if (!original) {
     return res.status(404).json({ error: 'Product not found' });
@@ -411,77 +451,77 @@ router.post('/admin/products/duplicate/:id', requireAdmin, (req: AuthenticatedRe
   };
 
   db.products.push(duplicated);
-  saveDatabase(db);
-  logAudit(req, 'DUPLICATE_PRODUCT', 'PRODUCT', duplicated.id, duplicated.name);
+  await saveDatabase(db);
+  await logAudit(req, 'DUPLICATE_PRODUCT', 'PRODUCT', duplicated.id, duplicated.name);
   broadcastEvent('CMS_UPDATE', 'products', duplicated);
 
   res.json(duplicated);
 });
 
-router.delete('/admin/products/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.delete('/admin/products/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const prod = db.products.find((p) => p.id === req.params.id);
   if (!prod) {
     return res.status(404).json({ error: 'Product not found' });
   }
 
   db.products = db.products.filter((p) => p.id !== req.params.id);
-  saveDatabase(db);
-  logAudit(req, 'DELETE_PRODUCT', 'PRODUCT', prod.id, prod.name);
+  await saveDatabase(db);
+  await logAudit(req, 'DELETE_PRODUCT', 'PRODUCT', prod.id, prod.name);
   broadcastEvent('CMS_UPDATE', 'products', { deletedId: prod.id });
 
   res.json({ success: true, id: req.params.id });
 });
 
 // --- Categories Management ---
-router.post('/admin/categories', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.post('/admin/categories', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const newCategory: CMSCategory = {
     ...req.body,
     id: req.body.id || 'cat-' + Date.now(),
   };
 
   db.categories.push(newCategory);
-  saveDatabase(db);
-  logAudit(req, 'CREATE_CATEGORY', 'CATEGORY', newCategory.id, newCategory.name);
+  await saveDatabase(db);
+  await logAudit(req, 'CREATE_CATEGORY', 'CATEGORY', newCategory.id, newCategory.name);
   broadcastEvent('CMS_UPDATE', 'categories', newCategory);
 
   res.json(newCategory);
 });
 
-router.put('/admin/categories/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.put('/admin/categories/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const idx = db.categories.findIndex((c) => c.id === req.params.id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Category not found' });
   }
 
   db.categories[idx] = { ...db.categories[idx], ...req.body };
-  saveDatabase(db);
-  logAudit(req, 'UPDATE_CATEGORY', 'CATEGORY', db.categories[idx].id, db.categories[idx].name);
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_CATEGORY', 'CATEGORY', db.categories[idx].id, db.categories[idx].name);
   broadcastEvent('CMS_UPDATE', 'categories', db.categories[idx]);
 
   res.json(db.categories[idx]);
 });
 
-router.delete('/admin/categories/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.delete('/admin/categories/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const cat = db.categories.find((c) => c.id === req.params.id);
   if (!cat) {
     return res.status(404).json({ error: 'Category not found' });
   }
 
   db.categories = db.categories.filter((c) => c.id !== req.params.id);
-  saveDatabase(db);
-  logAudit(req, 'DELETE_CATEGORY', 'CATEGORY', cat.id, cat.name);
+  await saveDatabase(db);
+  await logAudit(req, 'DELETE_CATEGORY', 'CATEGORY', cat.id, cat.name);
   broadcastEvent('CMS_UPDATE', 'categories', { deletedId: cat.id });
 
   res.json({ success: true, id: req.params.id });
 });
 
 // --- Offers Management ---
-router.post('/admin/offers', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.post('/admin/offers', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const newOffer: CMSOffer = {
     ...req.body,
     id: req.body.id || 'off-' + Date.now(),
@@ -490,15 +530,15 @@ router.post('/admin/offers', requireAdmin, (req: AuthenticatedRequest, res: Resp
   };
 
   db.offers.push(newOffer);
-  saveDatabase(db);
-  logAudit(req, 'CREATE_OFFER', 'OFFER', newOffer.id, newOffer.name);
+  await saveDatabase(db);
+  await logAudit(req, 'CREATE_OFFER', 'OFFER', newOffer.id, newOffer.name);
   broadcastEvent('CMS_UPDATE', 'offers', newOffer);
 
   res.json(newOffer);
 });
 
-router.put('/admin/offers/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.put('/admin/offers/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const idx = db.offers.findIndex((o) => o.id === req.params.id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Offer not found' });
@@ -510,155 +550,342 @@ router.put('/admin/offers/:id', requireAdmin, (req: AuthenticatedRequest, res: R
     updatedAt: new Date().toISOString(),
   };
 
-  saveDatabase(db);
-  logAudit(req, 'UPDATE_OFFER', 'OFFER', db.offers[idx].id, db.offers[idx].name);
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_OFFER', 'OFFER', db.offers[idx].id, db.offers[idx].name);
   broadcastEvent('CMS_UPDATE', 'offers', db.offers[idx]);
 
   res.json(db.offers[idx]);
 });
 
-router.delete('/admin/offers/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.delete('/admin/offers/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const off = db.offers.find((o) => o.id === req.params.id);
   if (!off) {
     return res.status(404).json({ error: 'Offer not found' });
   }
 
   db.offers = db.offers.filter((o) => o.id !== req.params.id);
-  saveDatabase(db);
-  logAudit(req, 'DELETE_OFFER', 'OFFER', off.id, off.name);
+  await saveDatabase(db);
+  await logAudit(req, 'DELETE_OFFER', 'OFFER', off.id, off.name);
   broadcastEvent('CMS_UPDATE', 'offers', { deletedId: off.id });
 
   res.json({ success: true, id: req.params.id });
 });
 
+// --- Benefits & Optimization Management ---
+router.post('/admin/benefits', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const { title, description, icon, imageUrl, imagePublicId, displayOrder, isActive } = req.body || {};
+  if (!title || !String(title).trim()) {
+    return res.status(400).json({ error: 'Title is required.' });
+  }
+  if (!description || !String(description).trim()) {
+    return res.status(400).json({ error: 'Description is required.' });
+  }
+
+  const db = await loadDatabase();
+  const newBenefit: CMSBenefit = {
+    id: 'ben-' + Date.now(),
+    title,
+    description,
+    icon: icon || 'Sparkles',
+    imageUrl: imageUrl || undefined,
+    imagePublicId: imagePublicId || undefined,
+    displayOrder: typeof displayOrder === 'number' ? displayOrder : (db.benefits || []).length + 1,
+    isActive: isActive !== false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  db.benefits = [...(db.benefits || []), newBenefit];
+  await saveDatabase(db);
+  await logAudit(req, 'CREATE_BENEFIT', 'BENEFIT', newBenefit.id, newBenefit.title);
+  broadcastEvent('CMS_UPDATE', 'benefits', newBenefit);
+
+  res.json(newBenefit);
+});
+
+router.put('/admin/benefits/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const idx = (db.benefits || []).findIndex((b) => b.id === req.params.id);
+  if (idx === -1) {
+    return res.status(404).json({ error: 'Benefit not found' });
+  }
+
+  const { title, description } = req.body || {};
+  if (title !== undefined && !String(title).trim()) {
+    return res.status(400).json({ error: 'Title cannot be empty.' });
+  }
+  if (description !== undefined && !String(description).trim()) {
+    return res.status(400).json({ error: 'Description cannot be empty.' });
+  }
+
+  db.benefits[idx] = {
+    ...db.benefits[idx],
+    ...req.body,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_BENEFIT', 'BENEFIT', db.benefits[idx].id, db.benefits[idx].title);
+  broadcastEvent('CMS_UPDATE', 'benefits', db.benefits[idx]);
+
+  res.json(db.benefits[idx]);
+});
+
+router.delete('/admin/benefits/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const benefit = (db.benefits || []).find((b) => b.id === req.params.id);
+  if (!benefit) {
+    return res.status(404).json({ error: 'Benefit not found' });
+  }
+
+  db.benefits = db.benefits.filter((b) => b.id !== req.params.id);
+  await saveDatabase(db);
+  await logAudit(req, 'DELETE_BENEFIT', 'BENEFIT', benefit.id, benefit.title);
+  broadcastEvent('CMS_UPDATE', 'benefits', { deletedId: benefit.id });
+
+  res.json({ success: true, id: req.params.id });
+});
+
+// --- Shop The Look Management ---
+router.post('/admin/looks', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const { title, tagline, description, image, category, productsUsed } = req.body || {};
+  if (!title || !String(title).trim()) {
+    return res.status(400).json({ error: 'Title is required.' });
+  }
+  if (!image || !String(image).trim()) {
+    return res.status(400).json({ error: 'Image is required.' });
+  }
+
+  const db = await loadDatabase();
+  const newLook: Look = {
+    id: 'look-' + Date.now(),
+    title,
+    tagline: tagline || '',
+    description: description || '',
+    image,
+    category: category || 'EVERYDAY GLAM',
+    productsUsed: Array.isArray(productsUsed) ? productsUsed : [],
+  };
+
+  db.looks = [...(db.looks || []), newLook];
+  await saveDatabase(db);
+  await logAudit(req, 'CREATE_LOOK', 'LOOK', newLook.id, newLook.title);
+  broadcastEvent('CMS_UPDATE', 'looks', newLook);
+
+  res.json(newLook);
+});
+
+router.put('/admin/looks/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const idx = (db.looks || []).findIndex((l) => l.id === req.params.id);
+  if (idx === -1) {
+    return res.status(404).json({ error: 'Look not found' });
+  }
+
+  const { title, image } = req.body || {};
+  if (title !== undefined && !String(title).trim()) {
+    return res.status(400).json({ error: 'Title cannot be empty.' });
+  }
+  if (image !== undefined && !String(image).trim()) {
+    return res.status(400).json({ error: 'Image cannot be empty.' });
+  }
+
+  db.looks[idx] = { ...db.looks[idx], ...req.body };
+
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_LOOK', 'LOOK', db.looks[idx].id, db.looks[idx].title);
+  broadcastEvent('CMS_UPDATE', 'looks', db.looks[idx]);
+
+  res.json(db.looks[idx]);
+});
+
+router.delete('/admin/looks/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const look = (db.looks || []).find((l) => l.id === req.params.id);
+  if (!look) {
+    return res.status(404).json({ error: 'Look not found' });
+  }
+
+  db.looks = db.looks.filter((l) => l.id !== req.params.id);
+  await saveDatabase(db);
+  await logAudit(req, 'DELETE_LOOK', 'LOOK', look.id, look.title);
+  broadcastEvent('CMS_UPDATE', 'looks', { deletedId: look.id });
+
+  res.json({ success: true, id: req.params.id });
+});
+
 // --- Navigation & Footer ---
-router.put('/admin/navigation', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.put('/admin/navigation', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   db.navigation = req.body;
-  saveDatabase(db);
-  logAudit(req, 'UPDATE_NAVIGATION', 'NAVIGATION', 'nav-main', 'Header Navigation Updated');
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_NAVIGATION', 'NAVIGATION', 'nav-main', 'Header Navigation Updated');
   broadcastEvent('CMS_UPDATE', 'navigation', db.navigation);
 
   res.json(db.navigation);
 });
 
-router.put('/admin/footer', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.put('/admin/footer', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   db.footer = req.body;
-  saveDatabase(db);
-  logAudit(req, 'UPDATE_FOOTER', 'FOOTER', 'footer-main', 'Footer Configuration Updated');
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_FOOTER', 'FOOTER', 'footer-main', 'Footer Configuration Updated');
   broadcastEvent('CMS_UPDATE', 'footer', db.footer);
 
   res.json(db.footer);
 });
 
+// --- Homepage Hero Content ---
+router.put('/admin/hero', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  db.heroContent = req.body;
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_HERO', 'HERO', 'hero-main', 'Homepage Hero Content Updated');
+  broadcastEvent('CMS_UPDATE', 'heroContent', db.heroContent);
+
+  res.json(db.heroContent);
+});
+
+// --- About Page Content ---
+router.put('/admin/about', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  db.aboutContent = req.body;
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_ABOUT', 'ABOUT', 'about-main', 'About Page Content Updated');
+  broadcastEvent('CMS_UPDATE', 'aboutContent', db.aboutContent);
+
+  res.json(db.aboutContent);
+});
+
+// --- Find My Shade Journey ---
+router.put('/admin/shade-journey', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  db.shadeJourney = req.body;
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_SHADE_JOURNEY', 'SHADE_JOURNEY', 'shade-journey-main', 'Find My Shade Journey Updated');
+  broadcastEvent('CMS_UPDATE', 'shadeJourney', db.shadeJourney);
+
+  res.json(db.shadeJourney);
+});
+
+// --- Homepage Benefits Section Heading ---
+router.put('/admin/benefits-section', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  db.benefitsSection = req.body;
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_BENEFITS_SECTION', 'BENEFITS_SECTION', 'benefits-section-main', 'Homepage Benefits Section Heading Updated');
+  broadcastEvent('CMS_UPDATE', 'benefitsSection', db.benefitsSection);
+
+  res.json(db.benefitsSection);
+});
+
 // --- Journal / Blog CMS ---
-router.post('/admin/articles', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.post('/admin/articles', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const newArticle: JournalArticle = {
     ...req.body,
     id: req.body.id || req.body.slug || 'art-' + Date.now(),
   };
 
   db.journalArticles.push(newArticle);
-  saveDatabase(db);
-  logAudit(req, 'CREATE_ARTICLE', 'ARTICLE', newArticle.id, newArticle.title);
+  await saveDatabase(db);
+  await logAudit(req, 'CREATE_ARTICLE', 'ARTICLE', newArticle.id, newArticle.title);
   broadcastEvent('CMS_UPDATE', 'journalArticles', newArticle);
 
   res.json(newArticle);
 });
 
-router.put('/admin/articles/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.put('/admin/articles/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const idx = db.journalArticles.findIndex((a) => a.id === req.params.id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Article not found' });
   }
 
   db.journalArticles[idx] = { ...db.journalArticles[idx], ...req.body };
-  saveDatabase(db);
-  logAudit(req, 'UPDATE_ARTICLE', 'ARTICLE', db.journalArticles[idx].id, db.journalArticles[idx].title);
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_ARTICLE', 'ARTICLE', db.journalArticles[idx].id, db.journalArticles[idx].title);
   broadcastEvent('CMS_UPDATE', 'journalArticles', db.journalArticles[idx]);
 
   res.json(db.journalArticles[idx]);
 });
 
-router.delete('/admin/articles/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.delete('/admin/articles/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const art = db.journalArticles.find((a) => a.id === req.params.id);
   if (!art) {
     return res.status(404).json({ error: 'Article not found' });
   }
 
   db.journalArticles = db.journalArticles.filter((a) => a.id !== req.params.id);
-  saveDatabase(db);
-  logAudit(req, 'DELETE_ARTICLE', 'ARTICLE', art.id, art.title);
+  await saveDatabase(db);
+  await logAudit(req, 'DELETE_ARTICLE', 'ARTICLE', art.id, art.title);
   broadcastEvent('CMS_UPDATE', 'journalArticles', { deletedId: art.id });
 
   res.json({ success: true, id: req.params.id });
 });
 
 // --- FAQs CMS ---
-router.post('/admin/faqs', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.post('/admin/faqs', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const newFaq: SupportFaq = {
     ...req.body,
     id: req.body.id || 'faq-' + Date.now(),
   };
 
   db.faqs.push(newFaq);
-  saveDatabase(db);
-  logAudit(req, 'CREATE_FAQ', 'FAQ', newFaq.id, newFaq.question);
+  await saveDatabase(db);
+  await logAudit(req, 'CREATE_FAQ', 'FAQ', newFaq.id, newFaq.question);
   broadcastEvent('CMS_UPDATE', 'faqs', newFaq);
 
   res.json(newFaq);
 });
 
-router.put('/admin/faqs/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.put('/admin/faqs/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const idx = db.faqs.findIndex((f) => f.id === req.params.id);
   if (idx === -1) {
     return res.status(404).json({ error: 'FAQ not found' });
   }
 
   db.faqs[idx] = { ...db.faqs[idx], ...req.body };
-  saveDatabase(db);
-  logAudit(req, 'UPDATE_FAQ', 'FAQ', db.faqs[idx].id, db.faqs[idx].question);
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_FAQ', 'FAQ', db.faqs[idx].id, db.faqs[idx].question);
   broadcastEvent('CMS_UPDATE', 'faqs', db.faqs[idx]);
 
   res.json(db.faqs[idx]);
 });
 
-router.delete('/admin/faqs/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.delete('/admin/faqs/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const faq = db.faqs.find((f) => f.id === req.params.id);
   if (!faq) {
     return res.status(404).json({ error: 'FAQ not found' });
   }
 
   db.faqs = db.faqs.filter((f) => f.id !== req.params.id);
-  saveDatabase(db);
-  logAudit(req, 'DELETE_FAQ', 'FAQ', faq.id, faq.question);
+  await saveDatabase(db);
+  await logAudit(req, 'DELETE_FAQ', 'FAQ', faq.id, faq.question);
   broadcastEvent('CMS_UPDATE', 'faqs', { deletedId: faq.id });
 
   res.json({ success: true, id: req.params.id });
 });
 
 // --- Global Settings ---
-router.put('/admin/settings', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.put('/admin/settings', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   db.globalSettings = { ...db.globalSettings, ...req.body };
-  saveDatabase(db);
-  logAudit(req, 'UPDATE_SETTINGS', 'GLOBAL_SETTINGS', 'settings', 'Global Store Settings Updated');
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_SETTINGS', 'GLOBAL_SETTINGS', 'settings', 'Global Store Settings Updated');
   broadcastEvent('CMS_UPDATE', 'globalSettings', db.globalSettings);
 
   res.json(db.globalSettings);
 });
 
 // --- Media Upload & Library ---
-router.get('/admin/media', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.get('/admin/media', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   res.json(db.media || []);
 });
 
@@ -666,16 +893,25 @@ router.post(
   '/admin/media/upload',
   requireAdmin,
   upload.single('file'),
-  (req: AuthenticatedRequest, res: Response) => {
+  async (req: AuthenticatedRequest, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ error: 'No image file uploaded' });
     }
 
-    const db = loadDatabase();
+    let uploaded: { url: string; publicId: string };
+    try {
+      uploaded = await uploadBufferToCloudinary(req.file.buffer);
+    } catch (err) {
+      console.error('Cloudinary upload failed:', err);
+      return res.status(502).json({ error: 'Failed to upload image to storage' });
+    }
+
+    const db = await loadDatabase();
     const mediaItem: CMSMediaItem = {
       id: 'med-' + Date.now(),
       name: req.body.name || req.file.originalname,
-      url: `/uploads/${req.file.filename}`,
+      url: uploaded.url,
+      publicId: uploaded.publicId,
       size: req.file.size,
       mimeType: req.file.mimetype,
       altText: req.body.altText || req.file.originalname,
@@ -683,37 +919,33 @@ router.post(
     };
 
     db.media.unshift(mediaItem);
-    saveDatabase(db);
-    logAudit(req, 'UPLOAD_MEDIA', 'MEDIA', mediaItem.id, mediaItem.name);
+    await saveDatabase(db);
+    await logAudit(req, 'UPLOAD_MEDIA', 'MEDIA', mediaItem.id, mediaItem.name);
     broadcastEvent('CMS_UPDATE', 'media', mediaItem);
 
     res.json(mediaItem);
   }
 );
 
-router.delete('/admin/media/:id', requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const db = loadDatabase();
+router.delete('/admin/media/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
   const item = db.media.find((m) => m.id === req.params.id);
   if (!item) {
     return res.status(404).json({ error: 'Media not found' });
   }
 
-  // Remove local file if stored in /uploads
-  if (item.url.startsWith('/uploads/')) {
-    const filename = path.basename(item.url);
-    const filePath = path.join(UPLOADS_DIR, filename);
-    if (fs.existsSync(filePath)) {
-      try {
-        fs.unlinkSync(filePath);
-      } catch (err) {
-        console.warn('Could not delete file from disk:', err);
-      }
+  // Remove the asset from Cloudinary if it was uploaded there
+  if (item.publicId) {
+    try {
+      await cloudinary.uploader.destroy(item.publicId);
+    } catch (err) {
+      console.warn('Could not delete asset from Cloudinary:', err);
     }
   }
 
   db.media = db.media.filter((m) => m.id !== req.params.id);
-  saveDatabase(db);
-  logAudit(req, 'DELETE_MEDIA', 'MEDIA', item.id, item.name);
+  await saveDatabase(db);
+  await logAudit(req, 'DELETE_MEDIA', 'MEDIA', item.id, item.name);
   broadcastEvent('CMS_UPDATE', 'media', { deletedId: item.id });
 
   res.json({ success: true, id: req.params.id });

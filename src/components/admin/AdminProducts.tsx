@@ -20,6 +20,9 @@ import {
   Tag,
   Sparkles,
 } from 'lucide-react';
+import { ImageCropUploadModal } from './ImageCropUploadModal';
+
+type ProductImageSlot = 'primary' | 'secondary' | 'detail' | 'texture' | 'lifestyle' | 'swatch';
 
 export const AdminProducts: React.FC = () => {
   const { products, categories, saveProduct, deleteProduct, duplicateProduct } = useCMS();
@@ -28,6 +31,7 @@ export const AdminProducts: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [uploadTargetSlot, setUploadTargetSlot] = useState<ProductImageSlot | null>(null);
 
   const filteredProducts = (products || []).filter((p) => {
     const matchesSearch =
@@ -51,6 +55,7 @@ export const AdminProducts: React.FC = () => {
       originalPrice: 1599,
       currency: '₹',
       inStock: true,
+      stock: 50,
       tag: 'NEW',
       benefits: ['12H Transfer-Proof', 'Weightless Velvet', 'Non-Drying Botanical Base'],
       images: {
@@ -280,34 +285,61 @@ export const AdminProducts: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                    Price (₹)
+                    Compare Price (₹) <span className="normal-case text-[#6B6B6B]">(original, before discount)</span>
                   </label>
                   <input
                     type="number"
-                    value={editingProduct.price}
-                    onChange={(e) =>
-                      setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })
-                    }
+                    value={editingProduct.originalPrice || ''}
+                    onChange={(e) => {
+                      const originalPrice = parseFloat(e.target.value) || undefined;
+                      setEditingProduct((prev) => (prev ? { ...prev, originalPrice } : prev));
+                    }}
                     className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                    Compare Price (₹)
+                    Discount % <span className="normal-case text-[#6B6B6B]">(auto-computes final price)</span>
                   </label>
                   <input
                     type="number"
-                    value={editingProduct.originalPrice || ''}
-                    onChange={(e) =>
-                      setEditingProduct({
-                        ...editingProduct,
-                        originalPrice: parseFloat(e.target.value) || undefined,
-                      })
+                    min={0}
+                    max={99}
+                    disabled={!editingProduct.originalPrice}
+                    value={
+                      editingProduct.originalPrice
+                        ? Math.round(((editingProduct.originalPrice - editingProduct.price) / editingProduct.originalPrice) * 100)
+                        : ''
                     }
-                    className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                    onChange={(e) => {
+                      const pct = Math.min(99, Math.max(0, parseFloat(e.target.value) || 0));
+                      const originalPrice = editingProduct.originalPrice;
+                      if (!originalPrice) return;
+                      const nextPrice = Math.round(originalPrice * (1 - pct / 100));
+                      setEditingProduct((prev) => (prev ? { ...prev, price: nextPrice } : prev));
+                    }}
+                    placeholder={editingProduct.originalPrice ? '0' : 'Set compare price first'}
+                    className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] disabled:opacity-40"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                  Final Selling Price (₹)
+                </label>
+                <input
+                  type="number"
+                  value={editingProduct.price}
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#C9972B]/50 rounded-lg text-xs text-[#FAF9F6] font-bold"
+                />
+                <p className="text-[10px] text-[#6B6B6B] mt-1">
+                  Editable directly, or set via Discount % above. This is the price shown on the storefront and used at checkout.
+                </p>
               </div>
 
               <div>
@@ -359,6 +391,24 @@ export const AdminProducts: React.FC = () => {
                 </select>
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                  Stock Quantity
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={editingProduct.stock ?? 0}
+                  onChange={(e) =>
+                    setEditingProduct({ ...editingProduct, stock: Math.max(0, parseInt(e.target.value, 10) || 0) })
+                  }
+                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                />
+                <p className="text-[10px] text-[#6B6B6B] mt-1">
+                  This is the real, decremented-on-order quantity used by cart &amp; checkout validation.
+                </p>
+              </div>
+
               <div className="pt-2 flex items-center justify-between border-t border-[#E8D5A8]/10">
                 <span className="text-xs font-semibold text-[#FAF9F6]">Stock Status</span>
                 <button
@@ -366,7 +416,7 @@ export const AdminProducts: React.FC = () => {
                   onClick={() => setEditingProduct({ ...editingProduct, inStock: !editingProduct.inStock })}
                   className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wider cursor-pointer ${
                     editingProduct.inStock
-                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
+                      ? 'bg-[#C9972B]/10 text-[#E3B84B] border border-[#C9972B]/40'
                       : 'bg-[#F05A7E]/20 text-[#F05A7E] border border-[#F05A7E]/30'
                   }`}
                 >
@@ -378,49 +428,104 @@ export const AdminProducts: React.FC = () => {
             {/* Images */}
             <div className="p-5 rounded-xl bg-[#171717] border border-[#E8D5A8]/30 space-y-4">
               <h3 className="font-serif text-base text-[#FAF9F6]">Product Media</h3>
+              <p className="text-[11px] text-[#6B6B6B]">
+                Primary &amp; Secondary drive the shop/best-seller card and are locked to a 4:3 crop for consistent card sizing.
+              </p>
 
-              <div>
-                <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                  Primary Image URL
-                </label>
-                <input
-                  type="text"
-                  value={editingProduct.images.primary}
-                  onChange={(e) =>
-                    setEditingProduct({
-                      ...editingProduct,
-                      images: { ...editingProduct.images, primary: e.target.value },
-                    })
-                  }
-                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
-                />
-                {editingProduct.images.primary && (
-                  <div className="mt-2 w-full h-28 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B]">
-                    <img
-                      src={editingProduct.images.primary}
-                      alt="Primary"
-                      className="w-full h-full object-cover"
-                    />
+              {([
+                { key: 'primary', label: 'Primary Image (card + hover default)', crop: true, required: true },
+                { key: 'secondary', label: 'Secondary / Hover Image', crop: true, required: false },
+                { key: 'detail', label: 'Detail Shot (product page gallery)', crop: false, required: false },
+                { key: 'texture', label: 'Texture Shot (product page gallery)', crop: false, required: false },
+                { key: 'lifestyle', label: 'Lifestyle Shot (product page gallery)', crop: false, required: false },
+                { key: 'swatch', label: 'Swatch Shot (product page gallery)', crop: false, required: false },
+              ] as { key: ProductImageSlot; label: string; crop: boolean; required: boolean }[]).map((slot) => {
+                const url = (editingProduct.images as any)[slot.key] || '';
+                return (
+                  <div key={slot.key}>
+                    <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                      {slot.label}
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={url}
+                        onChange={(e) =>
+                          setEditingProduct({
+                            ...editingProduct,
+                            images: { ...editingProduct.images, [slot.key]: e.target.value },
+                          })
+                        }
+                        placeholder="https://... or use Upload & Crop"
+                        className="flex-1 px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                      />
+                      {slot.crop && (
+                        <button
+                          type="button"
+                          onClick={() => setUploadTargetSlot(slot.key)}
+                          className="px-3 py-2 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] transition-colors cursor-pointer whitespace-nowrap"
+                        >
+                          Upload &amp; Crop
+                        </button>
+                      )}
+                    </div>
+                    {url && (
+                      <div className="mt-2 w-full h-28 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B]">
+                        <img src={url} alt={slot.label} className="w-full h-full object-cover" />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })}
 
-              <div>
-                <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                  Secondary / Hover Image URL
-                </label>
-                <input
-                  type="text"
-                  value={editingProduct.images.secondary || ''}
-                  onChange={(e) =>
-                    setEditingProduct({
-                      ...editingProduct,
-                      images: { ...editingProduct.images, secondary: e.target.value },
-                    })
+              {uploadTargetSlot && (
+                <ImageCropUploadModal
+                  isOpen
+                  onClose={() => setUploadTargetSlot(null)}
+                  title={`Upload ${uploadTargetSlot === 'primary' ? 'Primary' : 'Secondary'} Image`}
+                  aspectRatio={4 / 3}
+                  minWidth={600}
+                  minHeight={450}
+                  recommendedWidth={1200}
+                  recommendedHeight={900}
+                  outputWidth={1200}
+                  outputHeight={900}
+                  onUploaded={({ url }) =>
+                    setEditingProduct((prev) =>
+                      prev ? { ...prev, images: { ...prev.images, [uploadTargetSlot]: url } } : prev
+                    )
                   }
-                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
                 />
-              </div>
+              )}
+            </div>
+
+            {/* Card Button Visibility */}
+            <div className="p-5 rounded-xl bg-[#171717] border border-[#E8D5A8]/30 space-y-3">
+              <h3 className="font-serif text-base text-[#FAF9F6]">Card Button Visibility</h3>
+              <p className="text-[11px] text-[#6B6B6B]">
+                Control which hover actions appear on this product's card across Best Sellers, Shop, and related-product grids.
+              </p>
+              <label className="flex items-center gap-2.5 text-xs text-[#FAF9F6] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editingProduct.enableQuickView !== false}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, enableQuickView: e.target.checked })}
+                  className="accent-[#C9972B]"
+                />
+                Show "Quick View" button on card
+              </label>
+              <label className="flex items-center gap-2.5 text-xs text-[#FAF9F6] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editingProduct.enableTryOn !== false}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, enableTryOn: e.target.checked })}
+                  disabled={!editingProduct.shades || editingProduct.shades.length === 0}
+                  className="accent-[#C9972B] disabled:opacity-40"
+                />
+                <span className={!editingProduct.shades || editingProduct.shades.length === 0 ? 'opacity-40' : ''}>
+                  Show "Try On" button on card {(!editingProduct.shades || editingProduct.shades.length === 0) && '(requires at least one shade)'}
+                </span>
+              </label>
             </div>
           </div>
         </div>
@@ -539,12 +644,13 @@ export const AdminProducts: React.FC = () => {
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                         p.inStock
-                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-700'
+                          ? 'bg-[#C9972B]/10 text-[#E3B84B] border border-[#C9972B]/40'
                           : 'bg-[#F05A7E]/20 text-[#F05A7E] border border-[#F05A7E]/30'
                       }`}
                     >
                       {p.inStock ? 'In Stock' : 'Out of Stock'}
                     </span>
+                    <span className="block mt-1 text-[10px] text-[#6B6B6B]">Qty: {p.stock ?? 0}</span>
                   </td>
                   <td className="p-4 text-right space-x-1.5">
                     <button

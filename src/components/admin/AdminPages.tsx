@@ -109,7 +109,7 @@ export const AdminPages: React.FC = () => {
       id: 'sec-' + type + '-' + Date.now(),
       type,
       title: type.replace(/_/g, ' ').toUpperCase(),
-      order: (selectedPage.sections?.length || 0) + 1,
+      order: (selectedPage.sections || []).reduce((max, s) => Math.max(max, s.order || 0), 0) + 1,
       isVisible: true,
       props: {
         heading: 'SECTION TITLE',
@@ -204,7 +204,7 @@ export const AdminPages: React.FC = () => {
                 <span
                   className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                     selectedPage.status === 'published'
-                      ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/50'
+                      ? 'bg-[#C9972B]/10/80 text-[#E3B84B] border border-[#C9972B]/40/50'
                       : 'bg-[#6B6B6B]/20 text-[#E8D5A8] border border-[#E8D5A8]/30'
                   }`}
                 >
@@ -305,7 +305,7 @@ export const AdminPages: React.FC = () => {
                           handleToggleSectionVisibility(section.id);
                         }}
                         className={`p-1.5 rounded hover:bg-[#0B0B0B] ${
-                          section.isVisible ? 'text-emerald-400' : 'text-[#6B6B6B]'
+                          section.isVisible ? 'text-[#E3B84B]' : 'text-[#6B6B6B]'
                         }`}
                         title={section.isVisible ? 'Visible' : 'Hidden'}
                       >
@@ -708,7 +708,7 @@ export const AdminPages: React.FC = () => {
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                         p.status === 'published'
-                          ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/50'
+                          ? 'bg-[#C9972B]/10/80 text-[#E3B84B] border border-[#C9972B]/40/50'
                           : 'bg-[#6B6B6B]/20 text-[#E8D5A8] border border-[#E8D5A8]/30'
                       }`}
                     >

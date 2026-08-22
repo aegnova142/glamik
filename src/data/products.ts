@@ -15,6 +15,7 @@ export const GLAMIRK_PRODUCTS: Product[] = [
     originalPrice: 999,
     currency: '₹',
     inStock: true,
+    stock: 45,
     rating: 4.9,
     reviewCount: 128,
     finish: 'Matte',
@@ -99,6 +100,7 @@ export const GLAMIRK_PRODUCTS: Product[] = [
     originalPrice: 749,
     currency: '₹',
     inStock: true,
+    stock: 60,
     rating: 4.9,
     reviewCount: 94,
     finish: 'Matte',
@@ -107,7 +109,7 @@ export const GLAMIRK_PRODUCTS: Product[] = [
     skinType: ['Sensitive Scalp Friendly', 'All Skin Tones'],
     images: {
       primary: 'https://images.unsplash.com/photo-1616683693504-3ea7e9ad6fec?auto=format&fit=crop&w=1200&q=85',
-      secondary: 'https://images.unsplash.com/photo-1608248597359-002d05777174?auto=format&fit=crop&w=1200&q=85',
+      secondary: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=1200&q=85',
       detail: 'https://images.unsplash.com/photo-1599305090598-fe179d501227?auto=format&fit=crop&w=1200&q=85',
       texture: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=1200&q=85',
       lifestyle: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=1200&q=85',
@@ -162,6 +164,7 @@ export const GLAMIRK_PRODUCTS: Product[] = [
     originalPrice: 599,
     currency: '₹',
     inStock: true,
+    stock: 80,
     rating: 4.8,
     reviewCount: 68,
     sizes: ['30g', '50g'],
@@ -210,6 +213,7 @@ export const GLAMIRK_PRODUCTS: Product[] = [
     originalPrice: 949,
     currency: '₹',
     inStock: true,
+    stock: 35,
     rating: 4.9,
     reviewCount: 142,
     sizes: ['30g', '50g'],
@@ -222,8 +226,8 @@ export const GLAMIRK_PRODUCTS: Product[] = [
       primary: 'https://images.unsplash.com/photo-1571781926291-c477ebfd024b?auto=format&fit=crop&w=1200&q=85',
       secondary: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=1200&q=85',
       detail: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?auto=format&fit=crop&w=1200&q=85',
-      texture: 'https://images.unsplash.com/photo-1567928815104-b7980ee5032e?auto=format&fit=crop&w=1200&q=85',
-      lifestyle: 'https://images.unsplash.com/photo-1512290900672-1f02e7a09be2?auto=format&fit=crop&w=1200&q=85'
+      texture: 'https://images.unsplash.com/photo-1571875257727-256c39da42af?auto=format&fit=crop&w=1200&q=85',
+      lifestyle: 'https://images.unsplash.com/photo-1601049676869-702ea24cfd58?auto=format&fit=crop&w=1200&q=85'
     },
     benefits: [
       'Generous 50g ritual jar for daily morning and evening cleansing',

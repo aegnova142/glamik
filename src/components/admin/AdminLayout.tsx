@@ -24,6 +24,11 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
+import { AdminHero } from './AdminHero';
+import { AdminAbout } from './AdminAbout';
+import { AdminBenefits } from './AdminBenefits';
+import { AdminShadeFinder } from './AdminShadeFinder';
+import { AdminLooks } from './AdminLooks';
 import { AdminPages } from './AdminPages';
 import { AdminProducts } from './AdminProducts';
 import { AdminCategories } from './AdminCategories';
@@ -42,6 +47,11 @@ interface AdminLayoutProps {
 
 type AdminTab =
   | 'dashboard'
+  | 'hero'
+  | 'about'
+  | 'benefits'
+  | 'shadeFinder'
+  | 'looks'
   | 'pages'
   | 'products'
   | 'categories'
@@ -61,6 +71,11 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
 
   const NAV_ITEMS: { id: AdminTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: 'dashboard', label: 'Overview Dashboard', icon: LayoutDashboard },
+    { id: 'hero', label: 'Hero Section', icon: Sparkles },
+    { id: 'about', label: 'About Page', icon: FileText },
+    { id: 'benefits', label: 'Benefits & Optimization', icon: ShieldCheck },
+    { id: 'shadeFinder', label: 'Find My Shade Journey', icon: Sparkles },
+    { id: 'looks', label: 'Shop The Look', icon: Sparkles },
     { id: 'pages', label: 'Pages & Sections Builder', icon: FileText },
     { id: 'products', label: 'Product Catalogue', icon: Package },
     { id: 'categories', label: 'Categories & Taxonomy', icon: Layers },
@@ -100,7 +115,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         <div className="flex items-center gap-2">
           <button
             onClick={onExitAdmin}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-[#0B0B0B] hover:bg-[#262626] border border-[#E8D5A8]/30 rounded-lg text-[#FAF9F6] font-medium transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-[#0B0B0B] hover:bg-[#171717] border border-[#E8D5A8]/30 rounded-lg text-[#FAF9F6] font-medium transition-colors"
           >
             <ExternalLink className="w-3 h-3 text-[#C9972B]" />
             <span>Store</span>
@@ -127,7 +142,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
                 isActive
                   ? 'bg-[#F05A7E] text-white shadow-sm font-bold'
-                  : 'bg-[#171717] text-[#A3A3A3] hover:text-[#FAF9F6] border border-[#E8D5A8]/20'
+                  : 'bg-[#171717] text-[#FAF9F6]/60 hover:text-[#FAF9F6] border border-[#E8D5A8]/20'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -204,7 +219,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
                   {adminUser?.email || 'tryweb@gmail.com'}
                 </p>
               </div>
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-950 text-emerald-300 border border-emerald-800">
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-[#C9972B]/10 text-[#E3B84B] border border-[#C9972B]/40">
                 AUTH
               </span>
             </div>
@@ -234,6 +249,11 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#0B0B0B]">
           <div className="max-w-6xl mx-auto">
             {activeTab === 'dashboard' && <AdminDashboard onNavigateTab={(t) => setActiveTab(t as AdminTab)} />}
+            {activeTab === 'hero' && <AdminHero />}
+            {activeTab === 'about' && <AdminAbout />}
+            {activeTab === 'benefits' && <AdminBenefits />}
+            {activeTab === 'shadeFinder' && <AdminShadeFinder />}
+            {activeTab === 'looks' && <AdminLooks />}
             {activeTab === 'pages' && <AdminPages />}
             {activeTab === 'products' && <AdminProducts />}
             {activeTab === 'categories' && <AdminCategories />}

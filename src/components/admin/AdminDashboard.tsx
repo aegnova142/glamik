@@ -21,7 +21,7 @@ import {
   Calendar,
   Layers,
 } from 'lucide-react';
-import { LiveOfferCountdown } from '../LiveOfferCountdown';
+import { LiveOfferCountdown } from '../marketing/LiveOfferCountdown';
 
 interface AdminDashboardProps {
   onNavigateTab: (tab: string) => void;

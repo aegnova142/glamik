@@ -17,6 +17,12 @@ import {
   CMSMediaItem,
   CMSUser,
   CMSAuditLog,
+  CMSHeroContent,
+  CMSAboutContent,
+  CMSBenefit,
+  Look,
+  CMSShadeJourney,
+  CMSBenefitsSection,
 } from '../types';
 import { apiFetch, getAdminToken, setAdminAuth, clearAdminAuth, getStoredAdminUser } from '../utils/cmsClient';
 
@@ -24,6 +30,7 @@ import { apiFetch, getAdminToken, setAdminAuth, clearAdminAuth, getStoredAdminUs
 import { GLAMIRK_PRODUCTS } from '../data/products';
 import { GLAMIRK_JOURNAL_ARTICLES_EXTENDED } from '../data/editorial';
 import { SUPPORT_FAQS } from '../data/commerce';
+import { GLAMIRK_LOOKS } from '../data/looks';
 
 export interface CMSContextType {
   // Public state
@@ -32,6 +39,12 @@ export interface CMSContextType {
   categories: CMSCategory[];
   navigation: CMSNavigationItem[];
   footer: CMSFooterConfig | null;
+  heroContent: CMSHeroContent | null;
+  aboutContent: CMSAboutContent | null;
+  shadeJourney: CMSShadeJourney | null;
+  benefitsSection: CMSBenefitsSection | null;
+  benefits: CMSBenefit[];
+  looks: Look[];
   offers: CMSOffer[];
   journalArticles: JournalArticle[];
   faqs: SupportFaq[];
@@ -65,6 +78,14 @@ export interface CMSContextType {
   deleteOffer: (id: string) => Promise<boolean>;
   saveNavigation: (nav: CMSNavigationItem[]) => Promise<boolean>;
   saveFooter: (footer: CMSFooterConfig) => Promise<boolean>;
+  saveHeroContent: (hero: CMSHeroContent) => Promise<boolean>;
+  saveAboutContent: (about: CMSAboutContent) => Promise<boolean>;
+  saveShadeJourney: (journey: CMSShadeJourney) => Promise<boolean>;
+  saveBenefitsSection: (section: CMSBenefitsSection) => Promise<boolean>;
+  saveBenefit: (benefit: Partial<CMSBenefit>) => Promise<boolean>;
+  deleteBenefit: (id: string) => Promise<boolean>;
+  saveLook: (look: Partial<Look>) => Promise<boolean>;
+  deleteLook: (id: string) => Promise<boolean>;
   saveArticle: (article: Partial<JournalArticle>) => Promise<boolean>;
   deleteArticle: (id: string) => Promise<boolean>;
   saveFaq: (faq: Partial<SupportFaq>) => Promise<boolean>;
@@ -149,6 +170,12 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     { id: 'nav-support', label: 'Support', url: '/support', type: 'internal', order: 6, isVisible: true },
   ]);
   const [footer, setFooter] = useState<CMSFooterConfig | null>(null);
+  const [heroContent, setHeroContent] = useState<CMSHeroContent | null>(null);
+  const [aboutContent, setAboutContent] = useState<CMSAboutContent | null>(null);
+  const [shadeJourney, setShadeJourney] = useState<CMSShadeJourney | null>(null);
+  const [benefitsSection, setBenefitsSection] = useState<CMSBenefitsSection | null>(null);
+  const [benefits, setBenefits] = useState<CMSBenefit[]>([]);
+  const [looks, setLooks] = useState<Look[]>(GLAMIRK_LOOKS);
   const [offers, setOffers] = useState<CMSOffer[]>([]);
   const [journalArticles, setJournalArticles] = useState<JournalArticle[]>(GLAMIRK_JOURNAL_ARTICLES_EXTENDED);
   const [faqs, setFaqs] = useState<SupportFaq[]>(SUPPORT_FAQS.map((f, i) => ({ ...f, order: i + 1, isVisible: true })));
@@ -191,6 +218,12 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (res.data.categories) setCategories(res.data.categories);
         if (res.data.navigation) setNavigation(res.data.navigation);
         if (res.data.footer) setFooter(res.data.footer);
+        if (res.data.heroContent) setHeroContent(res.data.heroContent);
+        if (res.data.aboutContent) setAboutContent(res.data.aboutContent);
+        if (res.data.shadeJourney) setShadeJourney(res.data.shadeJourney);
+        if (res.data.benefitsSection) setBenefitsSection(res.data.benefitsSection);
+        if (res.data.benefits) setBenefits(res.data.benefits);
+        if (res.data.looks) setLooks(res.data.looks);
         if (res.data.offers) setOffers(res.data.offers);
         if (res.data.journalArticles) setJournalArticles(res.data.journalArticles);
         if (res.data.faqs) setFaqs(res.data.faqs);
@@ -435,6 +468,82 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
+  const saveHeroContent = async (hero: CMSHeroContent): Promise<boolean> => {
+    const res = await apiFetch('/api/admin/hero', { method: 'PUT', body: JSON.stringify(hero) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
+  const saveAboutContent = async (about: CMSAboutContent): Promise<boolean> => {
+    const res = await apiFetch('/api/admin/about', { method: 'PUT', body: JSON.stringify(about) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
+  const saveShadeJourney = async (journey: CMSShadeJourney): Promise<boolean> => {
+    const res = await apiFetch('/api/admin/shade-journey', { method: 'PUT', body: JSON.stringify(journey) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
+  const saveBenefitsSection = async (section: CMSBenefitsSection): Promise<boolean> => {
+    const res = await apiFetch('/api/admin/benefits-section', { method: 'PUT', body: JSON.stringify(section) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
+  const saveBenefit = async (benefit: Partial<CMSBenefit>): Promise<boolean> => {
+    const endpoint = benefit.id && benefits.some((b) => b.id === benefit.id) ? `/api/admin/benefits/${benefit.id}` : '/api/admin/benefits';
+    const method = benefit.id && benefits.some((b) => b.id === benefit.id) ? 'PUT' : 'POST';
+    const res = await apiFetch(endpoint, { method, body: JSON.stringify(benefit) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
+  const deleteBenefit = async (id: string): Promise<boolean> => {
+    const res = await apiFetch(`/api/admin/benefits/${id}`, { method: 'DELETE' });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
+  const saveLook = async (look: Partial<Look>): Promise<boolean> => {
+    const endpoint = look.id && looks.some((l) => l.id === look.id) ? `/api/admin/looks/${look.id}` : '/api/admin/looks';
+    const method = look.id && looks.some((l) => l.id === look.id) ? 'PUT' : 'POST';
+    const res = await apiFetch(endpoint, { method, body: JSON.stringify(look) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
+  const deleteLook = async (id: string): Promise<boolean> => {
+    const res = await apiFetch(`/api/admin/looks/${id}`, { method: 'DELETE' });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
   const saveArticle = async (article: Partial<JournalArticle>): Promise<boolean> => {
     const endpoint = article.id && journalArticles.some((a) => a.id === article.id) ? `/api/admin/articles/${article.id}` : '/api/admin/articles';
     const method = article.id && journalArticles.some((a) => a.id === article.id) ? 'PUT' : 'POST';
@@ -526,6 +635,12 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     categories,
     navigation,
     footer,
+    heroContent,
+    aboutContent,
+    shadeJourney,
+    benefitsSection,
+    benefits,
+    looks,
     offers,
     journalArticles,
     faqs,
@@ -553,6 +668,14 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     deleteOffer,
     saveNavigation,
     saveFooter,
+    saveHeroContent,
+    saveAboutContent,
+    saveShadeJourney,
+    saveBenefitsSection,
+    saveBenefit,
+    deleteBenefit,
+    saveLook,
+    deleteLook,
     saveArticle,
     deleteArticle,
     saveFaq,

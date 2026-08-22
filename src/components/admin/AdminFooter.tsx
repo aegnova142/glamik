@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCMS } from '../../context/CMSContext';
 import { CMSFooterConfig, CMSFooterColumn, CMSFooterLink, CMSLegalPolicyContent } from '../../types';
+import { FOOTER_COLUMN_ICON_MAP } from '../layout/Footer';
 import {
   Layers,
   Save,
@@ -41,43 +42,43 @@ const DEFAULT_PRESET_FOOTER: CMSFooterConfig = {
       title: 'Shop',
       order: 1,
       links: [
-        { id: 'l1', label: 'Matte Liquid Lipsticks', url: '/shop?category=Makeup&sub=Lips', actionKey: 'shop-lips' },
-        { id: 'l2', label: 'Luxury Sindoor', url: '/shop?category=Makeup&sub=Face', actionKey: 'shop-sindoor' },
-        { id: 'l3', label: 'Balm To Water Cleanser', url: '/shop?category=Skin&sub=Cleansing', actionKey: 'shop-cleanser' },
-        { id: 'l4', label: 'Shop All Creations', url: '/shop', actionKey: 'shop-all' },
+        { id: 'l1', label: 'All Products', url: '/shop', actionKey: 'shop-all' },
+        { id: 'l2', label: 'Best Sellers', url: '/shop', actionKey: 'shop-all' },
+        { id: 'l3', label: 'New Arrivals', url: '/shop', actionKey: 'shop-all' },
+        { id: 'l4', label: 'Personalized Kit', url: '/find-my-shade', actionKey: 'shade-finder' },
       ],
     },
     {
-      id: 'col-editorial',
-      title: 'Editorial & Journal',
+      id: 'col-about',
+      title: 'Company',
       order: 2,
       links: [
-        { id: 'l5', label: 'The Glamirk Journal', url: '/journal', actionKey: 'journal' },
-        { id: 'l6', label: 'Beauty Guides & Rituals', url: '/beauty-guides', actionKey: 'guides' },
-        { id: 'l7', label: 'Glamirk On You (Social)', url: '/social-commerce', actionKey: 'social' },
-        { id: 'l8', label: 'Sovereign Velvet Campaign', url: '/campaign/sovereign-velvet-festive', actionKey: 'campaign' },
+        { id: 'l5', label: 'Our Story', url: '/about', actionKey: 'about' },
+        { id: 'l6', label: 'Our Mission', url: '/about', actionKey: 'about' },
+        { id: 'l7', label: 'Our Values', url: '/about', actionKey: 'about' },
+        { id: 'l16', label: 'Contact Us', url: '/support', actionKey: 'contact' },
       ],
     },
     {
-      id: 'col-discovery',
-      title: 'Discovery & AI',
+      id: 'col-help',
+      title: 'Help',
       order: 3,
       links: [
-        { id: 'l9', label: 'Find Your Shade Diagnostic', url: '/find-my-shade', actionKey: 'shade-finder' },
-        { id: 'l10', label: 'Shop The Look', url: '/looks', actionKey: 'looks' },
-        { id: 'l11', label: 'Glamirk Privé Loyalty', url: '/my-glam', actionKey: 'loyalty' },
-        { id: 'l12', label: 'Atelier Philosophy', url: '/#philosophy', actionKey: 'philosophy' },
+        { id: 'l8', label: 'FAQ', url: '/support', actionKey: 'support' },
+        { id: 'l9', label: 'Contact', url: '/support', actionKey: 'support' },
+        { id: 'l10', label: 'Shipping', url: '/legal?policy=shipping', actionKey: 'legal-shipping' },
+        { id: 'l11', label: 'Returns', url: '/legal?policy=returns', actionKey: 'legal-returns' },
+        { id: 'l12', label: 'Track Order', url: '/order-tracking', actionKey: 'tracking' },
       ],
     },
     {
-      id: 'col-care',
-      title: 'Client Care',
+      id: 'col-legal',
+      title: 'Legal',
       order: 4,
       links: [
-        { id: 'l13', label: 'Concierge Support & FAQ', url: '/support', actionKey: 'support' },
-        { id: 'l14', label: 'Track Your Order', url: '/order-tracking', actionKey: 'tracking' },
-        { id: 'l15', label: 'Shipping & Returns', url: '/legal?policy=shipping', actionKey: 'legal-shipping' },
-        { id: 'l16', label: 'My Glam Account', url: '/my-glam', actionKey: 'my-glam' },
+        { id: 'l13', label: 'Privacy Policy', url: '/legal?policy=privacy', actionKey: 'legal-privacy' },
+        { id: 'l14', label: 'Terms of Use', url: '/legal?policy=terms', actionKey: 'legal-terms' },
+        { id: 'l15', label: 'Refund Policy', url: '/legal?policy=returns', actionKey: 'legal-returns' },
       ],
     },
   ],
@@ -91,6 +92,11 @@ const DEFAULT_PRESET_FOOTER: CMSFooterConfig = {
     { id: 'leg-term', label: 'Terms of Service', url: '/legal?policy=terms', policyKey: 'terms' },
     { id: 'leg-ship', label: 'Shipping Policy', url: '/legal?policy=shipping', policyKey: 'shipping' },
     { id: 'leg-cook', label: 'Cookie Policy', url: '/legal?policy=cookies', policyKey: 'cookies' },
+  ],
+  paymentMethods: ['Visa', 'Mastercard', 'RuPay', 'UPI', 'Amex'],
+  trustBadges: [
+    { id: 'tb-secure', icon: 'ShieldCheck', title: '100% Secure', subtitle: 'Payments' },
+    { id: 'tb-support', icon: 'Headphones', title: 'Customer Support', subtitle: 'Mon - Sat | 10AM - 7PM' },
   ],
   legalPolicies: {
     privacy: {
@@ -217,7 +223,11 @@ const DEFAULT_PRESET_FOOTER: CMSFooterConfig = {
   },
 };
 
-type ActiveSubTab = 'columns' | 'policies' | 'brand' | 'social';
+type ActiveSubTab = 'columns' | 'policies' | 'brand' | 'social' | 'trust';
+
+const AVAILABLE_PAYMENT_METHODS = ['Visa', 'Mastercard', 'RuPay', 'UPI', 'Amex', 'PayPal', 'GPay'];
+const AVAILABLE_TRUST_ICONS = ['ShieldCheck', 'RotateCcw', 'Headphones', 'Truck', 'Sparkles', 'Lock'];
+const AVAILABLE_COLUMN_ICONS = Object.keys(FOOTER_COLUMN_ICON_MAP);
 
 export const AdminFooter: React.FC = () => {
   const { footer, saveFooter } = useCMS();
@@ -237,6 +247,8 @@ export const AdminFooter: React.FC = () => {
         columns: footer.columns && footer.columns.length > 0 ? footer.columns : DEFAULT_PRESET_FOOTER.columns,
         legalLinks: footer.legalLinks && footer.legalLinks.length > 0 ? footer.legalLinks : DEFAULT_PRESET_FOOTER.legalLinks,
         legalPolicies: footer.legalPolicies || DEFAULT_PRESET_FOOTER.legalPolicies,
+        paymentMethods: footer.paymentMethods && footer.paymentMethods.length > 0 ? footer.paymentMethods : DEFAULT_PRESET_FOOTER.paymentMethods,
+        trustBadges: footer.trustBadges && footer.trustBadges.length > 0 ? footer.trustBadges : DEFAULT_PRESET_FOOTER.trustBadges,
       });
     }
   }, [footer]);
@@ -252,7 +264,7 @@ export const AdminFooter: React.FC = () => {
   };
 
   const handleResetToPreset = () => {
-    if (window.confirm('Reset footer links, 4 columns, and legal policy templates to official Glamirk configuration?')) {
+    if (window.confirm('Reset footer columns, payment methods, trust badges, and legal policy templates to official Glamirk configuration?')) {
       setFooterState(DEFAULT_PRESET_FOOTER);
     }
   };
@@ -269,7 +281,8 @@ export const AdminFooter: React.FC = () => {
     const newCol: CMSFooterColumn = {
       id: newColId,
       title: 'New Section',
-      order: (footerState.columns?.length || 0) + 1,
+      icon: 'Layers',
+      order: (footerState.columns || []).reduce((max, c) => Math.max(max, c.order || 0), 0) + 1,
       links: [{ id: `l-${Date.now()}`, label: 'New Link', url: '/shop' }],
     };
     setFooterState({ ...footerState, columns: [...(footerState.columns || []), newCol] });
@@ -278,6 +291,12 @@ export const AdminFooter: React.FC = () => {
 
   const handleDeleteColumn = (colIndex: number) => {
     const updated = (footerState.columns || []).filter((_, idx) => idx !== colIndex);
+    setFooterState({ ...footerState, columns: updated });
+  };
+
+  const handleUpdateColumnIcon = (colIndex: number, icon: string) => {
+    const updated = [...(footerState.columns || [])];
+    updated[colIndex] = { ...updated[colIndex], icon };
     setFooterState({ ...footerState, columns: updated });
   };
 
@@ -356,6 +375,49 @@ export const AdminFooter: React.FC = () => {
     setFooterState({ ...footerState, legalLinks: updated });
   };
 
+  // Social link operations
+  const handleAddSocialLink = () => {
+    const updated = [...(footerState.socialLinks || []), { platform: 'New Platform', url: 'https://', handle: '' }];
+    setFooterState({ ...footerState, socialLinks: updated });
+  };
+
+  const handleUpdateSocialPlatform = (idx: number, platform: string) => {
+    const updated = [...(footerState.socialLinks || [])];
+    updated[idx] = { ...updated[idx], platform };
+    setFooterState({ ...footerState, socialLinks: updated });
+  };
+
+  const handleDeleteSocialLink = (idx: number) => {
+    const updated = (footerState.socialLinks || []).filter((_, i) => i !== idx);
+    setFooterState({ ...footerState, socialLinks: updated });
+  };
+
+  // Payment method operations
+  const handleTogglePaymentMethod = (method: string) => {
+    const current = footerState.paymentMethods || [];
+    const updated = current.includes(method)
+      ? current.filter((m) => m !== method)
+      : [...current, method];
+    setFooterState({ ...footerState, paymentMethods: updated });
+  };
+
+  // Trust badge operations
+  const handleAddTrustBadge = () => {
+    const newBadge = { id: `tb-${Date.now()}`, icon: 'ShieldCheck', title: 'New Badge', subtitle: 'Description' };
+    setFooterState({ ...footerState, trustBadges: [...(footerState.trustBadges || []), newBadge] });
+  };
+
+  const handleUpdateTrustBadge = (idx: number, updates: Partial<{ icon: string; title: string; subtitle: string }>) => {
+    const updated = [...(footerState.trustBadges || [])];
+    updated[idx] = { ...updated[idx], ...updates };
+    setFooterState({ ...footerState, trustBadges: updated });
+  };
+
+  const handleDeleteTrustBadge = (idx: number) => {
+    const updated = (footerState.trustBadges || []).filter((_, i) => i !== idx);
+    setFooterState({ ...footerState, trustBadges: updated });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header with Save & Action Controls */}
@@ -367,8 +429,8 @@ export const AdminFooter: React.FC = () => {
               Live Sync
             </span>
           </div>
-          <p className="text-xs text-[#A3A3A3] mt-1">
-            Real-time control over all 4 footer columns (Shop, Editorial, AI Discovery, Client Care) &amp; Legal Policies.
+          <p className="text-xs text-[#6B6B6B] mt-1">
+            Real-time control over all footer columns (Shop, About, Help, Legal), payment methods, trust badges &amp; Legal Policies.
           </p>
         </div>
 
@@ -376,7 +438,7 @@ export const AdminFooter: React.FC = () => {
           <button
             onClick={handleResetToPreset}
             type="button"
-            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-[#1A1A1A] hover:bg-[#262626] text-[#E8D5A8] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-[#171717] hover:bg-[#0B0B0B] text-[#E8D5A8] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold transition-all cursor-pointer"
             title="Reset to official preset"
           >
             <ResetIcon className="w-3.5 h-3.5" />
@@ -402,11 +464,11 @@ export const AdminFooter: React.FC = () => {
           className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
             activeSubTab === 'columns'
               ? 'bg-[#F05A7E] text-white shadow-sm'
-              : 'text-[#A3A3A3] hover:text-[#FAF9F6] hover:bg-[#262626]'
+              : 'text-[#6B6B6B] hover:text-[#FAF9F6] hover:bg-[#171717]'
           }`}
         >
           <Layers className="w-4 h-4" />
-          <span>Footer Columns (4 Sections)</span>
+          <span>Footer Columns</span>
         </button>
 
         <button
@@ -414,7 +476,7 @@ export const AdminFooter: React.FC = () => {
           className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
             activeSubTab === 'policies'
               ? 'bg-[#F05A7E] text-white shadow-sm'
-              : 'text-[#A3A3A3] hover:text-[#FAF9F6] hover:bg-[#262626]'
+              : 'text-[#6B6B6B] hover:text-[#FAF9F6] hover:bg-[#171717]'
           }`}
         >
           <ShieldCheck className="w-4 h-4" />
@@ -426,7 +488,7 @@ export const AdminFooter: React.FC = () => {
           className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
             activeSubTab === 'brand'
               ? 'bg-[#F05A7E] text-white shadow-sm'
-              : 'text-[#A3A3A3] hover:text-[#FAF9F6] hover:bg-[#262626]'
+              : 'text-[#6B6B6B] hover:text-[#FAF9F6] hover:bg-[#171717]'
           }`}
         >
           <Sparkles className="w-4 h-4" />
@@ -438,11 +500,23 @@ export const AdminFooter: React.FC = () => {
           className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
             activeSubTab === 'social'
               ? 'bg-[#F05A7E] text-white shadow-sm'
-              : 'text-[#A3A3A3] hover:text-[#FAF9F6] hover:bg-[#262626]'
+              : 'text-[#6B6B6B] hover:text-[#FAF9F6] hover:bg-[#171717]'
           }`}
         >
           <LinkIcon className="w-4 h-4" />
           <span>Social Handles</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('trust')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+            activeSubTab === 'trust'
+              ? 'bg-[#F05A7E] text-white shadow-sm'
+              : 'text-[#6B6B6B] hover:text-[#FAF9F6] hover:bg-[#171717]'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4" />
+          <span>Payments &amp; Trust Badges</span>
         </button>
       </div>
 
@@ -452,14 +526,14 @@ export const AdminFooter: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-[#171717] rounded-xl border border-[#E8D5A8]/20">
             <div>
               <h3 className="font-serif text-base text-[#FAF9F6]">Navigation Columns &amp; Links</h3>
-              <p className="text-xs text-[#A3A3A3] mt-0.5">
-                Edit column headers (Shop, Editorial, AI Discovery, Client Care) and each linked destination.
+              <p className="text-xs text-[#6B6B6B] mt-0.5">
+                Edit column headers (Shop, About, Help, Legal) and each linked destination.
               </p>
             </div>
             <button
               onClick={handleAddColumn}
               type="button"
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#262626] hover:bg-[#333333] text-[#FAF9F6] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#171717] hover:bg-[#0B0B0B] text-[#FAF9F6] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 text-[#F05A7E]" />
               <span>Add Column</span>
@@ -477,9 +551,16 @@ export const AdminFooter: React.FC = () => {
                   {/* Column Header */}
                   <div className="flex items-center justify-between gap-3 pb-3 border-b border-[#E8D5A8]/15">
                     <div className="flex-1 flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-full bg-[#F05A7E]/20 text-[#F05A7E] text-xs font-bold flex items-center justify-center">
-                        {colIdx + 1}
-                      </span>
+                      <select
+                        value={col.icon || 'Layers'}
+                        onChange={(e) => handleUpdateColumnIcon(colIdx, e.target.value)}
+                        title="Column Icon"
+                        className="w-9 h-9 shrink-0 px-1 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-[#F05A7E] text-xs focus:border-[#F05A7E] focus:outline-none"
+                      >
+                        {AVAILABLE_COLUMN_ICONS.map((icon) => (
+                          <option key={icon} value={icon}>{icon}</option>
+                        ))}
+                      </select>
                       <input
                         type="text"
                         value={col.title}
@@ -491,7 +572,7 @@ export const AdminFooter: React.FC = () => {
 
                     <button
                       onClick={() => handleDeleteColumn(colIdx)}
-                      className="p-1.5 text-[#A3A3A3] hover:text-[#F05A7E] transition-colors cursor-pointer"
+                      className="p-1.5 text-[#6B6B6B] hover:text-[#F05A7E] transition-colors cursor-pointer"
                       title="Delete Column"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -515,7 +596,7 @@ export const AdminFooter: React.FC = () => {
                           />
                           <button
                             onClick={() => handleDeleteLink(colIdx, linkIdx)}
-                            className="p-1 text-[#A3A3A3] hover:text-[#F05A7E] transition-colors cursor-pointer"
+                            className="p-1 text-[#6B6B6B] hover:text-[#F05A7E] transition-colors cursor-pointer"
                             title="Remove Link"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -525,7 +606,7 @@ export const AdminFooter: React.FC = () => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {/* Route / Action Presets */}
                           <div>
-                            <label className="block text-[10px] uppercase tracking-wider text-[#A3A3A3] mb-0.5">
+                            <label className="block text-[10px] uppercase tracking-wider text-[#6B6B6B] mb-0.5">
                               Action Destination
                             </label>
                             <select
@@ -585,7 +666,7 @@ export const AdminFooter: React.FC = () => {
 
                           {/* URL input */}
                           <div>
-                            <label className="block text-[10px] uppercase tracking-wider text-[#A3A3A3] mb-0.5">
+                            <label className="block text-[10px] uppercase tracking-wider text-[#6B6B6B] mb-0.5">
                               URL / Path
                             </label>
                             <input
@@ -603,7 +684,7 @@ export const AdminFooter: React.FC = () => {
                     <button
                       onClick={() => handleAddLink(colIdx)}
                       type="button"
-                      className="w-full py-2 flex items-center justify-center gap-1.5 bg-[#0B0B0B] hover:bg-[#262626] border border-dashed border-[#E8D5A8]/30 rounded-xl text-xs text-[#FAF9F6] font-semibold transition-colors cursor-pointer"
+                      className="w-full py-2 flex items-center justify-center gap-1.5 bg-[#0B0B0B] hover:bg-[#171717] border border-dashed border-[#E8D5A8]/30 rounded-xl text-xs text-[#FAF9F6] font-semibold transition-colors cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5 text-[#F05A7E]" />
                       <span>Add Link to {col.title}</span>
@@ -621,7 +702,7 @@ export const AdminFooter: React.FC = () => {
         <div className="space-y-6">
           <div className="p-4 bg-[#171717] rounded-xl border border-[#E8D5A8]/20 space-y-3">
             <h3 className="font-serif text-base text-[#FAF9F6]">Legal Policies &amp; Atelier Compliance</h3>
-            <p className="text-xs text-[#A3A3A3]">
+            <p className="text-xs text-[#6B6B6B]">
               Edit the exact content, clauses, headings, and disclosures displayed across all Legal Policy pages.
             </p>
 
@@ -724,7 +805,7 @@ export const AdminFooter: React.FC = () => {
                 <button
                   onClick={handleAddPolicySection}
                   type="button"
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#262626] hover:bg-[#333333] text-[#FAF9F6] rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#171717] hover:bg-[#0B0B0B] text-[#FAF9F6] rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5 text-[#F05A7E]" />
                   <span>Add Section Clause</span>
@@ -747,7 +828,7 @@ export const AdminFooter: React.FC = () => {
                       />
                       <button
                         onClick={() => handleDeletePolicySection(secIdx)}
-                        className="p-1.5 text-[#A3A3A3] hover:text-[#F05A7E] transition-colors cursor-pointer"
+                        className="p-1.5 text-[#6B6B6B] hover:text-[#F05A7E] transition-colors cursor-pointer"
                         title="Delete Section"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -774,14 +855,14 @@ export const AdminFooter: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {(footerState.legalLinks || []).map((leg, legIdx) => (
                   <div key={leg.id || legIdx} className="p-3 bg-[#0B0B0B] border border-[#E8D5A8]/20 rounded-xl space-y-2">
-                    <label className="block text-[10px] uppercase text-[#A3A3A3]">Link {legIdx + 1} Label</label>
+                    <label className="block text-[10px] uppercase text-[#6B6B6B]">Link {legIdx + 1} Label</label>
                     <input
                       type="text"
                       value={leg.label}
                       onChange={(e) => handleUpdateLegalLink(legIdx, { label: e.target.value })}
                       className="w-full px-2.5 py-1 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs font-semibold text-[#FAF9F6]"
                     />
-                    <label className="block text-[10px] uppercase text-[#A3A3A3]">Target URL</label>
+                    <label className="block text-[10px] uppercase text-[#6B6B6B]">Target URL</label>
                     <input
                       type="text"
                       value={leg.url}
@@ -886,14 +967,39 @@ export const AdminFooter: React.FC = () => {
       {/* TAB 4: SOCIAL MEDIA HANDLES */}
       {activeSubTab === 'social' && (
         <div className="p-6 rounded-2xl bg-[#171717] border border-[#E8D5A8]/25 space-y-4">
-          <h3 className="font-serif text-base text-[#FAF9F6]">Social Media Profiles</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-serif text-base text-[#FAF9F6]">Social Media Profiles</h3>
+            <button
+              onClick={handleAddSocialLink}
+              type="button"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0B0B0B] hover:bg-[#171717] text-[#FAF9F6] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 text-[#F05A7E]" />
+              <span>Add Platform</span>
+            </button>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {(footerState.socialLinks || []).map((soc, idx) => (
-              <div key={soc.platform || idx} className="p-4 bg-[#0B0B0B] border border-[#E8D5A8]/20 rounded-xl space-y-2">
-                <label className="block text-xs font-bold text-[#E8D5A8] uppercase">{soc.platform}</label>
+              <div key={idx} className="p-4 bg-[#0B0B0B] border border-[#E8D5A8]/20 rounded-xl space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <input
+                    type="text"
+                    value={soc.platform}
+                    onChange={(e) => handleUpdateSocialPlatform(idx, e.target.value)}
+                    placeholder="Platform Name"
+                    className="flex-1 px-2 py-1 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs font-bold text-[#E8D5A8] uppercase focus:border-[#F05A7E] focus:outline-none"
+                  />
+                  <button
+                    onClick={() => handleDeleteSocialLink(idx)}
+                    className="p-1 text-[#6B6B6B] hover:text-[#F05A7E] transition-colors cursor-pointer"
+                    title="Remove Platform"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
                 <div>
-                  <label className="block text-[10px] text-[#A3A3A3] uppercase">Profile URL</label>
+                  <label className="block text-[10px] text-[#6B6B6B] uppercase">Profile URL</label>
                   <input
                     type="text"
                     value={soc.url}
@@ -906,7 +1012,7 @@ export const AdminFooter: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] text-[#A3A3A3] uppercase">Display Handle</label>
+                  <label className="block text-[10px] text-[#6B6B6B] uppercase">Display Handle</label>
                   <input
                     type="text"
                     value={soc.handle || ''}
@@ -921,6 +1027,91 @@ export const AdminFooter: React.FC = () => {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: PAYMENT METHODS & TRUST BADGES */}
+      {activeSubTab === 'trust' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-[#171717] border border-[#E8D5A8]/25 space-y-4">
+            <h3 className="font-serif text-base text-[#FAF9F6]">Accepted Payment Methods</h3>
+            <p className="text-xs text-[#6B6B6B]">Toggle which payment badges appear in the footer bottom bar.</p>
+            <div className="flex flex-wrap gap-2">
+              {AVAILABLE_PAYMENT_METHODS.map((method) => {
+                const isActive = (footerState.paymentMethods || []).includes(method);
+                return (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => handleTogglePaymentMethod(method)}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-[#C9972B] text-[#0B0B0B] border-[#C9972B]'
+                        : 'bg-[#0B0B0B] text-[#6B6B6B] border-[#E8D5A8]/30 hover:border-[#E8D5A8]/60'
+                    }`}
+                  >
+                    {method}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="p-6 rounded-2xl bg-[#171717] border border-[#E8D5A8]/25 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-serif text-base text-[#FAF9F6]">Trust Badges</h3>
+                <p className="text-xs text-[#6B6B6B] mt-0.5">The 3 badges shown on the right side of the footer bottom bar.</p>
+              </div>
+              <button
+                onClick={handleAddTrustBadge}
+                type="button"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-[#0B0B0B] hover:bg-[#171717] text-[#FAF9F6] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 text-[#F05A7E]" />
+                <span>Add Badge</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {(footerState.trustBadges || []).map((badge, idx) => (
+                <div key={badge.id || idx} className="p-4 bg-[#0B0B0B] border border-[#E8D5A8]/20 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <select
+                      value={badge.icon}
+                      onChange={(e) => handleUpdateTrustBadge(idx, { icon: e.target.value })}
+                      className="flex-1 px-2 py-1 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6] focus:border-[#F05A7E] focus:outline-none"
+                    >
+                      {AVAILABLE_TRUST_ICONS.map((icon) => (
+                        <option key={icon} value={icon}>{icon}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => handleDeleteTrustBadge(idx)}
+                      className="p-1 text-[#6B6B6B] hover:text-[#F05A7E] transition-colors cursor-pointer"
+                      title="Remove Badge"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={badge.title}
+                    onChange={(e) => handleUpdateTrustBadge(idx, { title: e.target.value })}
+                    placeholder="Title (e.g. 100% Secure)"
+                    className="w-full px-2.5 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs font-semibold text-[#FAF9F6]"
+                  />
+                  <input
+                    type="text"
+                    value={badge.subtitle}
+                    onChange={(e) => handleUpdateTrustBadge(idx, { subtitle: e.target.value })}
+                    placeholder="Subtitle (e.g. Payments)"
+                    className="w-full px-2.5 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

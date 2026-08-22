@@ -36,7 +36,7 @@ export const AdminNavigation: React.FC = () => {
       label: 'New Link',
       url: '/shop',
       type: 'internal',
-      order: navItems.length + 1,
+      order: navItems.reduce((max, n) => Math.max(max, n.order || 0), 0) + 1,
       isVisible: true,
     };
     setNavItems([...navItems, newItem]);
@@ -134,7 +134,7 @@ export const AdminNavigation: React.FC = () => {
                   type="button"
                   onClick={() => handleUpdate(idx, 'isVisible', !item.isVisible)}
                   className={`p-1.5 rounded hover:bg-[#0B0B0B] ${
-                    item.isVisible ? 'text-emerald-400' : 'text-[#6B6B6B]'
+                    item.isVisible ? 'text-[#E3B84B]' : 'text-[#6B6B6B]'
                   }`}
                   title={item.isVisible ? 'Visible' : 'Hidden'}
                 >

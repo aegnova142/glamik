@@ -83,7 +83,7 @@ export const AdminSecurity: React.FC = () => {
             <div
               className={`flex items-center gap-2 p-3 rounded-lg text-xs ${
                 message.type === 'success'
-                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700'
+                  ? 'bg-[#C9972B]/10/80 text-[#E3B84B] border border-[#C9972B]/40'
                   : 'bg-[#F05A7E]/20 text-[#F05A7E] border border-[#F05A7E]/30'
               }`}
             >

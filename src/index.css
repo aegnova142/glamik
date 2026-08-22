@@ -30,6 +30,24 @@
     --color-pink-lightest: #FAF9F6;
     --color-text-primary: #121212;
     --color-text-secondary: #6B6B6B;
+
+    /* Canonical Luxury Black + Gold + Glam Pink theme tokens */
+    --luxury-black: #0B0B0B;
+    --soft-black: #171717;
+
+    --luxury-gold: #C9972B;
+    --bright-gold: #E3B84B;
+
+    --glam-pink: #F05A7E;
+    --soft-pink: #FCE8ED;
+
+    --pure-white: #FFFFFF;
+    --warm-white: #FAF9F6;
+
+    --text-primary: #121212;
+    --text-muted: #6B6B6B;
+
+    --border-gold: #E8D5A8;
   }
 
   body {

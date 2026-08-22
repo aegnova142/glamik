@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { useCMS } from '../../context/CMSContext';
 import { Lock, Mail, Key, ShieldCheck, AlertCircle, ArrowRight, Sparkles } from 'lucide-react';
 import { motion } from 'motion/react';
+import { normalizeEmail } from '../../utils/formValidation';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -29,7 +30,9 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
     setIsSubmitting(true);
 
     try {
-      const res = await adminLogin(email, password);
+      const cleanEmail = normalizeEmail(email);
+      setEmail(cleanEmail);
+      const res = await adminLogin(cleanEmail, password);
       if (res.success) {
         onSuccess();
       } else {
@@ -49,28 +52,35 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0B0B]/80 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0B0B]/85 backdrop-blur-md">
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="w-full max-w-md bg-[#171717] border border-[#E8D5A8]/30 rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-md"
       >
-        {/* Header */}
-        <div className="relative px-8 pt-8 pb-6 bg-gradient-to-b from-[#0B0B0B] to-[#171717] border-b border-[#E8D5A8]/15 text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-[#C9972B]/10 border border-[#C9972B]/30 text-[#C9972B] mb-3">
-            <Lock className="w-6 h-6" />
-          </div>
-          <h2 className="font-serif text-2xl font-light tracking-wide text-[#FAF9F6]">
-            GLAMIRK <span className="font-sans text-xs tracking-widest text-[#C9972B] uppercase">Admin Portal</span>
-          </h2>
-          <p className="text-xs text-[#6B6B6B] mt-1">
-            Central content management & real-time store administration
-          </p>
-        </div>
+        {/* Ambient gold glow behind the card */}
+        <div className="absolute -inset-4 rounded-[28px] bg-[#C9972B]/10 blur-2xl pointer-events-none" />
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-8 space-y-5">
+        <div className="relative bg-[#171717] border border-[#C9972B]/25 rounded-2xl shadow-[0_25px_70px_rgba(0,0,0,0.55)] overflow-hidden">
+          {/* Gold top accent bar */}
+          <div className="h-1 bg-gradient-to-r from-[#C9972B] via-[#E3B84B] to-[#C9972B]" />
+
+          {/* Header */}
+          <div className="relative px-8 pt-8 pb-6 bg-gradient-to-b from-[#0B0B0B] to-[#171717] border-b border-[#E8D5A8]/15 text-center">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-br from-[#C9972B]/20 to-[#C9972B]/5 border border-[#C9972B]/40 text-[#E3B84B] mb-3 shadow-[0_0_20px_rgba(201,151,43,0.15)]">
+              <Lock className="w-6 h-6" />
+            </div>
+            <h2 className="font-serif text-2xl font-light tracking-wide text-[#FAF9F6]">
+              GLAMIRK <span className="font-sans text-xs tracking-widest text-[#C9972B] uppercase">Admin Portal</span>
+            </h2>
+            <p className="text-xs text-[#6B6B6B] mt-1">
+              Central content management & real-time store administration
+            </p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="p-8 space-y-5">
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-[#F05A7E]/10 border border-[#F05A7E]/30 text-[#F05A7E] text-xs">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -154,7 +164,8 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
               Return to Public Storefront
             </button>
           </div>
-        </form>
+          </form>
+        </div>
       </motion.div>
     </div>
   );

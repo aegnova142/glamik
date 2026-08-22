@@ -20,7 +20,7 @@ export const AdminFaqs: React.FC = () => {
       category: 'PRODUCTS',
       question: 'How do Glamirk lipsticks prevent ashen undertones?',
       answer: 'Our lipsticks contain calibrated warm ochre and yellow micro-pigments that neutralize the white chalky base common in standard cosmetics, guaranteeing true-to-pan vibrancy on melanin-rich skin.',
-      order: faqs.length + 1,
+      order: faqs.reduce((max, f) => Math.max(max, f.order || 0), 0) + 1,
       isVisible: true,
     };
     setEditingFaq(newFaq);

@@ -19,7 +19,7 @@ import {
   Percent,
   Sparkles,
 } from 'lucide-react';
-import { LiveOfferCountdown } from '../LiveOfferCountdown';
+import { LiveOfferCountdown } from '../marketing/LiveOfferCountdown';
 
 export const AdminOffers: React.FC = () => {
   const { offers, products, saveOffer, deleteOffer, serverTime } = useCMS();

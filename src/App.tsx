@@ -4,72 +4,78 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { AnnouncementBar } from './components/AnnouncementBar';
-import { Navbar } from './components/Navbar';
-import { Hero } from './components/Hero';
-import { BrandIntro } from './components/BrandIntro';
-import { BrandStatement } from './components/BrandStatement';
-import { CategoryGridSection } from './components/CategoryGridSection';
-import { PromotionalBanner } from './components/PromotionalBanner';
-import { GlamirkEdit } from './components/GlamirkEdit';
-import { CleanserShowcase } from './components/CleanserShowcase';
-import { ShadeFinderTeaser } from './components/ShadeFinderTeaser';
-import { ShopTheLook } from './components/ShopTheLook';
-import { GlamirkOnYou } from './components/GlamirkOnYou';
-import { JournalSection } from './components/JournalSection';
-import { TrustQualityStrip } from './components/TrustQualityStrip';
-import { Footer } from './components/Footer';
+import { AnnouncementBar } from './components/layout/AnnouncementBar';
+import { Navbar } from './components/layout/Navbar';
+import { Hero } from './components/home/Hero';
+import { BrandIntro } from './components/home/BrandIntro';
+import { BrandStatement } from './components/home/BrandStatement';
+import { AboutPage } from './components/content/AboutPage';
+import { CategoryGridSection } from './components/home/CategoryGridSection';
+import { PromotionalBanner } from './components/home/PromotionalBanner';
+import { GlamirkEdit } from './components/home/GlamirkEdit';
+import { CleanserShowcase } from './components/home/CleanserShowcase';
+import { ShadeFinderTeaser } from './components/home/ShadeFinderTeaser';
+import { FaqHomeSection } from './components/home/FaqHomeSection';
+import { ShopTheLook } from './components/home/ShopTheLook';
+import { GlamirkOnYou } from './components/social/GlamirkOnYou';
+import { JournalSection } from './components/home/JournalSection';
+import { TrustQualityStrip } from './components/home/TrustQualityStrip';
+import { Footer } from './components/layout/Footer';
+import { ConciergeModal } from './components/layout/ConciergeModal';
 
 // Phase 2 Pages
-import { ShopPage } from './components/ShopPage';
-import { FullProductPage } from './components/FullProductPage';
-import { ShopTheLookPage } from './components/ShopTheLookPage';
-import { WishlistPage } from './components/WishlistPage';
+import { ShopPage } from './components/product/ShopPage';
+import { FullProductPage } from './components/product/FullProductPage';
+import { ShopTheLookPage } from './components/product/ShopTheLookPage';
+import { WishlistPage } from './components/account/WishlistPage';
 
 // Phase 3 Pages & AI / AR Experiences
-import { FindMyShadePage } from './components/FindMyShadePage';
-import { MyGlamDashboard } from './components/MyGlamDashboard';
-import { VirtualTryOnModal } from './components/VirtualTryOnModal';
-import { BeautyAssistantDrawer } from './components/BeautyAssistantDrawer';
+import { FindMyShadePage } from './components/discovery/FindMyShadePage';
+import { MyGlamDashboard } from './components/account/MyGlamDashboard';
+import { VirtualTryOnModal } from './components/discovery/VirtualTryOnModal';
+import { BeautyAssistantDrawer } from './components/discovery/BeautyAssistantDrawer';
 
 // Phase 4 Commerce & Conversion Pages
-import { ShoppingBagPage } from './components/ShoppingBagPage';
-import { CheckoutPage } from './components/CheckoutPage';
-import { OrderConfirmationPage } from './components/OrderConfirmationPage';
-import { OrderTrackingPage } from './components/OrderTrackingPage';
-import { SupportCenterPage } from './components/SupportCenterPage';
+import { ShoppingBagPage } from './components/cart-checkout/ShoppingBagPage';
+import { CheckoutPage } from './components/cart-checkout/CheckoutPage';
+import { OrderConfirmationPage } from './components/cart-checkout/OrderConfirmationPage';
+import { OrderTrackingPage } from './components/cart-checkout/OrderTrackingPage';
+import { SupportCenterPage } from './components/content/SupportCenterPage';
 
 // Phase 5 Content, Discovery & Growth Pages
-import { JournalPage } from './components/JournalPage';
-import { ArticleDetailPage } from './components/ArticleDetailPage';
-import { BeautyGuidesPage } from './components/BeautyGuidesPage';
-import { SocialCommerceHub } from './components/SocialCommerceHub';
-import { CampaignLandingPage } from './components/CampaignLandingPage';
-import { BeautyQuizModal } from './components/BeautyQuizModal';
-import { PersonalizedHomeBanner } from './components/PersonalizedHomeBanner';
-import { TrendingDiscovery } from './components/TrendingDiscovery';
+import { JournalPage } from './components/content/JournalPage';
+import { ArticleDetailPage } from './components/content/ArticleDetailPage';
+import { BeautyGuidesPage } from './components/content/BeautyGuidesPage';
+import { SocialCommerceHub } from './components/social/SocialCommerceHub';
+import { CampaignLandingPage } from './components/marketing/CampaignLandingPage';
+import { BeautyQuizModal } from './components/discovery/BeautyQuizModal';
+import { PersonalizedHomeBanner } from './components/home/PersonalizedHomeBanner';
+import { TrendingDiscovery } from './components/home/TrendingDiscovery';
 
 // Phase 6 Production, Legal & Resilience Components
-import { NotFoundPage } from './components/NotFoundPage';
-import { LegalPage } from './components/LegalPage';
-import { OfflineBanner } from './components/OfflineBanner';
+import { NotFoundPage } from './components/content/NotFoundPage';
+import { LegalPage } from './components/content/LegalPage';
+import { OfflineBanner } from './components/layout/OfflineBanner';
 
 // CMS Context & Admin Components
 import { CMSProvider, useCMS } from './context/CMSContext';
+import { CustomerAuthProvider, useCustomerAuth } from './context/CustomerAuthContext';
+import { CommerceProvider, useCommerce } from './context/CommerceContext';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminLoginModal } from './components/admin/AdminLoginModal';
-import { LiveOfferCountdown } from './components/LiveOfferCountdown';
-import { DynamicSectionRenderer } from './components/DynamicSectionRenderer';
+import { LiveOfferCountdown } from './components/marketing/LiveOfferCountdown';
+import { DynamicSectionRenderer } from './components/content/DynamicSectionRenderer';
 
 // Modals, Drawers and Overlays
-import { CartDrawer } from './components/CartDrawer';
-import { WishlistDrawer } from './components/WishlistDrawer';
-import { QuickViewModal } from './components/QuickViewModal';
-import { LookDetailModal } from './components/LookDetailModal';
-import { SearchOverlay } from './components/SearchOverlay';
-import { ShadeFinderModal } from './components/ShadeFinderModal';
-import { JournalModal } from './components/JournalModal';
-import { MobileBottomNav } from './components/MobileBottomNav';
+import { CartDrawer } from './components/cart-checkout/CartDrawer';
+import { WishlistDrawer } from './components/account/WishlistDrawer';
+import { AuthModal } from './components/account/AuthModal';
+import { QuickViewModal } from './components/product/QuickViewModal';
+import { LookDetailModal } from './components/product/LookDetailModal';
+import { SearchOverlay } from './components/search/SearchOverlay';
+import { ShadeFinderModal } from './components/discovery/ShadeFinderModal';
+import { JournalModal } from './components/content/JournalModal';
+import { MobileBottomNav } from './components/layout/MobileBottomNav';
 
 import {
   Product,
@@ -97,9 +103,23 @@ import { Sparkles } from 'lucide-react';
 
 function AppContent() {
   const { products: cmsProducts, pages: cmsPages, activeOffers, globalSettings, isAdminAuthenticated } = useCMS();
+  const { customerUser, isCustomerLoggedIn } = useCustomerAuth();
+  const commerce = useCommerce();
+  const { cartItems, cartSubtotal, wishlist } = commerce;
+  // Mutations queued for replay after a sign-in gate must call through this ref, not a
+  // destructured const — a queued closure captures whatever `commerce` was at click time
+  // (still logged-out), and a plain const would freeze that stale, always-rejecting version.
+  const commerceRef = React.useRef(commerce);
+  commerceRef.current = commerce;
 
-  // Navigation Routing State
-  const [currentRoute, setCurrentRoute] = useState<PageRoute>({ page: 'home' });
+  // Navigation Routing State — /admin is a deliberately unadvertised direct
+  // URL entry point (like /wp-admin) rather than a link surfaced anywhere in
+  // the public UI, so only someone who already knows the address can reach it.
+  const [currentRoute, setCurrentRoute] = useState<PageRoute>(() =>
+    typeof window !== 'undefined' && window.location.pathname.replace(/\/+$/, '') === '/admin'
+      ? { page: 'admin' }
+      : { page: 'home' }
+  );
 
   // Combined product catalog (CMS products prioritized over base defaults)
   const allProducts = React.useMemo(() => {
@@ -109,15 +129,35 @@ function AppContent() {
     return [...cmsProducts, ...defaults];
   }, [cmsProducts]);
 
-  // Cart & Wishlist State
-  const [cartItems, setCartItems] = useState<CartItem[]>([
-    {
-      product: GLAMIRK_PRODUCTS[0],
-      selectedShade: GLAMIRK_PRODUCTS[0].shades?.[0],
-      quantity: 1,
-    },
-  ]);
-  const [wishlist, setWishlist] = useState<string[]>(['matte-liquid-lipstick-collection']);
+  // Sign-in gate: cart/wishlist are real, server-persisted, per-account data —
+  // any attempt to mutate them while logged out opens sign-in and replays the action on success.
+  const [isAuthGateOpen, setIsAuthGateOpen] = useState(false);
+  // Populated when the visitor lands here via a "Forgot Password" email link
+  // (?resetToken=...) — opens the auth gate straight into the reset step.
+  const [pendingResetToken, setPendingResetToken] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('resetToken');
+    if (token) {
+      setPendingResetToken(token);
+      setIsAuthGateOpen(true);
+      params.delete('resetToken');
+      const newSearch = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (newSearch ? `?${newSearch}` : ''));
+    }
+  }, []);
+  const pendingActionRef = React.useRef<(() => void) | null>(null);
+  const requireLogin = (action: () => void) => {
+    if (isCustomerLoggedIn) {
+      action();
+    } else {
+      pendingActionRef.current = action;
+      setIsAuthGateOpen(true);
+    }
+  };
+
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
 
   // Phase 4 Orders & Addresses State
@@ -136,11 +176,35 @@ function AppContent() {
     }
   });
 
-  // Recently Viewed History
-  const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>([
-    'matte-liquid-lipstick-collection',
-    'balm-to-water-cleanser-50g',
-  ]);
+  // Recently Viewed History — each signed-in customer gets their own list; guests get a shared device-local one.
+  const recentlyViewedKey = customerUser ? `glamirk_recently_viewed_${customerUser.id}` : 'glamirk_recently_viewed_guest';
+  const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(recentlyViewedKey);
+      return saved ? JSON.parse(saved) : ['matte-liquid-lipstick-collection', 'balm-to-water-cleanser-50g'];
+    } catch {
+      return ['matte-liquid-lipstick-collection', 'balm-to-water-cleanser-50g'];
+    }
+  });
+
+  // Switch to the correct per-user (or guest) history whenever login/logout changes who's active.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(recentlyViewedKey);
+      setRecentlyViewedIds(saved ? JSON.parse(saved) : []);
+    } catch {
+      setRecentlyViewedIds([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recentlyViewedKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(recentlyViewedKey, JSON.stringify(recentlyViewedIds));
+    } catch {
+      // ignore storage errors (e.g. private browsing quota)
+    }
+  }, [recentlyViewedIds, recentlyViewedKey]);
 
   // Modals / Drawers State
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -154,6 +218,7 @@ function AppContent() {
   const [tryOnProductId, setTryOnProductId] = useState<string>('matte-liquid-lipstick-collection');
   const [tryOnShadeId, setTryOnShadeId] = useState<string | undefined>('caramel');
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [isConciergeOpen, setIsConciergeOpen] = useState(false);
 
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [activeLook, setActiveLook] = useState<Look | null>(null);
@@ -179,6 +244,7 @@ function AppContent() {
   useEffect(() => {
     const pageTitleMap: Record<string, string> = {
       home: 'Glamirk Beauty | Luxury Beauty Atelier & Formulations',
+      about: 'About Us | Glamirk Beauty Private Limited',
       shop: 'Shop All Creations | Glamirk Beauty Private Limited',
       product: 'Cosmetic Formulation PDP | Glamirk Beauty',
       'shop-the-look': 'Shop The Look | Editorial Beauty Edits | Glamirk',
@@ -246,6 +312,11 @@ function AppContent() {
   // Navigation actions
   const navigateToHome = () => {
     setCurrentRoute({ page: 'home' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToAbout = () => {
+    setCurrentRoute({ page: 'about' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -355,58 +426,52 @@ function AppContent() {
     setIsTryOnOpen(true);
   };
 
-  // Cart actions
+  // Cart actions — server-persisted per signed-in customer; gated behind sign-in when logged out.
   const handleAddToCart = (product: Product, shade?: Shade, size?: string, quantity: number = 1) => {
-    trackRecentlyViewed(product.id);
-    setCartItems((prev) => {
-      const existingIndex = prev.findIndex(
-        (item) =>
-          item.product.id === product.id &&
-          item.selectedShade?.id === shade?.id &&
-          item.selectedSize === size
-      );
-
-      if (existingIndex > -1) {
-        const updated = [...prev];
-        updated[existingIndex].quantity += quantity;
-        return updated;
+    requireLogin(async () => {
+      trackRecentlyViewed(product.id);
+      const res = await commerceRef.current.addToCart(product, shade, quantity);
+      if (res.success) {
+        const shadeInfo = shade ? ` (${shade.name})` : '';
+        const sizeInfo = size ? ` [${size}]` : '';
+        showToast(`Added ${product.name}${shadeInfo}${sizeInfo} to bag`);
       } else {
-        return [...prev, { product, selectedShade: shade, selectedSize: size, quantity }];
+        showToast(res.error || 'Could not add this item to your bag.');
       }
     });
-
-    const shadeInfo = shade ? ` (${shade.name})` : '';
-    const sizeInfo = size ? ` [${size}]` : '';
-    showToast(`Added ${product.name}${shadeInfo}${sizeInfo} to bag`);
-    setIsCartOpen(true);
   };
 
   const handleBuyNow = (product: Product, shade?: Shade, size?: string) => {
-    handleAddToCart(product, shade, size, 1);
-    navigateToCheckout();
+    requireLogin(async () => {
+      trackRecentlyViewed(product.id);
+      const res = await commerceRef.current.addToCart(product, shade, 1);
+      if (res.success) {
+        navigateToCheckout();
+      } else {
+        showToast(res.error || 'Could not add this item to your bag.');
+      }
+    });
   };
 
-  const handleUpdateQuantity = (index: number, quantity: number) => {
+  const handleUpdateQuantity = async (index: number, quantity: number) => {
     if (quantity <= 0) {
       handleRemoveFromCart(index);
     } else {
-      setCartItems((prev) => {
-        const updated = [...prev];
-        updated[index].quantity = quantity;
-        return updated;
-      });
+      const res = await commerceRef.current.updateCartItemQuantity(index, quantity);
+      if (!res.success) showToast(res.error || 'Could not update quantity.');
     }
   };
 
-  const handleRemoveFromCart = (index: number) => {
-    setCartItems((prev) => prev.filter((_, i) => i !== index));
-    showToast('Item removed from shopping bag');
+  const handleRemoveFromCart = async (index: number) => {
+    const res = await commerceRef.current.removeCartItem(index);
+    showToast(res.success ? 'Item removed from shopping bag' : res.error || 'Could not remove this item.');
   };
 
-  const handleMoveToWishlist = (index: number, product: Product) => {
-    handleRemoveFromCart(index);
-    if (!wishlist.includes(product.id)) {
-      setWishlist((prev) => [...prev, product.id]);
+  const handleMoveToWishlist = async (index: number, product: Product) => {
+    const wasWishlisted = wishlist.includes(product.id);
+    await commerceRef.current.removeCartItem(index);
+    if (!wasWishlisted) {
+      await commerceRef.current.toggleWishlist(product.id);
     }
     showToast(`Moved ${product.name} to your Wishlist`);
   };
@@ -428,11 +493,10 @@ function AppContent() {
     showToast('New destination address saved');
   };
 
-  // Order Placement Success Handler
+  // Order Placement Success Handler — server already cleared the cart during checkout.
   const handlePlaceOrderSuccess = (newOrder: Order) => {
     setOrders((prev) => [newOrder, ...prev]);
     setConfirmedOrder(newOrder);
-    setCartItems([]);
     setAppliedCoupon(null);
     setCurrentRoute({ page: 'order-confirmation', orderId: newOrder.id });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -441,25 +505,27 @@ function AppContent() {
 
   // Wishlist actions
   const handleToggleWishlist = (productId: string) => {
-    setWishlist((prev) => {
-      if (prev.includes(productId)) {
-        showToast('Removed from saved wishlist');
-        return prev.filter((id) => id !== productId);
+    requireLogin(async () => {
+      const wasWishlisted = wishlist.includes(productId);
+      const res = await commerceRef.current.toggleWishlist(productId);
+      if (res.success) {
+        showToast(wasWishlisted ? 'Removed from saved wishlist' : 'Saved to your Glamirk wishlist');
       } else {
-        showToast('Saved to your Glamirk wishlist');
-        return [...prev, productId];
+        showToast(res.error || 'Could not update your wishlist.');
       }
     });
   };
 
   // Add multiple look products to bag
   const handleAddLookToBag = (products: { product: Product; shade?: Shade; size?: string }[]) => {
-    products.forEach((item) => {
-      trackRecentlyViewed(item.product.id);
-      handleAddToCart(item.product, item.shade, item.size, 1);
+    requireLogin(async () => {
+      for (const item of products) {
+        trackRecentlyViewed(item.product.id);
+        await commerceRef.current.addToCart(item.product, item.shade, 1);
+      }
+      showToast('All curated look creations added to shopping bag');
+      setIsCartOpen(true);
     });
-    showToast('All curated look creations added to shopping bag');
-    setIsCartOpen(true);
   };
 
   const cartTotalCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
@@ -533,6 +599,7 @@ function AppContent() {
         onNavigateSocialCommerce={navigateToSocialCommerce}
         onOpenQuiz={() => setIsQuizOpen(true)}
         onNavigateAdmin={() => setCurrentRoute({ page: 'admin' })}
+        onNavigateAbout={navigateToAbout}
       />
 
       {/* Main Dynamic View Routing */}
@@ -547,7 +614,37 @@ function AppContent() {
               onFindShadeClick={navigateToFindMyShade}
             />
 
-            {/* 2nd: Personalize Beauty */}
+            {/* 2nd: Best Seller (Most Loved Creations) */}
+            <GlamirkEdit
+              wishlist={wishlist}
+              onToggleWishlist={handleToggleWishlist}
+              onQuickView={(product) => setQuickViewProduct(product)}
+              onSelectProduct={(product) => navigateToProduct(product)}
+              onTryItOn={(product) => openVirtualTryOn(product)}
+              onQuickAdd={(product, shade, size) => handleAddToCart(product, shade, size, 1)}
+              onExploreShop={() => navigateToShop()}
+            />
+
+            {/* 3rd: Shop The Look (Curated Beauty Pairings) */}
+            <ShopTheLook
+              onSelectLook={(look) => navigateToShopTheLook()}
+            />
+
+            {/* 4th: Shop by Category */}
+            <CategoryGridSection
+              onSelectCategory={(category, subCategory) => navigateToShop(category, subCategory)}
+              onViewAllCategories={() => navigateToShop()}
+            />
+
+            {/* 5th: Find Your Perfect Match (Shade Intelligence) */}
+            <ShadeFinderTeaser
+              onOpenShadeFinderModal={navigateToFindMyShade}
+            />
+
+            {/* 6th: Frequently Asked Questions */}
+            <FaqHomeSection onOpenSupport={navigateToSupport} />
+
+            {/* 7th: Personalize Beauty */}
             <PersonalizedHomeBanner
               beautyProfile={beautyProfile}
               onOpenShadeFinder={navigateToFindMyShade}
@@ -561,34 +658,39 @@ function AppContent() {
               onOpenQuiz={() => setIsQuizOpen(true)}
             />
 
-            {/* 3rd: Best Seller */}
-            <GlamirkEdit
-              wishlist={wishlist}
-              onToggleWishlist={handleToggleWishlist}
-              onQuickView={(product) => setQuickViewProduct(product)}
-              onSelectProduct={(product) => navigateToProduct(product)}
-              onTryItOn={(product) => openVirtualTryOn(product)}
-              onQuickAdd={(product, shade, size) => handleAddToCart(product, shade, size, 1)}
-              onOpenShadeFinder={navigateToFindMyShade}
-              onExploreShop={() => navigateToShop()}
-            />
+            {/* 7th: Match Your Shade CTA Banner (just before Footer) */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-24">
+              <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#E8D5A8] shadow-[0_8px_30px_rgba(240,90,126,0.06)] flex flex-col sm:flex-row items-center justify-between gap-6">
+                <div className="space-y-1.5 text-center sm:text-left">
+                  <span className="text-[10.5px] tracking-wider uppercase text-[#F05A7E] font-bold">
+                    Unsure About Your Undertone?
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-bold text-[#121212]">
+                    Match Your Shade with Precision
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#6B6B6B] max-w-xl">
+                    Explore our shade intelligence algorithm to find your exact match across liquid lipsticks and ceremonial sindoor.
+                  </p>
+                </div>
 
-            {/* 4th: Find Your Perfect Match */}
-            <ShadeFinderTeaser
-              onOpenShadeFinderModal={navigateToFindMyShade}
-            />
-
-            {/* 5th: Shop The Look */}
-            <ShopTheLook
-              onSelectLook={(look) => navigateToShopTheLook()}
-            />
-
-            {/* 6th: Shop by Category */}
-            <CategoryGridSection
-              onSelectCategory={(category, subCategory) => navigateToShop(category, subCategory)}
-              onViewAllCategories={() => navigateToShop()}
-            />
+                <button
+                  onClick={navigateToFindMyShade}
+                  className="flex-shrink-0 px-6 py-3 bg-[#F05A7E] hover:bg-[#F05A7E] text-white text-xs font-bold rounded-full transition-all flex items-center gap-2 shadow-[0_4px_12px_rgba(240,90,126,0.25)] hover:scale-102 active:scale-95 cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Find My Shade</span>
+                </button>
+              </div>
+            </div>
           </div>
+        )}
+
+        {/* VIEW 1B: ABOUT US PAGE */}
+        {currentRoute.page === 'about' && (
+          <AboutPage
+            onExploreShop={() => navigateToShop()}
+            onNavigateSupport={navigateToSupport}
+          />
         )}
 
         {/* VIEW 2: SHOP PAGE */}
@@ -713,6 +815,7 @@ function AppContent() {
               const p = GLAMIRK_PRODUCTS.find((item) => item.id === productId);
               if (p) navigateToProduct(p);
             }}
+            onCheckout={(addr) => commerceRef.current.checkout(addr)}
           />
         )}
 
@@ -916,6 +1019,7 @@ function AppContent() {
         onNavigateCart={navigateToCart}
         onNavigateTracking={() => navigateToOrderTracking()}
         onNavigateSupport={navigateToSupport}
+        onOpenConcierge={() => setIsConciergeOpen(true)}
         onNavigateMyGlam={navigateToMyGlam}
         onNavigateJournal={navigateToJournal}
         onNavigateGuides={navigateToBeautyGuides}
@@ -923,6 +1027,7 @@ function AppContent() {
         onNavigateCampaign={navigateToCampaign}
         onNavigateLegal={navigateToLegal}
         onNavigateAdmin={() => setCurrentRoute({ page: 'admin' })}
+        onNavigateAbout={navigateToAbout}
       />
 
       {/* Mobile Application Sticky Bottom Navigation */}
@@ -935,6 +1040,23 @@ function AppContent() {
         onOpenShadeFinder={navigateToFindMyShade}
         onOpenWishlist={() => setIsWishlistOpen(true)}
         onOpenCart={() => setIsCartOpen(true)}
+      />
+
+      {/* Sign-in gate: opened whenever a logged-out visitor tries to touch wishlist/cart/checkout,
+          or when they land on a ?resetToken=... link from a "Forgot Password" email */}
+      <AuthModal
+        isOpen={isAuthGateOpen}
+        onClose={() => {
+          setIsAuthGateOpen(false);
+          pendingActionRef.current = null;
+        }}
+        initialResetToken={pendingResetToken || undefined}
+        onCustomerLoginSuccess={() => {
+          setIsAuthGateOpen(false);
+          const action = pendingActionRef.current;
+          pendingActionRef.current = null;
+          if (action) action();
+        }}
       />
 
       {/* Modals and Slide-Over Drawers */}
@@ -1047,6 +1169,12 @@ function AppContent() {
         }}
       />
 
+      <ConciergeModal
+        isOpen={isConciergeOpen}
+        onClose={() => setIsConciergeOpen(false)}
+        onOpenAssistant={() => setIsAssistantOpen(true)}
+      />
+
       {/* Phase 3 AI Beauty Assistant Drawer */}
       <BeautyAssistantDrawer
         isOpen={isAssistantOpen}
@@ -1083,7 +1211,11 @@ function AppContent() {
 export default function App() {
   return (
     <CMSProvider>
-      <AppContent />
+      <CustomerAuthProvider>
+        <CommerceProvider>
+          <AppContent />
+        </CommerceProvider>
+      </CustomerAuthProvider>
     </CMSProvider>
   );
 }

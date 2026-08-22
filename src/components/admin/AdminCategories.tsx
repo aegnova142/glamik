@@ -7,12 +7,14 @@ import React, { useState } from 'react';
 import { useCMS } from '../../context/CMSContext';
 import { CMSCategory } from '../../types';
 import { Layers, Plus, Trash2, Edit2, Save, Check, ArrowLeft } from 'lucide-react';
+import { ImageCropUploadModal } from './ImageCropUploadModal';
 
 export const AdminCategories: React.FC = () => {
   const { categories, saveCategory, deleteCategory } = useCMS();
   const [editingCategory, setEditingCategory] = useState<CMSCategory | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
 
   const handleCreateCategory = () => {
     const newCat: CMSCategory = {
@@ -21,7 +23,7 @@ export const AdminCategories: React.FC = () => {
       slug: 'new-collection',
       description: 'Handcrafted luxury formulation line.',
       image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=1200&q=80',
-      order: categories.length + 1,
+      order: categories.reduce((max, c) => Math.max(max, c.order || 0), 0) + 1,
       isVisible: true,
       subCategories: ['Essential Editions'],
     };
@@ -105,14 +107,44 @@ export const AdminCategories: React.FC = () => {
 
           <div>
             <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-              Cover Image URL
+              Cover Image <span className="normal-case text-[#6B6B6B]">(locked to 4:3 — matches the Shop by Category card)</span>
             </label>
-            <input
-              type="text"
-              value={editingCategory.image || ''}
-              onChange={(e) => setEditingCategory({ ...editingCategory, image: e.target.value })}
-              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={editingCategory.image || ''}
+                onChange={(e) => setEditingCategory({ ...editingCategory, image: e.target.value })}
+                placeholder="https://... or use Upload & Crop"
+                className="flex-1 px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+              />
+              <button
+                type="button"
+                onClick={() => setIsUploadOpen(true)}
+                className="px-3 py-2 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] transition-colors cursor-pointer whitespace-nowrap"
+              >
+                Upload &amp; Crop
+              </button>
+            </div>
+            {editingCategory.image && (
+              <div className="mt-2 w-full h-28 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B]">
+                <img src={editingCategory.image} alt="Cover" className="w-full h-full object-cover" />
+              </div>
+            )}
+            {isUploadOpen && (
+              <ImageCropUploadModal
+                isOpen
+                onClose={() => setIsUploadOpen(false)}
+                title="Upload Category Cover Image"
+                aspectRatio={4 / 3}
+                minWidth={600}
+                minHeight={450}
+                recommendedWidth={1200}
+                recommendedHeight={900}
+                outputWidth={1200}
+                outputHeight={900}
+                onUploaded={({ url }) => setEditingCategory((prev) => (prev ? { ...prev, image: url } : prev))}
+              />
+            )}
           </div>
 
           <div>

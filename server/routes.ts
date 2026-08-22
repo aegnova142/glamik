@@ -311,6 +311,11 @@ router.get('/looks/:id', async (req: Request, res: Response) => {
 // PROTECTED ADMIN CMS ROUTES
 // ==========================================
 
+router.get('/admin/audit-logs', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  res.json(db.auditLogs);
+});
+
 router.get('/admin/overview', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   const db = await loadDatabase();
   const evaluatedOffers = evaluateOffers(db.offers);

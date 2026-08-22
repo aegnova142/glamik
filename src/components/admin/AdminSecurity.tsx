@@ -23,7 +23,7 @@ export const AdminSecurity: React.FC = () => {
   const fetchLogs = async () => {
     setIsLoadingLogs(true);
     const res = await apiFetch<CMSAuditLog[]>('/api/admin/audit-logs');
-    if (res.data) {
+    if (Array.isArray(res.data)) {
       setAuditLogs(res.data);
     }
     setIsLoadingLogs(false);
@@ -180,11 +180,11 @@ export const AdminSecurity: React.FC = () => {
                         {log.action}
                       </span>
                       <span className="text-[10px] text-[#6B6B6B] uppercase font-mono">
-                        {log.entity}
+                        {log.objectType}
                       </span>
                     </div>
                     <p className="text-[#FAF9F6] text-[11px] mt-0.5">{log.details}</p>
-                    <span className="text-[10px] text-[#6B6B6B] font-mono">by {log.adminEmail}</span>
+                    <span className="text-[10px] text-[#6B6B6B] font-mono">by {log.userEmail}</span>
                   </div>
 
                   <span className="text-[10px] text-[#6B6B6B] font-mono shrink-0">

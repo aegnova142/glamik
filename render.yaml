@@ -1,7 +1,7 @@
 services:
   - type: web
     name: glamirk-beauty
-    runtime: node
+    env: node
     plan: free
     region: singapore
     branch: main

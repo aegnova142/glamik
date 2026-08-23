@@ -149,7 +149,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out"
                 loading="eager"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 lg:bg-gradient-to-r lg:from-[#0B0B0B] lg:via-transparent lg:to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B]/80 via-transparent to-[#0B0B0B]/20 lg:bg-gradient-to-r lg:from-[#0B0B0B] lg:via-transparent lg:to-transparent" />
             </div>
           </motion.div>
         )}

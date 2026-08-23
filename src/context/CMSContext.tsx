@@ -612,7 +612,6 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
 
       const mediaItem = await res.json();
-      await loadPublicContent();
       return mediaItem;
     } catch (err) {
       console.error('Media upload error:', err);

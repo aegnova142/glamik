@@ -142,7 +142,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   className={`w-3.5 h-3.5 rounded-full border transition-all duration-150 ${
                     selectedShade?.id === shade.id
                       ? 'border-[#F05A7E] scale-125 ring-2 ring-[#F05A7E]/30'
-                      : 'border-black/15 hover:scale-110'
+                      : 'border-[#0B0B0B]/15 hover:scale-110'
                   }`}
                   style={{ backgroundColor: shade.hex }}
                   title={`${shade.name} (${shade.undertone} undertone)`}

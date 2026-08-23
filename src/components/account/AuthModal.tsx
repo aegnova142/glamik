@@ -397,7 +397,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             <li
                               key={req.id}
                               className={`flex items-center gap-1.5 text-[10.5px] transition-colors ${
-                                req.met ? 'text-[#4ADE80]' : 'text-[#6B6B6B]'
+                                req.met ? 'text-[#C9972B]' : 'text-[#6B6B6B]'
                               }`}
                             >
                               <CheckCircle className={`w-3 h-3 shrink-0 ${req.met ? 'opacity-100' : 'opacity-30'}`} />
@@ -442,7 +442,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                 {forgotStep === 'done' && (
                   <div className="text-center space-y-4 py-4">
-                    <CheckCircle className="w-10 h-10 text-[#4ADE80] mx-auto" />
+                    <CheckCircle className="w-10 h-10 text-[#C9972B] mx-auto" />
                     <div>
                       <h3 className="font-serif text-lg text-[#FAF9F6]">Password Reset!</h3>
                       <p className="text-xs text-[#6B6B6B] mt-1">
@@ -610,7 +610,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           <li
                             key={req.id}
                             className={`flex items-center gap-1.5 text-[10.5px] transition-colors ${
-                              req.met ? 'text-[#4ADE80]' : 'text-[#6B6B6B]'
+                              req.met ? 'text-[#C9972B]' : 'text-[#6B6B6B]'
                             }`}
                           >
                             <CheckCircle className={`w-3 h-3 shrink-0 ${req.met ? 'opacity-100' : 'opacity-30'}`} />
@@ -726,11 +726,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   disabled={googleLoading}
                   className="w-full py-2.5 px-3 bg-[#0B0B0B] hover:bg-[#171717] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] flex items-center justify-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
                 >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.63h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.57-5.17 3.57-8.81z" />
-                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.07 7.94-2.92l-3.88-3c-1.08.72-2.45 1.15-4.06 1.15-3.13 0-5.78-2.11-6.73-4.96H1.26v3.1A12 12 0 0 0 12 24z" />
-                    <path fill="#FBBC05" d="M5.27 14.27a7.2 7.2 0 0 1 0-4.54v-3.1H1.26a12 12 0 0 0 0 10.74z" />
-                    <path fill="#EA4335" d="M12 4.77c1.77 0 3.35.61 4.6 1.8l3.44-3.44C17.94 1.19 15.24 0 12 0 7.31 0 3.26 2.69 1.26 6.63l4.01 3.1C6.22 6.88 8.87 4.77 12 4.77z" />
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#C9972B">
+                    <path d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.63h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.57-5.17 3.57-8.81z" />
+                    <path d="M12 24c3.24 0 5.95-1.07 7.94-2.92l-3.88-3c-1.08.72-2.45 1.15-4.06 1.15-3.13 0-5.78-2.11-6.73-4.96H1.26v3.1A12 12 0 0 0 12 24z" />
+                    <path d="M5.27 14.27a7.2 7.2 0 0 1 0-4.54v-3.1H1.26a12 12 0 0 0 0 10.74z" />
+                    <path d="M12 4.77c1.77 0 3.35.61 4.6 1.8l3.44-3.44C17.94 1.19 15.24 0 12 0 7.31 0 3.26 2.69 1.26 6.63l4.01 3.1C6.22 6.88 8.87 4.77 12 4.77z" />
                   </svg>
                   <span>{googleLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
                 </button>

@@ -66,7 +66,7 @@ export const BeautyQuizModal: React.FC<BeautyQuizModalProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 bg-black/75 backdrop-blur-sm"
+          className="fixed inset-0 bg-[#0B0B0B]/75 backdrop-blur-sm"
         />
 
         {/* Quiz Modal Container */}
@@ -194,7 +194,7 @@ export const BeautyQuizModal: React.FC<BeautyQuizModalProps> = ({
                     {matchedShade && (
                       <div className="flex items-center gap-1.5 text-xs text-[#6B6B6B]">
                         <span
-                          className="w-3 h-3 rounded-full border border-black/10 inline-block"
+                          className="w-3 h-3 rounded-full border border-[#0B0B0B]/10 inline-block"
                           style={{ backgroundColor: matchedShade.hex }}
                         />
                         <span>Shade: <strong>{matchedShade.name}</strong></span>

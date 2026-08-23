@@ -150,7 +150,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto bg-black/80 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto bg-[#0B0B0B]/80 backdrop-blur-md">
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -304,7 +304,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
               {/* Mode 2: LIVE CAMERA STREAM */}
               {tryOnMode === 'CAMERA' && (
-                <div className="relative w-full h-full flex items-center justify-center bg-black">
+                <div className="relative w-full h-full flex items-center justify-center bg-[#0B0B0B]">
                   <video
                     ref={videoRef}
                     autoPlay
@@ -323,7 +323,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                       }}
                     />
                   )}
-                  <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-xs text-white px-3 py-1 text-[10px] tracking-widest uppercase flex items-center gap-2 border border-white/20">
+                  <div className="absolute top-4 left-4 bg-[#0B0B0B]/60 backdrop-blur-xs text-white px-3 py-1 text-[10px] tracking-widest uppercase flex items-center gap-2 border border-white/20">
                     <span className="w-2 h-2 rounded-full bg-[#F05A7E] animate-ping" />
                     <span>Live AR Studio</span>
                   </div>
@@ -332,7 +332,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
               {/* Mode 3: UPLOADED PHOTO */}
               {tryOnMode === 'UPLOAD' && uploadedPhoto && (
-                <div className="relative w-full h-full flex items-center justify-center bg-black">
+                <div className="relative w-full h-full flex items-center justify-center bg-[#0B0B0B]">
                   <img
                     src={uploadedPhoto}
                     alt="Uploaded Portrait"
@@ -352,7 +352,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
               )}
 
               {/* Before/After Indicator Badge */}
-              <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5 bg-black/60 backdrop-blur-xs px-3 py-1.5 border border-white/20">
+              <div className="absolute top-4 right-4 z-10 flex items-center gap-1.5 bg-[#0B0B0B]/60 backdrop-blur-xs px-3 py-1.5 border border-white/20">
                 <button
                   onClick={() => setShowBeforeAfter(!showBeforeAfter)}
                   className={`text-[10px] tracking-wider uppercase font-semibold transition-colors cursor-pointer ${
@@ -370,7 +370,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                     stopCameraStream();
                     setTryOnMode('MODEL');
                   }}
-                  className={`px-3 py-1 text-[10px] tracking-wider uppercase font-medium bg-black/80 text-white border ${
+                  className={`px-3 py-1 text-[10px] tracking-wider uppercase font-medium bg-[#0B0B0B]/80 text-white border ${
                     tryOnMode === 'MODEL' ? 'border-[#C9972B] text-[#C9972B]' : 'border-white/20'
                   }`}
                 >
@@ -378,7 +378,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                 </button>
                 <button
                   onClick={startCamera}
-                  className={`px-3 py-1 text-[10px] tracking-wider uppercase font-medium bg-black/80 text-white border ${
+                  className={`px-3 py-1 text-[10px] tracking-wider uppercase font-medium bg-[#0B0B0B]/80 text-white border ${
                     tryOnMode === 'CAMERA' ? 'border-[#C9972B] text-[#C9972B]' : 'border-white/20'
                   }`}
                 >
@@ -386,7 +386,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                 </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className={`px-3 py-1 text-[10px] tracking-wider uppercase font-medium bg-black/80 text-white border ${
+                  className={`px-3 py-1 text-[10px] tracking-wider uppercase font-medium bg-[#0B0B0B]/80 text-white border ${
                     tryOnMode === 'UPLOAD' ? 'border-[#C9972B] text-[#C9972B]' : 'border-white/20'
                   }`}
                 >
@@ -397,7 +397,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
             {/* Model Selection Selector Bar (when in model mode) */}
             {tryOnMode === 'MODEL' && (
-              <div className="absolute bottom-4 left-4 right-4 bg-black/80 backdrop-blur-xs p-2.5 border border-white/10 flex items-center justify-between gap-2 overflow-x-auto">
+              <div className="absolute bottom-4 left-4 right-4 bg-[#0B0B0B]/80 backdrop-blur-xs p-2.5 border border-white/10 flex items-center justify-between gap-2 overflow-x-auto">
                 <span className="text-[9.5px] uppercase tracking-widest text-[#C9972B] font-semibold whitespace-nowrap hidden sm:inline">
                   Complexion:
                 </span>
@@ -456,7 +456,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
                   <div className="flex items-center gap-3 text-center">
                     <div
-                      className="w-7 h-7 rounded-full border border-black/20 shadow-xs ring-2 ring-[#C9972B]"
+                      className="w-7 h-7 rounded-full border border-[#0B0B0B]/20 shadow-xs ring-2 ring-[#C9972B]"
                       style={{ backgroundColor: currentShade.hex }}
                     />
                     <div>
@@ -500,7 +500,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                       }`}
                     >
                       <div
-                        className="w-5 h-5 rounded-full border border-black/10 shadow-xs"
+                        className="w-5 h-5 rounded-full border border-[#0B0B0B]/10 shadow-xs"
                         style={{ backgroundColor: shade.hex }}
                       />
                       <span className="text-[10px] font-medium text-[#121212] text-center leading-tight truncate w-full">

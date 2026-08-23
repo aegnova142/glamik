@@ -36,20 +36,22 @@ cloudinary.config();
 // Multer holds the upload in memory; it is streamed to Cloudinary, never written to local disk
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB limit
+  limits: { fileSize: 60 * 1024 * 1024 }, // 60 MB limit (video clips need more room than stills)
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files (JPEG, PNG, WebP, GIF, SVG) are supported'));
+      cb(new Error('Only image files (JPEG, PNG, WebP, GIF, SVG) or video files (MP4, WebM, MOV) are supported'));
     }
   },
 });
 
+// resource_type: 'auto' lets Cloudinary classify image vs. video from the
+// actual file content, so callers never need to duplicate that check.
 function uploadBufferToCloudinary(buffer: Buffer): Promise<{ url: string; publicId: string }> {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder: 'glamirk-beauty' },
+      { folder: 'glamirk-beauty', resource_type: 'auto' },
       (err, result) => {
         if (err || !result) return reject(err || new Error('Cloudinary upload failed'));
         resolve({ url: result.secure_url, publicId: result.public_id });
@@ -654,7 +656,7 @@ router.delete('/admin/benefits/:id', requireAdmin, async (req: AuthenticatedRequ
 
 // --- Shop The Look Management ---
 router.post('/admin/looks', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
-  const { title, tagline, description, image, category, productsUsed } = req.body || {};
+  const { title, tagline, description, image, video, category, productsUsed } = req.body || {};
   if (!title || !String(title).trim()) {
     return res.status(400).json({ error: 'Title is required.' });
   }
@@ -669,6 +671,7 @@ router.post('/admin/looks', requireAdmin, async (req: AuthenticatedRequest, res:
     tagline: tagline || '',
     description: description || '',
     image,
+    video: video || undefined,
     category: category || 'EVERYDAY GLAM',
     productsUsed: Array.isArray(productsUsed) ? productsUsed : [],
   };
@@ -900,7 +903,7 @@ router.post(
   upload.single('file'),
   async (req: AuthenticatedRequest, res: Response) => {
     if (!req.file) {
-      return res.status(400).json({ error: 'No image file uploaded' });
+      return res.status(400).json({ error: 'No file uploaded' });
     }
 
     let uploaded: { url: string; publicId: string };
@@ -908,7 +911,7 @@ router.post(
       uploaded = await uploadBufferToCloudinary(req.file.buffer);
     } catch (err) {
       console.error('Cloudinary upload failed:', err);
-      return res.status(502).json({ error: 'Failed to upload image to storage' });
+      return res.status(502).json({ error: 'Failed to upload file to storage' });
     }
 
     const db = await loadDatabase();

@@ -32,7 +32,7 @@ export const WishlistDrawer: React.FC<WishlistDrawerProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 transition-opacity"
+            className="fixed inset-0 bg-[#0B0B0B]/60 backdrop-blur-xs z-50 transition-opacity"
           />
 
           <motion.div

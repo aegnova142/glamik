@@ -46,15 +46,27 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({ onSelectLook }) => {
             >
               {/* Campaign Visual with subtle hover zoom */}
               <div className="relative aspect-[3/4] overflow-hidden bg-[#FCE8ED]">
-                <img
-                  src={look.image}
-                  alt={look.title}
-                  className="w-full h-full object-cover transform group-hover:scale-104 transition-transform duration-500 ease-out"
-                  loading="lazy"
-                />
+                {look.video ? (
+                  <video
+                    src={look.video}
+                    poster={look.image}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    className="w-full h-full object-cover transform group-hover:scale-104 transition-transform duration-500 ease-out"
+                  />
+                ) : (
+                  <img
+                    src={look.image}
+                    alt={look.title}
+                    className="w-full h-full object-cover transform group-hover:scale-104 transition-transform duration-500 ease-out"
+                    loading="lazy"
+                  />
+                )}
 
                 {/* Subtle gradient vignette */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B]/60 via-transparent to-transparent pointer-events-none" />
 
                 {/* Top Category Badge */}
                 <div className="absolute top-4 left-4 z-10">

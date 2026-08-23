@@ -69,25 +69,58 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const NAV_ITEMS: { id: AdminTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { id: 'dashboard', label: 'Overview Dashboard', icon: LayoutDashboard },
-    { id: 'hero', label: 'Hero Section', icon: Sparkles },
-    { id: 'about', label: 'About Page', icon: FileText },
-    { id: 'benefits', label: 'Benefits & Optimization', icon: ShieldCheck },
-    { id: 'shadeFinder', label: 'Find My Shade Journey', icon: Sparkles },
-    { id: 'looks', label: 'Shop The Look', icon: Sparkles },
-    { id: 'pages', label: 'Pages & Sections Builder', icon: FileText },
-    { id: 'products', label: 'Product Catalogue', icon: Package },
-    { id: 'categories', label: 'Categories & Taxonomy', icon: Layers },
-    { id: 'offers', label: 'Offers & Campaigns', icon: Tag },
-    { id: 'navigation', label: 'Header Navigation', icon: MenuIcon },
-    { id: 'footer', label: 'Footer Settings', icon: Layers },
-    { id: 'blog', label: 'Journal & Guides', icon: BookOpen },
-    { id: 'faqs', label: 'Client FAQs', icon: HelpCircle },
-    { id: 'media', label: 'Media Library', icon: ImageIcon },
-    { id: 'settings', label: 'Global Store Settings', icon: Settings },
-    { id: 'security', label: 'Security & Audit Trail', icon: ShieldCheck },
+  type NavItem = { id: AdminTab; label: string; icon: React.ComponentType<{ className?: string }> };
+
+  const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+    {
+      label: 'Overview',
+      items: [{ id: 'dashboard', label: 'Overview Dashboard', icon: LayoutDashboard }],
+    },
+    {
+      label: 'Homepage & Content',
+      items: [
+        { id: 'hero', label: 'Hero Section', icon: Sparkles },
+        { id: 'about', label: 'About Page', icon: FileText },
+        { id: 'benefits', label: 'Benefits & Optimization', icon: ShieldCheck },
+        { id: 'shadeFinder', label: 'Find My Shade Journey', icon: Sparkles },
+        { id: 'looks', label: 'Shop The Look', icon: Sparkles },
+        { id: 'blog', label: 'Journal & Guides', icon: BookOpen },
+        { id: 'pages', label: 'Pages & Sections Builder', icon: FileText },
+      ],
+    },
+    {
+      label: 'Catalog',
+      items: [
+        { id: 'products', label: 'Product Catalogue', icon: Package },
+        { id: 'categories', label: 'Categories & Taxonomy', icon: Layers },
+      ],
+    },
+    {
+      label: 'Marketing',
+      items: [{ id: 'offers', label: 'Offers & Campaigns', icon: Tag }],
+    },
+    {
+      label: 'Site Structure',
+      items: [
+        { id: 'navigation', label: 'Header Navigation', icon: MenuIcon },
+        { id: 'footer', label: 'Footer Settings', icon: Layers },
+        { id: 'faqs', label: 'Client FAQs', icon: HelpCircle },
+      ],
+    },
+    {
+      label: 'Assets',
+      items: [{ id: 'media', label: 'Media Library', icon: ImageIcon }],
+    },
+    {
+      label: 'System',
+      items: [
+        { id: 'settings', label: 'Global Store Settings', icon: Settings },
+        { id: 'security', label: 'Security & Audit Trail', icon: ShieldCheck },
+      ],
+    },
   ];
+
+  const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
   const handleLogout = () => {
     adminLogout();
@@ -157,7 +190,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         {mobileMenuOpen && (
           <div
             onClick={() => setMobileMenuOpen(false)}
-            className="fixed inset-0 bg-black/75 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+            className="fixed inset-0 bg-[#0B0B0B]/75 backdrop-blur-xs z-40 lg:hidden transition-opacity"
           />
         )}
 
@@ -179,32 +212,39 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
               <p className="text-[11px] text-[#6B6B6B] mt-1">Full-Stack Real-Time Content Hub</p>
             </div>
 
-            {/* Navigation items */}
-            <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-230px)]">
-              {NAV_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setActiveTab(item.id);
-                      setMobileMenuOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      isActive
-                        ? 'bg-[#C9972B] text-[#0B0B0B] shadow-sm font-bold'
-                        : 'text-[#FAF9F6] hover:bg-[#0B0B0B] hover:text-[#C9972B]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-[#0B0B0B]' : 'text-[#C9972B]'}`} />
-                      <span>{item.label}</span>
-                    </div>
-                    {isActive && <ChevronRight className="w-3.5 h-3.5" />}
-                  </button>
-                );
-              })}
+            {/* Navigation items, grouped */}
+            <nav className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-230px)]">
+              {NAV_GROUPS.map((group) => (
+                <div key={group.label} className="space-y-1">
+                  <p className="px-3.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">
+                    {group.label}
+                  </p>
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          setMobileMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-[#C9972B] text-[#0B0B0B] shadow-sm font-bold'
+                            : 'text-[#FAF9F6] hover:bg-[#0B0B0B] hover:text-[#C9972B]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Icon className={`w-4 h-4 ${isActive ? 'text-[#0B0B0B]' : 'text-[#C9972B]'}`} />
+                          <span>{item.label}</span>
+                        </div>
+                        {isActive && <ChevronRight className="w-3.5 h-3.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
             </nav>
           </div>
 

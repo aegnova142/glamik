@@ -88,7 +88,7 @@ export const Footer: React.FC<FooterProps> = ({
   onNavigateAbout,
   onOpenConcierge,
 }) => {
-  const { footer } = useCMS();
+  const { footer, globalSettings } = useCMS();
   const [openSection, setOpenSection] = useState<string | null>(null);
 
   const toggleSection = (section: string) => {
@@ -143,6 +143,19 @@ export const Footer: React.FC<FooterProps> = ({
         { id: 'l13', label: 'Privacy Policy', url: '/legal?policy=privacy', actionKey: 'legal-privacy' },
         { id: 'l14', label: 'Terms of Use', url: '/legal?policy=terms', actionKey: 'legal-terms' },
         { id: 'l15', label: 'Refund Policy', url: '/legal?policy=returns', actionKey: 'legal-returns' },
+      ],
+    },
+    {
+      id: 'col-marketplaces',
+      title: 'Available On',
+      icon: 'Tag',
+      order: 5,
+      links: [
+        { id: 'ml-nykaa', label: 'Nykaa', url: 'https://www.nykaa.com', isExternal: true },
+        { id: 'ml-amazon', label: 'Amazon', url: 'https://www.amazon.in', isExternal: true },
+        { id: 'ml-flipkart', label: 'Flipkart', url: 'https://www.flipkart.com', isExternal: true },
+        { id: 'ml-myntra', label: 'Myntra', url: 'https://www.myntra.com', isExternal: true },
+        { id: 'ml-purplle', label: 'Purplle', url: 'https://www.purplle.com', isExternal: true },
       ],
     },
   ];
@@ -261,7 +274,11 @@ export const Footer: React.FC<FooterProps> = ({
 
         {/* Brand Block (mobile — desktop version sits as the left column below) */}
         <div className="md:hidden pb-8 border-b border-[#E8D5A8]/15 space-y-3 max-w-md">
-          <span className="font-serif text-xl tracking-widest uppercase text-[#FAF9F6]">GLAMIRK</span>
+          {globalSettings?.logoUrl ? (
+            <img src={globalSettings.logoUrl} alt={globalSettings.logoText || globalSettings.brandName || 'Logo'} className="h-12 w-auto max-w-[200px] object-contain" />
+          ) : (
+            <span className="font-serif text-xl tracking-widest uppercase text-[#FAF9F6]">{globalSettings?.logoText || 'GLAMIRK'}</span>
+          )}
           <p className="text-xs text-[#FAF9F6]/60 leading-relaxed">
             {footer?.tagline || footer?.brandDescription || 'Intelligent color personalization and modern luxury cosmetics calibrated for Indian complexions.'}
           </p>
@@ -339,7 +356,11 @@ export const Footer: React.FC<FooterProps> = ({
         <div className="hidden md:flex md:gap-10 pb-10">
           {/* Brand Column (left side, distinct from Social) */}
           <div className="w-64 shrink-0 pr-8 border-r border-[#E8D5A8]/15 space-y-3">
-            <span className="font-serif text-xl tracking-widest uppercase text-[#FAF9F6]">GLAMIRK</span>
+            {globalSettings?.logoUrl ? (
+            <img src={globalSettings.logoUrl} alt={globalSettings.logoText || globalSettings.brandName || 'Logo'} className="h-12 w-auto max-w-[200px] object-contain" />
+          ) : (
+            <span className="font-serif text-xl tracking-widest uppercase text-[#FAF9F6]">{globalSettings?.logoText || 'GLAMIRK'}</span>
+          )}
             <p className="text-xs text-[#FAF9F6]/60 leading-relaxed">
               {footer?.tagline || footer?.brandDescription || 'Intelligent color personalization and modern luxury cosmetics calibrated for Indian complexions.'}
             </p>
@@ -415,7 +436,7 @@ export const Footer: React.FC<FooterProps> = ({
         </div>
 
         {/* Bottom Bar: Copyright + Payment Methods + Trust Badges */}
-        <div className="border-t border-[#E8D5A8]/15 pt-6 flex flex-col lg:flex-row items-center justify-between gap-y-4 gap-x-8">
+        <div className="border-t border-[#E8D5A8]/15 pt-6 flex flex-col lg:flex-row items-center justify-between gap-y-4 gap-x-8 lg:pr-44">
           <p className="text-xs text-[#FAF9F6]/60 text-center lg:text-left shrink-0">{copyrightText}</p>
 
           {/* Payment method badges */}

@@ -41,7 +41,7 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
+          className="fixed inset-0 bg-[#0B0B0B]/75 backdrop-blur-sm transition-opacity"
         />
 
         {/* Modal Window */}
@@ -55,7 +55,7 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
           {/* Close Button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 z-20 p-2 bg-black/40 hover:bg-black/70 text-white rounded-full transition-colors md:hidden"
+            className="absolute top-4 right-4 z-20 p-2 bg-[#0B0B0B]/40 hover:bg-[#0B0B0B]/70 text-white rounded-full transition-colors md:hidden"
             aria-label="Close"
           >
             <X className="w-5 h-5" />

@@ -38,7 +38,7 @@ export const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
               <div className="relative flex items-center justify-center gap-3 max-w-sm sm:max-w-md">
                 
                 {/* Product 1: Balm Cleanser Jar */}
-                <div className="relative z-10 w-24 sm:w-28 aspect-square rounded-2xl bg-white/20 backdrop-blur-md p-1.5 shadow-[0_8px_20px_rgba(0,0,0,0.15)] border border-white/40 transform -rotate-3 hover:rotate-0 transition-transform">
+                <div className="relative z-10 w-24 sm:w-28 aspect-square rounded-2xl bg-white/20 backdrop-blur-md p-1.5 shadow-[0_8px_20px_rgba(11,11,11,0.15)] border border-white/40 transform -rotate-3 hover:rotate-0 transition-transform">
                   <img
                     src="https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=400&q=80"
                     alt="Balm to Water Cleanser"
@@ -50,7 +50,7 @@ export const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
                 </div>
 
                 {/* Product 2: Velvet Lipstick / Serum Bottle (Tall Center) */}
-                <div className="relative z-20 w-28 sm:w-32 aspect-[3/4] rounded-2xl bg-white/25 backdrop-blur-md p-2 shadow-[0_12px_28px_rgba(0,0,0,0.2)] border border-white/50 transform scale-105 hover:scale-110 transition-transform">
+                <div className="relative z-20 w-28 sm:w-32 aspect-[3/4] rounded-2xl bg-white/25 backdrop-blur-md p-2 shadow-[0_12px_28px_rgba(11,11,11,0.2)] border border-white/50 transform scale-105 hover:scale-110 transition-transform">
                   <img
                     src="https://images.unsplash.com/photo-1586495777744-4413f21062fa?auto=format&fit=crop&w=400&q=80"
                     alt="Matte Liquid Lipstick"
@@ -62,7 +62,7 @@ export const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
                 </div>
 
                 {/* Product 3: Luxury Sindoor / Shimmer Bottle */}
-                <div className="relative z-10 w-24 sm:w-28 aspect-square rounded-2xl bg-white/20 backdrop-blur-md p-1.5 shadow-[0_8px_20px_rgba(0,0,0,0.15)] border border-white/40 transform rotate-3 hover:rotate-0 transition-transform">
+                <div className="relative z-10 w-24 sm:w-28 aspect-square rounded-2xl bg-white/20 backdrop-blur-md p-1.5 shadow-[0_8px_20px_rgba(11,11,11,0.15)] border border-white/40 transform rotate-3 hover:rotate-0 transition-transform">
                   <img
                     src="https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=400&q=80"
                     alt="Luxury Sindoor"
@@ -100,7 +100,7 @@ export const PromotionalBanner: React.FC<PromotionalBannerProps> = ({
                 <button
                   id="promotional-banner-shop-btn"
                   onClick={onShopClick}
-                  className="px-8 py-3.5 bg-white text-[#F05A7E] hover:bg-[#FCE8ED] hover:text-[#F05A7E] text-xs font-bold rounded-full shadow-[0_6px_20px_rgba(0,0,0,0.12)] hover:scale-105 active:scale-95 transition-all inline-flex items-center gap-2 cursor-pointer"
+                  className="px-8 py-3.5 bg-white text-[#F05A7E] hover:bg-[#FCE8ED] hover:text-[#F05A7E] text-xs font-bold rounded-full shadow-[0_6px_20px_rgba(11,11,11,0.12)] hover:scale-105 active:scale-95 transition-all inline-flex items-center gap-2 cursor-pointer"
                 >
                   <span>{ctaText}</span>
                   <ArrowRight className="w-4 h-4 text-[#F05A7E]" />

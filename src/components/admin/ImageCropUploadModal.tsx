@@ -19,7 +19,8 @@ interface ImageCropUploadModalProps {
 
 const ACCEPTED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const VIEWPORT_W = 480;
+const MAX_VIEWPORT_W = 480;
+const MIN_VIEWPORT_W = 240;
 
 export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
   isOpen,
@@ -43,8 +44,10 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragState = useRef<{ startX: number; startY: number; startOffset: { x: number; y: number } } | null>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [viewportW, setViewportW] = useState(MAX_VIEWPORT_W);
 
-  const viewportH = VIEWPORT_W / aspectRatio;
+  const viewportH = viewportW / aspectRatio;
 
   useEffect(() => {
     if (!isOpen) {
@@ -57,7 +60,21 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
     }
   }, [isOpen]);
 
-  const baseScale = imgEl ? Math.max(VIEWPORT_W / imgEl.naturalWidth, viewportH / imgEl.naturalHeight) : 1;
+  // Keep the crop box within the modal's actual rendered width — a hardcoded
+  // pixel size overflows the card (and the viewport) on narrower windows.
+  useEffect(() => {
+    const measure = () => {
+      if (bodyRef.current) {
+        const available = bodyRef.current.clientWidth;
+        setViewportW(Math.max(MIN_VIEWPORT_W, Math.min(MAX_VIEWPORT_W, available)));
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [isOpen]);
+
+  const baseScale = imgEl ? Math.max(viewportW / imgEl.naturalWidth, viewportH / imgEl.naturalHeight) : 1;
   const scale = baseScale * zoom;
 
   const clampOffset = useCallback(
@@ -66,14 +83,14 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
       const s = baseScale * currentZoom;
       const displayedW = imgEl.naturalWidth * s;
       const displayedH = imgEl.naturalHeight * s;
-      const minX = Math.min(0, VIEWPORT_W - displayedW);
+      const minX = Math.min(0, viewportW - displayedW);
       const minY = Math.min(0, viewportH - displayedH);
       return {
         x: Math.min(0, Math.max(next.x, minX)),
         y: Math.min(0, Math.max(next.y, minY)),
       };
     },
-    [imgEl, baseScale, viewportH]
+    [imgEl, baseScale, viewportH, viewportW]
   );
 
   const handleFileSelect = (file: File | undefined) => {
@@ -140,7 +157,7 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
     try {
       const cropX = -offset.x / scale;
       const cropY = -offset.y / scale;
-      const cropW = VIEWPORT_W / scale;
+      const cropW = viewportW / scale;
       const cropH = viewportH / scale;
 
       const canvas = document.createElement('canvas');
@@ -172,16 +189,25 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-lg bg-[#171717] border border-[#E8D5A8]/30 rounded-2xl shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between p-5 border-b border-[#E8D5A8]/20">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0B0B0B]/70 backdrop-blur-sm p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-lg max-h-[92vh] bg-[#171717] border border-[#E8D5A8]/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b border-[#E8D5A8]/20 shrink-0">
           <h3 className="font-serif text-lg text-[#FAF9F6]">{title}</h3>
-          <button onClick={onClose} className="p-1.5 text-[#6B6B6B] hover:text-[#F05A7E] transition-colors cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 text-[#6B6B6B] hover:text-[#F05A7E] transition-colors cursor-pointer"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div ref={bodyRef} className="p-5 space-y-4 overflow-y-auto min-h-0">
           {error && (
             <div className="flex items-start gap-2 p-3 bg-[#F05A7E]/10 border border-[#F05A7E]/30 rounded-lg text-xs text-[#F05A7E]">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -222,7 +248,7 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
               <div
                 ref={viewportRef}
                 className="relative mx-auto overflow-hidden rounded-xl border border-[#E8D5A8]/30 bg-[#0B0B0B] cursor-grab active:cursor-grabbing select-none"
-                style={{ width: VIEWPORT_W, height: viewportH }}
+                style={{ width: viewportW, height: viewportH }}
                 onMouseDown={(e) => handlePointerDown(e.clientX, e.clientY)}
                 onMouseMove={(e) => dragState.current && handlePointerMove(e.clientX, e.clientY)}
                 onMouseUp={handlePointerUp}
@@ -278,7 +304,7 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
         </div>
 
         {(step === 'crop' || step === 'uploading') && (
-          <div className="flex items-center justify-end gap-2 p-5 border-t border-[#E8D5A8]/20">
+          <div className="flex items-center justify-end gap-2 p-5 border-t border-[#E8D5A8]/20 shrink-0">
             <button
               onClick={() => setStep('pick')}
               disabled={step === 'uploading'}

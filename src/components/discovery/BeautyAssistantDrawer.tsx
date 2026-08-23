@@ -244,7 +244,7 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex justify-end bg-[#0B0B0B]/60 backdrop-blur-xs">
       <motion.div
         initial={{ x: '100%' }}
         animate={{ x: 0 }}
@@ -307,7 +307,7 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
                         <div className="flex items-center gap-2.5 overflow-hidden">
                           {rec.suggestedShade ? (
                             <div
-                              className="w-5 h-5 rounded-full border border-black/10 shrink-0 shadow-xs"
+                              className="w-5 h-5 rounded-full border border-[#0B0B0B]/10 shrink-0 shadow-xs"
                               style={{ backgroundColor: rec.suggestedShade.hex }}
                             />
                           ) : (

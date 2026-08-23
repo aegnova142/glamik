@@ -62,7 +62,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ isOpen, onClos
         {/* Ambient gold glow behind the card */}
         <div className="absolute -inset-4 rounded-[28px] bg-[#C9972B]/10 blur-2xl pointer-events-none" />
 
-        <div className="relative bg-[#171717] border border-[#C9972B]/25 rounded-2xl shadow-[0_25px_70px_rgba(0,0,0,0.55)] overflow-hidden">
+        <div className="relative bg-[#171717] border border-[#C9972B]/25 rounded-2xl shadow-[0_25px_70px_rgba(11,11,11,0.55)] overflow-hidden">
           {/* Gold top accent bar */}
           <div className="h-1 bg-gradient-to-r from-[#C9972B] via-[#E3B84B] to-[#C9972B]" />
 

@@ -28,7 +28,7 @@ export const JournalModal: React.FC<JournalModalProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/75 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-[#0B0B0B]/75 backdrop-blur-xs transition-opacity"
           />
 
           {/* Modal */}

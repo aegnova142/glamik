@@ -26,7 +26,7 @@ export const GlamirkEdit: React.FC<GlamirkEditProps> = ({
 }) => {
   const { products: cmsProducts } = useCMS();
   const allProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
-  const bestSellers = allProducts.filter((p) => p.tag === 'BESTSELLER');
+  const bestSellers = allProducts.filter((p) => p.isBestSeller || p.tag === 'BESTSELLER');
   const sourceProducts = bestSellers.length >= 3 ? bestSellers : allProducts;
 
   const [activeCategory, setActiveCategory] = useState<'ALL' | 'MAKEUP' | 'SKIN'>('ALL');

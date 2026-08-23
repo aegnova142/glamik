@@ -45,12 +45,12 @@ export const AdminProducts: React.FC = () => {
   const handleCreateNewProduct = () => {
     const newProd: Product = {
       id: 'prod-' + Date.now(),
-      name: 'New Luxury Product',
+      name: '',
       category: 'Makeup',
       subCategory: 'Lips',
-      subtitle: 'Formulated with high-potency micro-pigments',
-      description: 'Velvet soft matte formulation designed for 12-hour weightless comfort.',
-      ritual: 'Apply directly onto clean, exfoliated lips starting from the center outward.',
+      subtitle: '',
+      description: '',
+      ritual: '',
       price: 1299,
       originalPrice: 1599,
       currency: '₹',
@@ -66,7 +66,7 @@ export const AdminProducts: React.FC = () => {
         {
           id: 'shade-' + Date.now(),
           name: 'Royal Terracotta',
-          hex: '#8C3D2B',
+          hex: '#C9972B',
           undertone: 'Warm',
           description: 'Warm burnt saffron and cinnamon nude.',
         },
@@ -85,6 +85,10 @@ export const AdminProducts: React.FC = () => {
 
   const handleSaveProduct = async () => {
     if (!editingProduct) return;
+    if (!editingProduct.name.trim()) {
+      window.alert('Product Name is required before saving.');
+      return;
+    }
     setIsSaving(true);
     const ok = await saveProduct(editingProduct);
     setIsSaving(false);
@@ -100,9 +104,9 @@ export const AdminProducts: React.FC = () => {
   const handleAddShade = () => {
     if (!editingProduct) return;
     const newShade: Shade = {
-      id: 'shade-' + Date.now(),
+      id: 'shade-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
       name: 'New Shade',
-      hex: '#9E4752',
+      hex: '#F05A7E',
       undertone: 'Warm',
       description: 'Calibrated luxury pigment.',
     };
@@ -170,7 +174,8 @@ export const AdminProducts: React.FC = () => {
                   type="text"
                   value={editingProduct.name}
                   onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                  placeholder="e.g. Velvet Matte Liquid Lipstick"
+                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] placeholder:text-[#6B6B6B]"
                 />
               </div>
 
@@ -182,7 +187,8 @@ export const AdminProducts: React.FC = () => {
                   type="text"
                   value={editingProduct.subtitle}
                   onChange={(e) => setEditingProduct({ ...editingProduct, subtitle: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                  placeholder="e.g. Formulated with high-potency micro-pigments"
+                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] placeholder:text-[#6B6B6B]"
                 />
               </div>
 
@@ -194,7 +200,8 @@ export const AdminProducts: React.FC = () => {
                   rows={3}
                   value={editingProduct.description}
                   onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                  placeholder="e.g. Velvet soft matte formulation designed for 12-hour weightless comfort."
+                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] placeholder:text-[#6B6B6B]"
                 />
               </div>
 
@@ -206,7 +213,8 @@ export const AdminProducts: React.FC = () => {
                   rows={2}
                   value={editingProduct.ritual}
                   onChange={(e) => setEditingProduct({ ...editingProduct, ritual: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                  placeholder="e.g. Apply directly onto clean, exfoliated lips starting from the center outward."
+                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] placeholder:text-[#6B6B6B]"
                 />
               </div>
             </div>
@@ -236,16 +244,29 @@ export const AdminProducts: React.FC = () => {
                     <div className="flex items-center gap-3 w-full sm:w-auto">
                       <input
                         type="color"
-                        value={shade.hex}
+                        value={/^#([0-9a-fA-F]{6})$/.test(shade.hex) ? shade.hex : '#F05A7E'}
                         onChange={(e) => handleUpdateShade(idx, 'hex', e.target.value)}
-                        className="w-8 h-8 rounded border border-[#E8D5A8]/30 cursor-pointer bg-transparent"
+                        title="Pick a color"
+                        className="w-8 h-8 rounded border border-[#E8D5A8]/30 cursor-pointer bg-transparent shrink-0"
+                      />
+                      <input
+                        type="text"
+                        value={shade.hex}
+                        placeholder="#RRGGBB"
+                        maxLength={7}
+                        onChange={(e) => {
+                          const v = '#' + e.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6);
+                          handleUpdateShade(idx, 'hex', v);
+                        }}
+                        title="Type an exact hex code, e.g. #FCE8ED"
+                        className="px-2 py-1 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6] w-20 font-mono uppercase"
                       />
                       <input
                         type="text"
                         value={shade.name}
                         placeholder="Shade Name"
                         onChange={(e) => handleUpdateShade(idx, 'name', e.target.value)}
-                        className="px-2 py-1 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6] w-36"
+                        className="px-2 py-1 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6] w-32"
                       />
                     </div>
 
@@ -505,6 +526,15 @@ export const AdminProducts: React.FC = () => {
               <p className="text-[11px] text-[#6B6B6B]">
                 Control which hover actions appear on this product's card across Best Sellers, Shop, and related-product grids.
               </p>
+              <label className="flex items-center gap-2.5 text-xs text-[#FAF9F6] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!editingProduct.isBestSeller}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, isBestSeller: e.target.checked })}
+                  className="accent-[#C9972B]"
+                />
+                Show in "Best Sellers" (homepage)
+              </label>
               <label className="flex items-center gap-2.5 text-xs text-[#FAF9F6] cursor-pointer">
                 <input
                   type="checkbox"

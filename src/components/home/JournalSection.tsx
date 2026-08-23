@@ -3,12 +3,16 @@ import { GLAMIRK_JOURNAL_ARTICLES } from '../../data/journal';
 import { JournalArticle } from '../../types';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { ArticleCard } from '../content/ArticleCard';
+import { useCMS } from '../../context/CMSContext';
 
 interface JournalSectionProps {
   onReadArticle: (article: JournalArticle) => void;
 }
 
 export const JournalSection: React.FC<JournalSectionProps> = ({ onReadArticle }) => {
+  const { journalArticles } = useCMS();
+  const articles = journalArticles && journalArticles.length > 0 ? journalArticles.slice(0, 3) : GLAMIRK_JOURNAL_ARTICLES;
+
   return (
     <section id="the-glamirk-journal" className="py-16 sm:py-24 bg-white border-b border-[#E8D5A8]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -32,7 +36,7 @@ export const JournalSection: React.FC<JournalSectionProps> = ({ onReadArticle })
 
           <div>
             <button
-              onClick={() => onReadArticle(GLAMIRK_JOURNAL_ARTICLES[0])}
+              onClick={() => articles[0] && onReadArticle(articles[0])}
               className="inline-flex items-center gap-2 text-xs font-bold text-[#F05A7E] hover:text-[#F05A7E] border-b border-[#F05A7E] pb-1 transition-colors cursor-pointer group"
             >
               <span>View All Stories</span>
@@ -43,7 +47,7 @@ export const JournalSection: React.FC<JournalSectionProps> = ({ onReadArticle })
 
         {/* 3 Journal Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {GLAMIRK_JOURNAL_ARTICLES.map((article) => (
+          {articles.map((article) => (
             <ArticleCard key={article.id} article={article} onOpen={() => onReadArticle(article)} />
           ))}
         </div>

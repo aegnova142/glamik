@@ -160,7 +160,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
           {/* Policy Document Content */}
           <div className="lg:col-span-8 bg-[#FFFFFF] border border-[#E8D5A8] p-6 sm:p-10 shadow-sm">
             {cmsPolicy ? (
-              <article className="prose prose-neutral max-w-none text-[#121212]">
+              <article className="max-w-none text-[#121212]">
                 <div className="border-b border-[#E8D5A8] pb-6 mb-8">
                   <span className="text-[10px] uppercase tracking-[0.2em] text-[#C9972B] font-medium">
                     Effective Date: {cmsPolicy.effectiveDate || 'Current Production Release'}
@@ -201,7 +201,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
                 </div>
               </article>
             ) : activePolicy === 'privacy' ? (
-              <article className="prose prose-neutral max-w-none text-[#121212]">
+              <article className="max-w-none text-[#121212]">
                 <div className="border-b border-[#E8D5A8] pb-6 mb-8">
                   <span className="text-[10px] uppercase tracking-[0.2em] text-[#C9972B] font-medium">
                     Effective Date: Current Production Release
@@ -259,7 +259,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
                 </div>
               </article>
             ) : activePolicy === 'terms' ? (
-              <article className="prose prose-neutral max-w-none text-[#121212]">
+              <article className="max-w-none text-[#121212]">
                 <div className="border-b border-[#E8D5A8] pb-6 mb-8">
                   <span className="text-[10px] uppercase tracking-[0.2em] text-[#C9972B] font-medium">
                     Terms &amp; Conditions
@@ -302,7 +302,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
                 </div>
               </article>
             ) : activePolicy === 'shipping' ? (
-              <article className="prose prose-neutral max-w-none text-[#121212]">
+              <article className="max-w-none text-[#121212]">
                 <div className="border-b border-[#E8D5A8] pb-6 mb-8">
                   <span className="text-[10px] uppercase tracking-[0.2em] text-[#C9972B] font-medium">
                     Pan-India Delivery Logistics
@@ -370,7 +370,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
                 </div>
               </article>
             ) : activePolicy === 'returns' ? (
-              <article className="prose prose-neutral max-w-none text-[#121212]">
+              <article className="max-w-none text-[#121212]">
                 <div className="border-b border-[#E8D5A8] pb-6 mb-8">
                   <span className="text-[10px] uppercase tracking-[0.2em] text-[#C9972B] font-medium">
                     Client Satisfaction &amp; Quality Guarantee
@@ -413,7 +413,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
                 </div>
               </article>
             ) : (
-              <article className="prose prose-neutral max-w-none text-[#121212]">
+              <article className="max-w-none text-[#121212]">
                 <div className="border-b border-[#E8D5A8] pb-6 mb-8">
                   <span className="text-[10px] uppercase tracking-[0.2em] text-[#C9972B] font-medium">
                     Session &amp; Preference Transparency

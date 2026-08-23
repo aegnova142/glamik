@@ -55,7 +55,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 transition-opacity"
+            className="fixed inset-0 bg-[#0B0B0B]/60 backdrop-blur-xs z-50 transition-opacity"
           />
 
           {/* Slide-over Drawer */}
@@ -167,7 +167,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         {item.selectedShade && (
                           <div className="flex items-center gap-1.5 mt-1 text-[11px] text-[#6B6B6B]">
                             <span
-                              className="w-3 h-3 rounded-full border border-black/10 inline-block"
+                              className="w-3 h-3 rounded-full border border-[#0B0B0B]/10 inline-block"
                               style={{ backgroundColor: item.selectedShade.hex }}
                             />
                             <span>Shade: {item.selectedShade.name}</span>

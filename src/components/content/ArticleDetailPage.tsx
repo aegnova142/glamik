@@ -320,7 +320,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
                         {matchingShade && (
                           <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-[#6B6B6B]">
                             <span
-                              className="w-3 h-3 rounded-full border border-black/10 inline-block"
+                              className="w-3 h-3 rounded-full border border-[#0B0B0B]/10 inline-block"
                               style={{ backgroundColor: matchingShade.hex }}
                             />
                             <span>Featured Shade: <strong>{matchingShade.name}</strong></span>

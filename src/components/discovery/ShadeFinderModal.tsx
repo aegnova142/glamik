@@ -113,7 +113,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/75 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-[#0B0B0B]/75 backdrop-blur-xs transition-opacity"
           />
 
           {/* Modal */}
@@ -349,7 +349,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                     <div className="p-4 bg-[#FAF9F6] border border-[#E8D5A8] flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
                         <div
-                          className="w-10 h-10 rounded-full border border-black/15 shadow-inner flex-shrink-0"
+                          className="w-10 h-10 rounded-full border border-[#0B0B0B]/15 shadow-inner flex-shrink-0"
                           style={{ backgroundColor: matched.matchedLipShade.hex }}
                         />
                         <div>
@@ -377,7 +377,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                     <div className="p-4 bg-[#FAF9F6] border border-[#E8D5A8] flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
                         <div
-                          className="w-10 h-10 rounded-full border border-black/15 shadow-inner flex-shrink-0"
+                          className="w-10 h-10 rounded-full border border-[#0B0B0B]/15 shadow-inner flex-shrink-0"
                           style={{ backgroundColor: matched.matchedSindoorShade.hex }}
                         />
                         <div>

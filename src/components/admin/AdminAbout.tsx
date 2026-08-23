@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Save, Check, Plus, Trash2, RotateCcw as ResetIcon, ImageUp } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 import { CMSAboutContent } from '../../types';
 import { ImageCropUploadModal } from './ImageCropUploadModal';
+import { useSyncOnce } from '../../hooks/useSyncOnce';
 
 const AVAILABLE_VALUE_ICONS = ['ShieldCheck', 'Eye', 'Users', 'Leaf', 'FlaskConical', 'Heart'];
 
@@ -150,9 +151,7 @@ export const AdminAbout: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [uploadTargetFounderId, setUploadTargetFounderId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (aboutContent) setState(aboutContent);
-  }, [aboutContent]);
+  useSyncOnce(aboutContent, setState);
 
   const handleSave = async () => {
     setIsSaving(true);

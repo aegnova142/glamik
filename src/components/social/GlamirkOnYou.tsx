@@ -89,7 +89,7 @@ export const GlamirkOnYou: React.FC<GlamirkOnYouProps> = ({ onQuickView }) => {
                 />
 
                 {/* Hover Overlay */}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4 text-white">
+                <div className="absolute inset-0 bg-[#0B0B0B]/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-4 text-white">
                   <div className="flex justify-end">
                     <div className="p-2 bg-white/20 backdrop-blur-md rounded-full">
                       <Instagram className="w-4 h-4 text-white" />

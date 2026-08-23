@@ -6,8 +6,9 @@
 import React, { useState } from 'react';
 import { useCMS } from '../../context/CMSContext';
 import { Look, LookProductItem } from '../../types';
-import { Plus, Trash2, Save, Check, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, Save, Check, ArrowLeft, Video, Loader2 } from 'lucide-react';
 import { ImageCropUploadModal } from './ImageCropUploadModal';
+import { useFileUpload } from '../../hooks/useFileUpload';
 
 const CATEGORY_OPTIONS = ['EVERYDAY GLAM', 'DATE NIGHT', 'WEDDING GLAM', 'MINIMAL GLAM'];
 
@@ -19,6 +20,11 @@ export const AdminLooks: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const { upload: uploadVideo, isUploading: isVideoUploading, error: videoError } = useFileUpload({
+    acceptedTypes: ['video/'],
+    maxSizeBytes: 60 * 1024 * 1024, // 60MB — keep card autoplay clips short
+    typeErrorMessage: 'Please choose a video file (MP4, WebM, or MOV).',
+  });
 
   const handleCreateLook = () => {
     const newLook: Look = {
@@ -66,6 +72,11 @@ export const AdminLooks: React.FC = () => {
   const removeProductItem = (idx: number) => {
     if (!editingLook) return;
     setEditingLook({ ...editingLook, productsUsed: editingLook.productsUsed.filter((_, i) => i !== idx) });
+  };
+
+  const handleVideoFileSelect = async (file: File | undefined) => {
+    const mediaItem = await uploadVideo(file);
+    if (mediaItem) setEditingLook((prev) => (prev ? { ...prev, video: mediaItem.url } : prev));
   };
 
   if (editingLook) {
@@ -184,6 +195,50 @@ export const AdminLooks: React.FC = () => {
             )}
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+              Video <span className="normal-case text-[#6B6B6B]">(optional — plays instead of the image, loops continuously)</span>
+            </label>
+
+            {videoError && (
+              <p className="mb-2 text-[11px] text-[#F05A7E]">{videoError}</p>
+            )}
+
+            {editingLook.video ? (
+              <div className="space-y-2">
+                <video
+                  src={editingLook.video}
+                  className="w-full h-40 object-cover rounded-lg border border-[#E8D5A8]/20"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                />
+                <div className="flex gap-2">
+                  <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] transition-colors cursor-pointer">
+                    {isVideoUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Video className="w-3.5 h-3.5" />}
+                    <span>{isVideoUploading ? 'Uploading...' : 'Replace Video'}</span>
+                    <input type="file" accept="video/mp4,video/webm,video/quicktime" className="hidden" disabled={isVideoUploading} onChange={(e) => handleVideoFileSelect(e.target.files?.[0])} />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setEditingLook((prev) => (prev ? { ...prev, video: undefined } : prev))}
+                    className="px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-[#6B6B6B] hover:text-[#F05A7E] transition-colors cursor-pointer"
+                    title="Remove video — falls back to the image above"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <label className="flex items-center justify-center gap-2 px-3 py-3 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-dashed border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] transition-colors cursor-pointer">
+                {isVideoUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Video className="w-3.5 h-3.5" />}
+                <span>{isVideoUploading ? 'Uploading...' : 'Upload Video'}</span>
+                <input type="file" accept="video/mp4,video/webm,video/quicktime" className="hidden" disabled={isVideoUploading} onChange={(e) => handleVideoFileSelect(e.target.files?.[0])} />
+              </label>
+            )}
+          </div>
+
           <div className="pt-2 border-t border-[#E8D5A8]/10 space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider">
@@ -276,6 +331,12 @@ export const AdminLooks: React.FC = () => {
               <span className="absolute top-2 left-2 px-2 py-0.5 bg-[#C9972B] text-[#0B0B0B] text-[9px] font-bold uppercase tracking-wider rounded-full">
                 {look.category}
               </span>
+              {look.video && (
+                <span className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 bg-[#0B0B0B]/80 text-[#FAF9F6] text-[9px] font-bold uppercase tracking-wider rounded-full border border-[#E8D5A8]/30">
+                  <Video className="w-2.5 h-2.5" />
+                  <span>Video</span>
+                </span>
+              )}
             </div>
 
             <div className="p-5 flex-1 flex flex-col justify-between space-y-3">

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useCMS } from '../../context/CMSContext';
 import { CMSShadeJourney, CMSJourneyStep } from '../../types';
+import { useSyncOnce } from '../../hooks/useSyncOnce';
 import {
   Plus,
   Trash2,
@@ -49,9 +50,7 @@ export const AdminShadeFinder: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (shadeJourney) setJourneyState(shadeJourney);
-  }, [shadeJourney]);
+  useSyncOnce(shadeJourney, setJourneyState);
 
   const handleSave = async () => {
     setError(null);

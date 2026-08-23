@@ -3,10 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useCMS } from '../../context/CMSContext';
 import { CMSFooterConfig, CMSFooterColumn, CMSFooterLink, CMSLegalPolicyContent } from '../../types';
 import { FOOTER_COLUMN_ICON_MAP } from '../layout/Footer';
+import { useSyncOnce } from '../../hooks/useSyncOnce';
 import {
   Layers,
   Save,
@@ -79,6 +80,19 @@ const DEFAULT_PRESET_FOOTER: CMSFooterConfig = {
         { id: 'l13', label: 'Privacy Policy', url: '/legal?policy=privacy', actionKey: 'legal-privacy' },
         { id: 'l14', label: 'Terms of Use', url: '/legal?policy=terms', actionKey: 'legal-terms' },
         { id: 'l15', label: 'Refund Policy', url: '/legal?policy=returns', actionKey: 'legal-returns' },
+      ],
+    },
+    {
+      id: 'col-marketplaces',
+      title: 'Available On',
+      icon: 'Tag',
+      order: 5,
+      links: [
+        { id: 'ml-nykaa', label: 'Nykaa', url: 'https://www.nykaa.com', isExternal: true },
+        { id: 'ml-amazon', label: 'Amazon', url: 'https://www.amazon.in', isExternal: true },
+        { id: 'ml-flipkart', label: 'Flipkart', url: 'https://www.flipkart.com', isExternal: true },
+        { id: 'ml-myntra', label: 'Myntra', url: 'https://www.myntra.com', isExternal: true },
+        { id: 'ml-purplle', label: 'Purplle', url: 'https://www.purplle.com', isExternal: true },
       ],
     },
   ],
@@ -238,20 +252,18 @@ export const AdminFooter: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [expandedCol, setExpandedCol] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (footer) {
-      // Merge with safe defaults if some fields are missing
-      setFooterState({
-        ...DEFAULT_PRESET_FOOTER,
-        ...footer,
-        columns: footer.columns && footer.columns.length > 0 ? footer.columns : DEFAULT_PRESET_FOOTER.columns,
-        legalLinks: footer.legalLinks && footer.legalLinks.length > 0 ? footer.legalLinks : DEFAULT_PRESET_FOOTER.legalLinks,
-        legalPolicies: footer.legalPolicies || DEFAULT_PRESET_FOOTER.legalPolicies,
-        paymentMethods: footer.paymentMethods && footer.paymentMethods.length > 0 ? footer.paymentMethods : DEFAULT_PRESET_FOOTER.paymentMethods,
-        trustBadges: footer.trustBadges && footer.trustBadges.length > 0 ? footer.trustBadges : DEFAULT_PRESET_FOOTER.trustBadges,
-      });
-    }
-  }, [footer]);
+  useSyncOnce(footer, (loadedFooter) => {
+    // Merge with safe defaults if some fields are missing
+    setFooterState({
+      ...DEFAULT_PRESET_FOOTER,
+      ...loadedFooter,
+      columns: loadedFooter.columns && loadedFooter.columns.length > 0 ? loadedFooter.columns : DEFAULT_PRESET_FOOTER.columns,
+      legalLinks: loadedFooter.legalLinks && loadedFooter.legalLinks.length > 0 ? loadedFooter.legalLinks : DEFAULT_PRESET_FOOTER.legalLinks,
+      legalPolicies: loadedFooter.legalPolicies || DEFAULT_PRESET_FOOTER.legalPolicies,
+      paymentMethods: loadedFooter.paymentMethods && loadedFooter.paymentMethods.length > 0 ? loadedFooter.paymentMethods : DEFAULT_PRESET_FOOTER.paymentMethods,
+      trustBadges: loadedFooter.trustBadges && loadedFooter.trustBadges.length > 0 ? loadedFooter.trustBadges : DEFAULT_PRESET_FOOTER.trustBadges,
+    });
+  });
 
   const handleSave = async () => {
     setIsSaving(true);

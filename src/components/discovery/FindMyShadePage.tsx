@@ -202,11 +202,11 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
 
   // Skin tone definitions
   const skinTones: { id: SkinToneType; label: string; color: string; desc: string }[] = [
-    { id: 'Fair', label: 'Fair', color: '#F8E3D2', desc: 'Porcelain or ivory surface tone' },
-    { id: 'Light', label: 'Light', color: '#EFC9AF', desc: 'Warm cream or light golden surface tone' },
-    { id: 'Medium', label: 'Medium', color: '#D6A681', desc: 'Olive, honey or golden medium surface tone' },
-    { id: 'Tan', label: 'Tan', color: '#B37850', desc: 'Sun-kissed bronze or rich caramel tone' },
-    { id: 'Deep', label: 'Deep', color: '#6F4129', desc: 'Rich mocha, cocoa or deep espresso tone' },
+    { id: 'Fair', label: 'Fair', color: '#FAF9F6', desc: 'Porcelain or ivory surface tone' },
+    { id: 'Light', label: 'Light', color: '#E8D5A8', desc: 'Warm cream or light golden surface tone' },
+    { id: 'Medium', label: 'Medium', color: '#E3B84B', desc: 'Olive, honey or golden medium surface tone' },
+    { id: 'Tan', label: 'Tan', color: '#C9972B', desc: 'Sun-kissed bronze or rich caramel tone' },
+    { id: 'Deep', label: 'Deep', color: '#171717', desc: 'Rich mocha, cocoa or deep espresso tone' },
   ];
 
   return (
@@ -351,7 +351,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                     }`}
                   >
                     <div
-                      className="w-10 h-10 rounded-full border border-black/10 shadow-xs shrink-0"
+                      className="w-10 h-10 rounded-full border border-[#0B0B0B]/10 shadow-xs shrink-0"
                       style={{ backgroundColor: tone.color }}
                     />
                     <div className="space-y-0.5">
@@ -864,7 +864,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
               <div className="mt-6 flex items-center justify-between bg-[#FAF9F6] p-4 border border-[#E8D5A8]">
                 <div className="flex items-center gap-3">
                   <div
-                    className="w-8 h-8 rounded-full border border-black/20 shadow-xs ring-2 ring-[#C9972B]"
+                    className="w-8 h-8 rounded-full border border-[#0B0B0B]/20 shadow-xs ring-2 ring-[#C9972B]"
                     style={{ backgroundColor: matchResult.primaryShade.hex }}
                   />
                   <div>
@@ -1005,7 +1005,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <div
-                          className="w-6 h-6 rounded-full border border-black/10 shadow-xs"
+                          className="w-6 h-6 rounded-full border border-[#0B0B0B]/10 shadow-xs"
                           style={{ backgroundColor: alt.shade.hex }}
                         />
                         <span className="text-sm font-bold uppercase tracking-wider text-[#121212]">

@@ -123,7 +123,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/80 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-[#0B0B0B]/80 backdrop-blur-xs transition-opacity"
           />
 
           {/* Search Panel Card */}

@@ -1,12 +1,12 @@
 import React from 'react';
 import { Coupon } from '../../types';
-import { GLAMIRK_COUPONS } from '../../data/commerce';
 import { X, Tag, Check, ArrowRight, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface OffersDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  offers: Coupon[];
   appliedCoupon: Coupon | null;
   onApplyCoupon: (coupon: Coupon) => void;
   onRemoveCoupon: () => void;
@@ -16,6 +16,7 @@ interface OffersDrawerProps {
 export const OffersDrawer: React.FC<OffersDrawerProps> = ({
   isOpen,
   onClose,
+  offers,
   appliedCoupon,
   onApplyCoupon,
   onRemoveCoupon,
@@ -31,7 +32,7 @@ export const OffersDrawer: React.FC<OffersDrawerProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            className="absolute inset-0 bg-[#0B0B0B]/60 backdrop-blur-xs transition-opacity"
           />
 
           <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
@@ -66,7 +67,10 @@ export const OffersDrawer: React.FC<OffersDrawerProps> = ({
                 </p>
 
                 <div className="space-y-3.5">
-                  {GLAMIRK_COUPONS.map((coupon) => {
+                  {offers.length === 0 && (
+                    <p className="text-xs text-[#6B6B6B] text-center py-6">No active offers right now — check back soon.</p>
+                  )}
+                  {offers.map((coupon) => {
                     const isApplied = appliedCoupon?.code === coupon.code;
                     const isEligible = !coupon.minOrderValue || cartTotal >= coupon.minOrderValue;
 

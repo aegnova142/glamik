@@ -14,7 +14,7 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
       description: 'Your skin glows with golden, peachy, or caramel undertones. Rich terracotta, toasted cinnamon, and spiced rose create radiant warmth.',
       recommendedLip: 'Spice Velvet & Nude Suede',
       recommendedSindoor: 'Ceremonial Scarlet',
-      swatchHexes: ['#8C3D2B', '#A06E5B', '#F05A7E'],
+      swatchHexes: ['#C9972B', '#E8D5A8', '#F05A7E'],
       visual: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=85'
     },
     Neutral: {
@@ -22,7 +22,7 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
       description: 'A harmonious balance of warm and cool notes. You can effortlessly carry dusty rose, classic ruby, and muted crimson pigments.',
       recommendedLip: 'Royal Rose & Crimson Sovereign',
       recommendedSindoor: 'Ceremonial Scarlet & Heritage Maroon',
-      swatchHexes: ['#9E4752', '#7A1C28', '#F05A7E'],
+      swatchHexes: ['#F05A7E', '#171717', '#F05A7E'],
       visual: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=85'
     },
     Cool: {
@@ -30,7 +30,7 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
       description: 'Hints of blue, pink, or deep berry undertones. Deep berry wines, blue-based red lips, and heritage maroon sindoor illuminate your complexion.',
       recommendedLip: 'Plum Opulence & Crimson Sovereign',
       recommendedSindoor: 'Heritage Maroon',
-      swatchHexes: ['#5E2235', '#7A1C28', '#691B22'],
+      swatchHexes: ['#121212', '#171717', '#121212'],
       visual: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=800&q=85'
     },
     Olive: {
@@ -38,7 +38,7 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
       description: 'Subtle greenish-gold or neutral undertones that require depth. Earthy terracottas, toasted nudes, and opulent scarlet create striking definition.',
       recommendedLip: 'Spice Velvet & Plum Opulence',
       recommendedSindoor: 'Ceremonial Scarlet',
-      swatchHexes: ['#8C3D2B', '#5E2235', '#F05A7E'],
+      swatchHexes: ['#C9972B', '#121212', '#F05A7E'],
       visual: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=800&q=85'
     }
   };
@@ -107,7 +107,7 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
                   {profile.swatchHexes.map((hex, i) => (
                     <span
                       key={i}
-                      className="w-4 h-4 rounded-full border border-black/10 shadow-xs"
+                      className="w-4 h-4 rounded-full border border-[#0B0B0B]/10 shadow-xs"
                       style={{ backgroundColor: hex }}
                     />
                   ))}
@@ -146,7 +146,7 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
                 className="w-full h-full object-cover transition-all duration-700"
               />
 
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B]/60 via-transparent to-transparent" />
 
               <div className="absolute bottom-6 left-6 right-6 text-white flex items-end justify-between">
                 <div>

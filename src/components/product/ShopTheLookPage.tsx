@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { GLAMIRK_LOOKS } from '../../data/looks';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { Look, Product, Shade } from '../../types';
-import { ShoppingBag, ArrowRight, Sparkles, Check } from 'lucide-react';
+import { ShoppingBag, ArrowRight, Sparkles, Check, Tag, Copy } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
+import { OffersPopupModal } from '../marketing/OffersPopupModal';
+
+const OFFERS_POPUP_SESSION_KEY = 'glamirk_offers_popup_shown';
 
 interface ShopTheLookPageProps {
   onAddLookToBag: (items: { product: Product; shade?: Shade; size?: string }[]) => void;
@@ -16,9 +19,32 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
   onSelectProduct,
   onOpenShadeFinder,
 }) => {
-  const { looks } = useCMS();
+  const { looks, activeOffers } = useCMS();
   const displayLooks = looks && looks.length > 0 ? looks : GLAMIRK_LOOKS;
   const [selectedFilter, setSelectedFilter] = useState<string>('ALL');
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [isOffersPopupOpen, setIsOffersPopupOpen] = useState(false);
+
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  // Greet the admin's active offers once per browser session, the first
+  // time the shopper lands on this page — not on every visit. The ref makes
+  // sure this decision only ever runs once per mount, even if `activeOffers`
+  // updates its array reference again later (a 30s poll, an SSE update).
+  const hasCheckedOffersPopupRef = useRef(false);
+  useEffect(() => {
+    if (hasCheckedOffersPopupRef.current) return;
+    if (activeOffers.length === 0) return;
+    hasCheckedOffersPopupRef.current = true;
+    if (!sessionStorage.getItem(OFFERS_POPUP_SESSION_KEY)) {
+      sessionStorage.setItem(OFFERS_POPUP_SESSION_KEY, '1');
+      setIsOffersPopupOpen(true);
+    }
+  }, [activeOffers]);
 
   const filterTabs = ['ALL', 'EVERYDAY GLAM', 'DATE NIGHT', 'WEDDING GLAM', 'MINIMAL GLAM'];
 
@@ -47,6 +73,58 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
           </p>
         </div>
       </div>
+
+      {/* Active Offers & Campaigns */}
+      {activeOffers.length > 0 && (
+        <div className="bg-[#FCE8ED] border-b border-[#E8D5A8] py-8 sm:py-10 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto space-y-4">
+            <div className="flex items-center gap-2">
+              <Tag className="w-4 h-4 text-[#F05A7E]" />
+              <span className="text-[10.5px] font-bold tracking-[0.24em] uppercase text-[#F05A7E]">
+                Live Privileges
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {activeOffers.map((offer) => (
+                <div
+                  key={offer.id}
+                  className="bg-white border border-[#E8D5A8] p-5 space-y-2.5 shadow-xs"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    {offer.tag && (
+                      <span className="text-[9.5px] tracking-widest uppercase font-semibold text-[#C9972B] bg-[#C9972B]/10 px-2 py-0.5">
+                        {offer.tag}
+                      </span>
+                    )}
+                    {offer.couponCode && (
+                      <button
+                        onClick={() => handleCopyCode(offer.couponCode!)}
+                        className="flex items-center gap-1 font-mono text-xs font-semibold tracking-wider text-[#121212] bg-[#FAF9F6] px-2 py-1 border border-[#E8D5A8] hover:border-[#C9972B] transition-colors cursor-pointer"
+                      >
+                        {copiedCode === offer.couponCode ? (
+                          <Check className="w-3 h-3 text-[#C9972B]" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                        {offer.couponCode}
+                      </button>
+                    )}
+                  </div>
+                  <h3 className="font-serif text-base text-[#121212]">
+                    {offer.publicTitle || offer.name}
+                  </h3>
+                  <p className="text-xs text-[#6B6B6B] leading-relaxed">{offer.description}</p>
+                  {offer.minOrderValue > 0 && (
+                    <p className="text-[10.5px] text-[#6B6B6B] font-mono">
+                      Minimum bag value: ₹{offer.minOrderValue}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Look Category Filter Tabs */}
       <div className="bg-[#FAF9F6] border-b border-[#E8D5A8] sticky top-16 z-20 backdrop-blur-md bg-[#FAF9F6]/95">
@@ -90,11 +168,23 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
             >
               {/* Left Look Editorial Image (5 cols) */}
               <div className="lg:col-span-5 relative aspect-[4/5] lg:aspect-auto overflow-hidden bg-[#FAF9F6]">
-                <img
-                  src={look.image}
-                  alt={look.title}
-                  className="w-full h-full object-cover"
-                />
+                {look.video ? (
+                  <video
+                    src={look.video}
+                    poster={look.image}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={look.image}
+                    alt={look.title}
+                    className="w-full h-full object-cover"
+                  />
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B]/75 via-transparent to-transparent lg:hidden" />
                 <div className="absolute bottom-4 left-4 right-4 text-white lg:hidden">
                   <span className="text-[10px] tracking-widest uppercase text-[#C9972B] block">
@@ -192,6 +282,12 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
           );
         })}
       </div>
+
+      <OffersPopupModal
+        isOpen={isOffersPopupOpen}
+        onClose={() => setIsOffersPopupOpen(false)}
+        offers={activeOffers}
+      />
     </div>
   );
 };

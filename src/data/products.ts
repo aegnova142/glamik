@@ -34,35 +34,35 @@ export const GLAMIRK_PRODUCTS: Product[] = [
       {
         id: 'shade-royal-rose',
         name: 'Royal Rose',
-        hex: '#9E4752',
+        hex: '#F05A7E',
         undertone: 'Neutral',
         description: 'A refined dusty petal rose that complements both day and evening glamour.'
       },
       {
         id: 'shade-spice-velvet',
         name: 'Spice Velvet',
-        hex: '#8C3D2B',
+        hex: '#C9972B',
         undertone: 'Warm',
         description: 'A toasted terracotta with rich cinnamon undertones for an effortlessly regal warmth.'
       },
       {
         id: 'shade-crimson-sovereign',
         name: 'Crimson Sovereign',
-        hex: '#7A1C28',
+        hex: '#171717',
         undertone: 'Universal',
         description: 'An iconic deep ruby red curated to flatter every complexion with instant impact.'
       },
       {
         id: 'shade-nude-suede',
         name: 'Nude Suede',
-        hex: '#A06E5B',
+        hex: '#E8D5A8',
         undertone: 'Warm',
         description: 'A modern caramel nude tailored to avoid ashy cast on melanin-rich skin.'
       },
       {
         id: 'shade-plum-opulence',
         name: 'Plum Opulence',
-        hex: '#5E2235',
+        hex: '#121212',
         undertone: 'Cool',
         description: 'A decadent mulberry wine for high-drama evening sophistication.'
       }
@@ -119,14 +119,14 @@ export const GLAMIRK_PRODUCTS: Product[] = [
       {
         id: 'sindoor-scarlet-glam',
         name: 'Ceremonial Scarlet',
-        hex: '#A31D24',
+        hex: '#F05A7E',
         undertone: 'Universal',
         description: 'A vibrant classic red embodying timeless tradition and sacred luxury.'
       },
       {
         id: 'sindoor-maroon-heritage',
         name: 'Heritage Maroon',
-        hex: '#691B22',
+        hex: '#121212',
         undertone: 'Universal',
         description: 'A profound, rich maroon with deep velvety undertones for stately elegance.'
       }

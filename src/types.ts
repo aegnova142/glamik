@@ -75,6 +75,7 @@ export interface Product {
   completeTheLookProductIds: string[];
   enableQuickView?: boolean;
   enableTryOn?: boolean;
+  isBestSeller?: boolean;
 }
 
 export interface CartItem {
@@ -116,7 +117,10 @@ export interface Look {
   title: string;
   tagline: string;
   description: string;
+  /** Poster/fallback image — also used as the video's poster frame when a video is set. */
   image: string;
+  /** Optional looping video shown instead of the static image on the card. */
+  video?: string;
   category: 'EVERYDAY GLAM' | 'DATE NIGHT' | 'WEDDING GLAM' | 'MINIMAL GLAM' | string;
   productsUsed: LookProductItem[];
 }
@@ -924,7 +928,26 @@ export interface CMSHeroTrustBarItem {
   subtitle: string;
 }
 
-export interface CMSHeroSlide {
+export type CMSHeroHPosition = 'left' | 'center' | 'right';
+
+/** Portion 2 — one image in the independent decorative background carousel
+ * behind the hero. Array order is display order (same convention as slides). */
+export interface CMSHeroBackground {
+  id: string;
+  image: string;
+  /** Whether this background appears in the live carousel. Default true. */
+  isActive?: boolean;
+}
+
+/** Layout controls shared by the primary slide and every additional slide. */
+export interface CMSHeroLayout {
+  /** Where the main image sits within the hero. Default: 'right'. */
+  outerImagePosition?: CMSHeroHPosition;
+  /** Alignment of the heading/description/CTA block. Default: 'left'. */
+  textPosition?: CMSHeroHPosition;
+}
+
+export interface CMSHeroSlide extends CMSHeroLayout {
   id: string;
   badgeText: string;
   headingLine1: string;
@@ -937,9 +960,13 @@ export interface CMSHeroSlide {
   imageBadgeLabel: string;
   imageProductName: string;
   imagePrice: string;
+  /** Optional destination for the primary CTA on this slide. External (http/https) opens a new tab; internal paths navigate in-app. Omit to keep the default Shop action. */
+  primaryCtaLink?: string;
+  /** Whether this slide appears in the live carousel. Default true. */
+  isActive?: boolean;
 }
 
-export interface CMSHeroContent {
+export interface CMSHeroContent extends CMSHeroLayout {
   badgeText: string;
   headingLine1: string;
   headingPrefix: string;
@@ -952,8 +979,15 @@ export interface CMSHeroContent {
   imageBadgeLabel: string;
   imageProductName: string;
   imagePrice: string;
+  primaryCtaLink?: string;
   trustBar: CMSHeroTrustBarItem[];
   slides?: CMSHeroSlide[];
+  /** Whether slide 1 appears in the live carousel. Default true. */
+  isActive?: boolean;
+  /** Portion 2 — independent decorative background carousel behind the hero. */
+  backgrounds?: CMSHeroBackground[];
+  /** Portion 2 crossfade interval in ms. Default 3000. Independent of the Portion 1 slide timer. */
+  backgroundIntervalMs?: number;
 }
 
 export interface CMSJourneyStep {

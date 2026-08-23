@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PageRoute } from '../../types';
+import { useCMS } from '../../context/CMSContext';
 
 interface NavbarProps {
   currentRoute: PageRoute;
@@ -60,6 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigateAdmin,
   onNavigateAbout,
 }) => {
+  const { globalSettings } = useCMS();
   const [isScrolled, setIsScrolled] = useState(false);
   const [activeMegaMenu, setActiveMegaMenu] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -119,23 +121,33 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Menu className="w-6 h-6 stroke-[1.75]" />
             </button>
 
-            {/* Brand Logo with reference-style floral icon */}
+            {/* Brand Logo — uploaded logo image when set, otherwise the default icon + wordmark */}
             <button
               id="brand-logo-link"
               onClick={onNavigateHome}
               className="group flex items-center gap-2.5 focus:outline-none cursor-pointer text-left"
             >
-              <div className="w-8 h-8 rounded-full bg-[#FCE8ED] border border-[#E8D5A8] flex items-center justify-center text-[#F05A7E] group-hover:scale-105 transition-transform">
-                <Flower2 className="w-4 h-4 text-[#F05A7E]" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-xl sm:text-2xl font-bold tracking-tight text-[#121212] leading-none group-hover:text-[#F05A7E] transition-colors">
-                  Glamirk
-                </span>
-                <span className="text-[9px] font-medium tracking-[0.2em] text-[#6B6B6B] uppercase mt-0.5">
-                  Luxury Beauty
-                </span>
-              </div>
+              {globalSettings?.logoUrl ? (
+                <img
+                  src={globalSettings.logoUrl}
+                  alt={globalSettings.logoText || globalSettings.brandName || 'Logo'}
+                  className="h-11 sm:h-14 w-auto max-w-[220px] object-contain group-hover:scale-105 transition-transform"
+                />
+              ) : (
+                <>
+                  <div className="w-8 h-8 rounded-full bg-[#FCE8ED] border border-[#E8D5A8] flex items-center justify-center text-[#F05A7E] group-hover:scale-105 transition-transform">
+                    <Flower2 className="w-4 h-4 text-[#F05A7E]" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xl sm:text-2xl font-bold tracking-tight text-[#121212] leading-none group-hover:text-[#F05A7E] transition-colors">
+                      {globalSettings?.logoText || 'Glamirk'}
+                    </span>
+                    <span className="text-[9px] font-medium tracking-[0.2em] text-[#6B6B6B] uppercase mt-0.5">
+                      Luxury Beauty
+                    </span>
+                  </div>
+                </>
+              )}
             </button>
           </div>
 
@@ -529,7 +541,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setMobileMenuOpen(false)}
-              className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs lg:hidden"
+              className="fixed inset-0 z-50 bg-[#0B0B0B]/40 backdrop-blur-xs lg:hidden"
             />
 
             <motion.div
@@ -549,17 +561,27 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }}
                   className="flex items-center gap-2.5 text-left"
                 >
-                  <div className="w-8 h-8 rounded-full bg-white border border-[#E8D5A8] flex items-center justify-center text-[#F05A7E] shadow-xs">
-                    <Flower2 className="w-4 h-4 text-[#F05A7E]" />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-base font-bold text-[#121212] leading-none">
-                      Glamirk
-                    </span>
-                    <span className="text-[8.5px] font-semibold tracking-[0.2em] text-[#6B6B6B] uppercase mt-0.5">
-                      Luxury Beauty
-                    </span>
-                  </div>
+                  {globalSettings?.logoUrl ? (
+                    <img
+                      src={globalSettings.logoUrl}
+                      alt={globalSettings.logoText || globalSettings.brandName || 'Logo'}
+                      className="h-10 w-auto max-w-[180px] object-contain"
+                    />
+                  ) : (
+                    <>
+                      <div className="w-8 h-8 rounded-full bg-white border border-[#E8D5A8] flex items-center justify-center text-[#F05A7E] shadow-xs">
+                        <Flower2 className="w-4 h-4 text-[#F05A7E]" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-base font-bold text-[#121212] leading-none">
+                          {globalSettings?.logoText || 'Glamirk'}
+                        </span>
+                        <span className="text-[8.5px] font-semibold tracking-[0.2em] text-[#6B6B6B] uppercase mt-0.5">
+                          Luxury Beauty
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </button>
                 <button
                   id="close-mobile-menu-btn"

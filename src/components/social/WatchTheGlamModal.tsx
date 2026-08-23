@@ -34,7 +34,7 @@ export const WatchTheGlamModal: React.FC<WatchTheGlamModalProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 bg-black/85 backdrop-blur-md"
+          className="fixed inset-0 bg-[#0B0B0B]/85 backdrop-blur-md"
         />
 
         <motion.div
@@ -68,7 +68,7 @@ export const WatchTheGlamModal: React.FC<WatchTheGlamModalProps> = ({
             />
 
             {/* Video Overlay Info */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 flex flex-col justify-between p-6">
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B]/80 via-transparent to-[#0B0B0B]/30 flex flex-col justify-between p-6">
               <div>
                 <h4 className="font-serif text-xl text-[#FAF9F6]">{title}</h4>
                 <p className="text-xs text-[#C9972B] mt-0.5">High-Definition Application Tutorial</p>

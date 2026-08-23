@@ -108,10 +108,10 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
                   loading="lazy"
                 />
 
-                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B]/75 via-transparent to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
 
                 {/* Creator Badge Overlay */}
-                <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/60 backdrop-blur-xs px-2.5 py-1 text-white text-[11px]">
+                <div className="absolute top-3 left-3 flex items-center gap-2 bg-[#0B0B0B]/60 backdrop-blur-xs px-2.5 py-1 text-white text-[11px]">
                   <span className="font-mono">{post.creatorHandle}</span>
                   {post.isVerified && <BadgeCheck className="w-3.5 h-3.5 text-[#C9972B]" />}
                 </div>
@@ -268,7 +268,7 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             onClick={() => setIsSubmitModalOpen(false)}
-            className="fixed inset-0 bg-black/70 backdrop-blur-xs"
+            className="fixed inset-0 bg-[#0B0B0B]/70 backdrop-blur-xs"
           />
           <div className="relative bg-[#FAF9F6] border border-[#E8D5A8] p-8 max-w-md w-full shadow-2xl z-50 space-y-5 text-center">
             {submittedUgc ? (

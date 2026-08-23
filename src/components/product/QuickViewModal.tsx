@@ -61,7 +61,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-[#0B0B0B]/60 backdrop-blur-xs transition-opacity"
           />
 
           {/* Modal Card */}
@@ -234,7 +234,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                           className={`w-7 h-7 rounded-full border transition-all cursor-pointer ${
                             selectedShade?.id === shade.id
                               ? 'border-[#F05A7E] scale-110 ring-2 ring-[#F05A7E]/40'
-                              : 'border-black/10 hover:scale-105'
+                              : 'border-[#0B0B0B]/10 hover:scale-105'
                           }`}
                           style={{ backgroundColor: shade.hex }}
                           title={`${shade.name} - ${shade.undertone}`}

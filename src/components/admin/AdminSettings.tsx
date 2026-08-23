@@ -6,7 +6,8 @@
 import React, { useState } from 'react';
 import { useCMS } from '../../context/CMSContext';
 import { CMSGlobalSettings, CMSAnnouncementMessage } from '../../types';
-import { Settings, Save, Check, Plus, Trash2, ShieldCheck, Palette, Copy } from 'lucide-react';
+import { Settings, Save, Check, Plus, Trash2, ShieldCheck, Palette, Copy, Upload, Loader2, ImageOff } from 'lucide-react';
+import { useFileUpload } from '../../hooks/useFileUpload';
 
 export const AdminSettings: React.FC = () => {
   const { globalSettings, saveGlobalSettings } = useCMS();
@@ -49,6 +50,16 @@ export const AdminSettings: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [copiedHex, setCopiedHex] = useState<string | null>(null);
+  const { upload: uploadLogo, isUploading: isLogoUploading, error: logoError } = useFileUpload({
+    acceptedTypes: ['image/png', 'image/svg+xml', 'image/webp', 'image/jpeg'],
+    maxSizeBytes: 5 * 1024 * 1024,
+    typeErrorMessage: 'Please choose a PNG, SVG, WebP, or JPG file.',
+  });
+
+  const handleLogoFileSelect = async (file: File | undefined) => {
+    const mediaItem = await uploadLogo(file);
+    if (mediaItem) setSettings((prev) => ({ ...prev, logoUrl: mediaItem.url }));
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -139,6 +150,53 @@ export const AdminSettings: React.FC = () => {
               onChange={(e) => setSettings({ ...settings, tagline: e.target.value })}
               className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+              Logo Text <span className="normal-case text-[#6B6B6B]">(shown when no logo image is set)</span>
+            </label>
+            <input
+              type="text"
+              value={settings.logoText}
+              onChange={(e) => setSettings({ ...settings, logoText: e.target.value })}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+              Logo Image <span className="normal-case text-[#6B6B6B]">(replaces the text logo in the navbar &amp; footer)</span>
+            </label>
+
+            {logoError && <p className="mb-2 text-[11px] text-[#F05A7E]">{logoError}</p>}
+
+            <div className="flex items-center gap-3">
+              <div className="w-20 h-20 shrink-0 rounded-lg bg-[#0B0B0B] border border-[#E8D5A8]/30 flex items-center justify-center overflow-hidden">
+                {settings.logoUrl ? (
+                  <img src={settings.logoUrl} alt="Logo preview" className="w-full h-full object-contain" />
+                ) : (
+                  <ImageOff className="w-5 h-5 text-[#6B6B6B]" />
+                )}
+              </div>
+              <div className="flex-1 space-y-2">
+                <label className="flex items-center justify-center gap-1.5 px-3 py-2 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-dashed border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] transition-colors cursor-pointer">
+                  {isLogoUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                  <span>{isLogoUploading ? 'Uploading...' : settings.logoUrl ? 'Replace Logo' : 'Upload Logo'}</span>
+                  <input type="file" accept="image/png,image/svg+xml,image/webp,image/jpeg" className="hidden" disabled={isLogoUploading} onChange={(e) => handleLogoFileSelect(e.target.files?.[0])} />
+                </label>
+                {settings.logoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setSettings({ ...settings, logoUrl: '' })}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-[11px] font-semibold text-[#6B6B6B] hover:text-[#F05A7E] transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Remove Logo</span>
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

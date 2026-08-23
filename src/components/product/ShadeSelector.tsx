@@ -53,7 +53,7 @@ export const ShadeSelector: React.FC<ShadeSelectorProps> = ({
               className={`relative w-8 h-8 rounded-full border transition-all duration-200 cursor-pointer ${
                 isSelected
                   ? 'border-[#F05A7E] scale-115 ring-2 ring-[#F05A7E] ring-offset-2 shadow-md'
-                  : 'border-black/15 hover:scale-105 opacity-85 hover:opacity-100'
+                  : 'border-[#0B0B0B]/15 hover:scale-105 opacity-85 hover:opacity-100'
               }`}
               style={{ backgroundColor: shade.hex }}
               title={`${shade.name} (${shade.undertone} undertone)`}

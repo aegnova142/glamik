@@ -928,6 +928,12 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
 }
 
 export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
+  // Serve from the in-process cache once loaded — saveDatabase() keeps it in
+  // sync on every admin save/delete, so reads never hit Postgres on the hot
+  // path. This is only safe because the app runs as a single server process
+  // (WEB_CONCURRENCY=1); it does NOT sync across two separately-running
+  // processes (e.g. a local dev server and the deployed instance pointed at
+  // the same database) — each keeps its own cache until restarted.
   if (cachedDb) return cachedDb;
 
   await ensureSchema();

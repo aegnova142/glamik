@@ -60,7 +60,7 @@ export const CampaignLandingPage: React.FC<CampaignLandingPageProps> = ({
           alt={campaign.title}
           className="absolute inset-0 w-full h-full object-cover opacity-60 scale-105"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B] via-[#0B0B0B]/60 to-black/40" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B] via-[#0B0B0B]/60 to-[#0B0B0B]/40" />
 
         <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 py-24 text-center space-y-6">
           <motion.div
@@ -95,7 +95,7 @@ export const CampaignLandingPage: React.FC<CampaignLandingPageProps> = ({
               {campaign.lookId && (
                 <button
                   onClick={() => onOpenLook(campaign.lookId!)}
-                  className="px-8 py-4 bg-black/40 border border-[#FAF9F6]/30 text-[#FAF9F6] text-xs font-semibold tracking-[0.2em] uppercase hover:bg-black/60 transition-colors cursor-pointer"
+                  className="px-8 py-4 bg-[#0B0B0B]/40 border border-[#FAF9F6]/30 text-[#FAF9F6] text-xs font-semibold tracking-[0.2em] uppercase hover:bg-[#0B0B0B]/60 transition-colors cursor-pointer"
                 >
                   EXPLORE THE LOOK
                 </button>

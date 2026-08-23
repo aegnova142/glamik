@@ -3,6 +3,7 @@ import { CartItem, Product, Shade, Coupon } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE, GLAMIRK_COUPONS } from '../../data/commerce';
 import { OffersDrawer } from '../marketing/OffersDrawer';
+import { useCMS } from '../../context/CMSContext';
 import {
   ShoppingBag,
   Trash2,
@@ -49,6 +50,20 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
   onOpenAssistant,
   onQuickAdd,
 }) => {
+  const { activeOffers } = useCMS();
+  const cmsCoupons: Coupon[] = activeOffers
+    .filter((o) => o.couponCode && (o.discountType === 'percentage' || o.discountType === 'flat'))
+    .map((o) => ({
+      code: o.couponCode!,
+      title: o.publicTitle || o.name,
+      description: o.description,
+      discountType: o.discountType as 'percentage' | 'flat',
+      discountValue: o.discountValue,
+      minOrderValue: o.minOrderValue || undefined,
+      tag: o.tag,
+    }));
+  const availableCoupons = cmsCoupons.length > 0 ? cmsCoupons : GLAMIRK_COUPONS;
+
   const [promoInput, setPromoInput] = useState('');
   const [promoError, setPromoError] = useState<string | null>(null);
   const [isOffersDrawerOpen, setIsOffersDrawerOpen] = useState(false);
@@ -86,7 +101,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
       return;
     }
 
-    const matched = GLAMIRK_COUPONS.find((c) => c.code.toUpperCase() === clean);
+    const matched = availableCoupons.find((c) => c.code.toUpperCase() === clean);
     if (!matched) {
       setPromoError('Invalid promotional code. Tap "View Available Offers" to inspect active privileges.');
       return;
@@ -255,7 +270,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                           {item.selectedShade && (
                             <div className="flex items-center gap-1.5 bg-[#FAF9F6] px-2.5 py-1 border border-[#E8D5A8]">
                               <span
-                                className="w-3 h-3 rounded-full border border-black/10 flex-shrink-0"
+                                className="w-3 h-3 rounded-full border border-[#0B0B0B]/10 flex-shrink-0"
                                 style={{ backgroundColor: item.selectedShade.hex }}
                               />
                               <span className="font-medium text-[#121212]">
@@ -644,6 +659,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
       <OffersDrawer
         isOpen={isOffersDrawerOpen}
         onClose={() => setIsOffersDrawerOpen(false)}
+        offers={availableCoupons}
         appliedCoupon={appliedCoupon}
         onApplyCoupon={onApplyCoupon}
         onRemoveCoupon={onRemoveCoupon}

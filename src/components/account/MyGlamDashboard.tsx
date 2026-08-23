@@ -480,7 +480,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                       <h3 className="font-serif text-2xl sm:text-3xl text-[#FAF9F6]">
                         Sign In to Unlock Your Glam Suite
                       </h3>
-                      <p className="text-[#9B9B9B] text-xs sm:text-[13px] leading-relaxed max-w-md">
+                      <p className="text-[#6B6B6B] text-xs sm:text-[13px] leading-relaxed max-w-md">
                         One account for everything Glamirk — track every order, revisit your shade quiz
                         results, manage saved addresses, and watch your Privé rewards grow with every purchase.
                       </p>
@@ -506,7 +506,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                         <div className="w-10 h-10 rounded-full bg-[#C9972B]/10 border border-[#C9972B]/30 flex items-center justify-center text-[#E3B84B]">
                           <item.icon className="w-4 h-4" />
                         </div>
-                        <span className="text-[10.5px] text-[#9B9B9B] leading-tight">{item.label}</span>
+                        <span className="text-[10.5px] text-[#6B6B6B] leading-tight">{item.label}</span>
                       </div>
                     ))}
                   </div>
@@ -679,7 +679,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span
-                          className="w-5 h-5 rounded-full border border-black/10 shadow-xs"
+                          className="w-5 h-5 rounded-full border border-[#0B0B0B]/10 shadow-xs"
                           style={{ backgroundColor: shade.hex }}
                         />
                         <span className="font-serif text-base text-[#121212] font-medium">
@@ -1169,7 +1169,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
       {/* Review Modal */}
       <AnimatePresence>
         {isReviewModalOpen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0B0B0B]/60 backdrop-blur-xs flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -1260,7 +1260,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
       {/* Return Request Modal */}
       <AnimatePresence>
         {isReturnModalOpen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0B0B0B]/60 backdrop-blur-xs flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -1331,7 +1331,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
       {/* Add Address Modal */}
       <AnimatePresence>
         {isAddAddressOpen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0B0B0B]/60 backdrop-blur-xs flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}

@@ -1,12 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowRight, Sparkles, ShieldCheck, Truck, Headphones, RotateCcw, Lock, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
-import { CMSHeroSlide } from '../../types';
+import { CMSHeroContent, CMSHeroSlide, CMSHeroBackground } from '../../types';
+import { HeroBackgroundCarousel } from './HeroBackgroundCarousel';
+import { resolveHeroLayout, heroRowOrderClass, heroTextAlignClasses } from './heroSlideLayout';
+
+// Stable reference so a hero with no Portion 2 images doesn't hand
+// HeroBackgroundCarousel a fresh [] every render (which would defeat its
+// own useMemo and re-run the active/broken-image filter for no reason).
+const EMPTY_BACKGROUNDS: CMSHeroBackground[] = [];
 
 const TRUST_BAR_VISIBLE_LIMIT = 3;
 const AUTOPLAY_MS = 2000;
-const AUTOPLAY_FADE_MS = 400; // automatic slide change
-const MANUAL_FADE_MS = 150; // button/dot/swipe — snappy, feels instant
+const AUTOPLAY_FADE_MS = 200; // automatic slide change — quick move
+const MANUAL_FADE_MS = 100; // button/dot/swipe — instant-feeling
 const DRAG_THRESHOLD_PX = 60;
 
 interface HeroProps {
@@ -23,7 +30,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: 
   Lock,
 };
 
-const DEFAULT_HERO = {
+const DEFAULT_HERO: CMSHeroContent = {
   badgeText: 'Radiate Confidence Every Day',
   headingLine1: 'Beauty & Radiance',
   headingPrefix: 'for a ',
@@ -68,8 +75,16 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
     imageBadgeLabel: hero.imageBadgeLabel,
     imageProductName: hero.imageProductName,
     imagePrice: hero.imagePrice,
+    primaryCtaLink: hero.primaryCtaLink,
+    outerImagePosition: hero.outerImagePosition,
+    textPosition: hero.textPosition,
+    isActive: hero.isActive,
   };
-  const slides: CMSHeroSlide[] = [primarySlide, ...((hero as { slides?: CMSHeroSlide[] }).slides || [])];
+  const allSlides: CMSHeroSlide[] = [primarySlide, ...((hero as { slides?: CMSHeroSlide[] }).slides || [])];
+  // Disabled slides drop out of the live carousel; if every slide were somehow
+  // disabled at once, fall back to showing all of them rather than a blank hero.
+  const activeSlides = allSlides.filter((s) => s.isActive !== false);
+  const slides: CMSHeroSlide[] = activeSlides.length > 0 ? activeSlides : allSlides;
   const slideCount = slides.length;
 
   const [displayIndex, setDisplayIndex] = useState(0);
@@ -78,6 +93,18 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
   const [fadeMs, setFadeMs] = useState(MANUAL_FADE_MS);
   const [isHovering, setIsHovering] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  // Brief cooldown after a hover-out or a button/dot click, so autoplay
+  // doesn't immediately snatch the slide back mid-interaction — then it
+  // resumes moving on its own.
+  const [isPaused, setIsPaused] = useState(false);
+  const pauseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pauseAutoplayBriefly = useCallback((ms = 2500) => {
+    setIsPaused(true);
+    if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
+    pauseTimeoutRef.current = setTimeout(() => setIsPaused(false), ms);
+  }, []);
+  const [parallax, setParallax] = useState({ x: 0, y: 0 });
+  const parallaxFrameRef = useRef<number | null>(null);
   const dragStartX = useRef<number | null>(null);
   const dragDeltaX = useRef(0);
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -112,12 +139,19 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
     [slideCount, displayIndex]
   );
 
-  const goNext = useCallback(() => goToIndex(displayIndex + 1), [displayIndex, goToIndex]);
-  const goPrev = useCallback(() => goToIndex(displayIndex - 1), [displayIndex, goToIndex]);
+  const goNext = useCallback(() => {
+    pauseAutoplayBriefly();
+    goToIndex(displayIndex + 1);
+  }, [displayIndex, goToIndex, pauseAutoplayBriefly]);
+  const goPrev = useCallback(() => {
+    pauseAutoplayBriefly();
+    goToIndex(displayIndex - 1);
+  }, [displayIndex, goToIndex, pauseAutoplayBriefly]);
 
   useEffect(() => {
     return () => {
       if (fadeTimeoutRef.current) clearTimeout(fadeTimeoutRef.current);
+      if (parallaxFrameRef.current !== null) cancelAnimationFrame(parallaxFrameRef.current);
     };
   }, []);
 
@@ -126,12 +160,12 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
   // a manual Prev/Next/dot/swipe action — so manual navigation always resets
   // the clock instead of racing an already-scheduled tick.
   useEffect(() => {
-    if (slideCount <= 1 || isHovering || isDragging) return;
+    if (slideCount <= 1 || isHovering || isDragging || isPaused) return;
     const timer = setTimeout(() => {
       goToIndex(displayIndex + 1, AUTOPLAY_FADE_MS);
     }, AUTOPLAY_MS);
     return () => clearTimeout(timer);
-  }, [slideCount, isHovering, isDragging, displayIndex, goToIndex]);
+  }, [slideCount, isHovering, isDragging, isPaused, displayIndex, goToIndex]);
 
   // Keyboard navigation: ArrowLeft = previous, ArrowRight = next.
   useEffect(() => {
@@ -170,49 +204,80 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
     setIsDragging(false);
   };
 
+  // Subtle desktop-only parallax: the product image drifts a few pixels as
+  // the cursor moves. Coalesced to one setState per animation frame — mousemove
+  // fires far more often than the browser can paint, so without this every
+  // pixel of cursor travel would re-render the whole Hero tree.
+  const handleParallaxMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const { clientX, clientY, currentTarget } = e;
+    if (parallaxFrameRef.current !== null) return;
+    parallaxFrameRef.current = requestAnimationFrame(() => {
+      parallaxFrameRef.current = null;
+      const rect = currentTarget.getBoundingClientRect();
+      setParallax({
+        x: (clientX - rect.left) / rect.width - 0.5,
+        y: (clientY - rect.top) / rect.height - 0.5,
+      });
+    });
+  };
+  const resetParallax = () => {
+    if (parallaxFrameRef.current !== null) {
+      cancelAnimationFrame(parallaxFrameRef.current);
+      parallaxFrameRef.current = null;
+    }
+    setParallax({ x: 0, y: 0 });
+  };
+
   const activeSlide = slides[displayIndex] || primarySlide;
+  const layout = resolveHeroLayout(activeSlide);
+  const textAlign = heroTextAlignClasses(layout.textPosition);
+  const isStackedComposition = layout.outerImagePosition === 'center';
+
+  const handlePrimaryCtaClick = () => {
+    const link = activeSlide.primaryCtaLink?.trim();
+    if (!link) {
+      onShopClick();
+      return;
+    }
+    if (/^https?:\/\//i.test(link)) {
+      window.open(link, '_blank', 'noopener,noreferrer');
+    } else {
+      window.location.href = link;
+    }
+  };
 
   return (
     <section
       id="hero-section"
       className="relative overflow-hidden bg-[#FAF9F6]"
     >
-      {/* Background decorative gradients */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-32 top-10 h-[500px] w-[500px] rounded-full bg-[#FCE8ED]/70 blur-3xl" />
-        <div className="absolute -right-20 top-0 h-[500px] w-[400px] rounded-full bg-[#FCE8ED] blur-3xl" />
-        <div className="absolute left-[45%] top-10 h-[250px] w-[250px] rounded-full bg-[#E3B84B]/10 blur-3xl" />
-      </div>
-
-      {/* Gold decorative curve */}
-      <div className="pointer-events-none absolute left-0 top-0 hidden h-full w-[130px] lg:block">
-        <div className="absolute left-[30px] top-[-30px] h-[570px] w-[70px] rounded-[50%] border-l-2 border-[#C9972B]/70 rotate-[12deg]" />
-        <div className="absolute left-[58px] top-[30px] h-[470px] w-[45px] rounded-[50%] border-l border-[#E3B84B]/50 rotate-[10deg]" />
-      </div>
-
-      {/* Pink right decoration */}
-      <div className="pointer-events-none absolute right-[-80px] top-0 hidden h-full w-[300px] overflow-hidden lg:block">
-        <div className="absolute right-[-80px] top-[-50px] h-[650px] w-[260px] rounded-[50%] bg-gradient-to-br from-[#FCE8ED] via-[#F05A7E]/30 to-transparent rotate-[20deg]" />
-        <div className="absolute right-[40px] top-[-20px] h-[650px] w-[90px] rounded-[50%] border-l border-[#C9972B]/50 rotate-[25deg]" />
-      </div>
+      {/* Portion 2 — independent decorative background carousel (admin-managed, own timer, never synced to the Portion 1 slide carousel below) */}
+      <HeroBackgroundCarousel images={hero.backgrounds || EMPTY_BACKGROUNDS} intervalMs={hero.backgroundIntervalMs} />
 
       <div className="relative mx-auto max-w-[1200px] px-5 pb-8 pt-8 sm:px-8 lg:px-10 lg:pb-10 lg:pt-10">
 
-        {/* HERO SLIDE — swipe/drag surface */}
+        {/* HERO SLIDE — swipe/drag surface; hovering anywhere here (text, buttons, image) pauses autoplay */}
         <div
           className="relative select-none touch-pan-y"
           onMouseDown={(e) => handleDragStart(e.clientX)}
           onMouseMove={(e) => {
             if (isDragging) handleDragMove(e.clientX);
+            handleParallaxMove(e);
           }}
           onMouseUp={handleDragEnd}
+          onMouseEnter={() => setIsHovering(true)}
+          onMouseLeave={() => {
+            setIsHovering(false);
+            pauseAutoplayBriefly();
+            resetParallax();
+          }}
           onTouchStart={(e) => handleDragStart(e.touches[0].clientX)}
           onTouchMove={(e) => handleDragMove(e.touches[0].clientX)}
           onTouchEnd={handleDragEnd}
         >
-          {/* HERO GRID */}
+          {/* HERO COMPOSITION — content + layered image, order/alignment driven by admin layout config */}
           <div
-            className="grid items-center gap-10 lg:grid-cols-[1fr_430px] lg:gap-14 ease-out"
+            className={`flex ${isStackedComposition ? 'flex-col items-center text-center' : `flex-col ${heroRowOrderClass(layout.outerImagePosition)} lg:items-center`} gap-10 lg:gap-14 ease-out`}
             style={{
               opacity: visible ? 1 : 0,
               transform: visible ? 'translateX(0)' : `translateX(${direction * 28}px)`,
@@ -221,8 +286,8 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
             }}
           >
 
-            {/* LEFT CONTENT */}
-            <div className="relative z-10 max-w-[650px]">
+            {/* CONTENT */}
+            <div className={`relative z-10 flex w-full max-w-[650px] flex-col ${textAlign.items} lg:flex-1`}>
 
               {/* Badge */}
               <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#E8D5A8] bg-white px-4 py-2 text-[11px] font-semibold text-[#F05A7E] shadow-sm">
@@ -234,7 +299,7 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
               <div className="mb-4 h-[2px] w-10 bg-[#C9972B]" />
 
               {/* Heading */}
-              <h1 className="max-w-[620px] text-[42px] font-extrabold leading-[1.03] tracking-[-1.8px] text-[#121212] sm:text-[50px] lg:text-[58px]">
+              <h1 className={`max-w-[620px] text-[42px] font-extrabold leading-[1.03] tracking-[-1.8px] text-[#121212] sm:text-[50px] lg:text-[58px] ${textAlign.text}`}>
                 {activeSlide.headingLine1}
                 <br />
                 {activeSlide.headingPrefix}
@@ -244,17 +309,17 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
               </h1>
 
               {/* Description */}
-              <p className="mt-5 max-w-[540px] text-[15px] leading-7 text-[#6B6B6B] sm:text-[16px]">
+              <p className={`mt-5 max-w-[540px] text-[15px] leading-7 text-[#6B6B6B] sm:text-[16px] ${textAlign.text}`}>
                 {activeSlide.description}
               </p>
 
               {/* Buttons */}
-              <div className="mt-7 flex flex-wrap gap-4">
+              <div className={`mt-7 flex flex-wrap gap-4 ${textAlign.justify}`}>
 
                 {/* Primary */}
                 <button
                   id="hero-shop-cta-btn"
-                  onClick={onShopClick}
+                  onClick={handlePrimaryCtaClick}
                   className="group inline-flex h-12 items-center gap-3 rounded-full bg-[#0B0B0B] px-7 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(11,11,11,0.18)] transition-all duration-300 hover:bg-[#C9972B] hover:text-[#0B0B0B] cursor-pointer"
                 >
                   {activeSlide.primaryCtaText}
@@ -276,7 +341,7 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
               </div>
 
               {/* Trust indicators */}
-              <div className="mt-7 flex flex-wrap gap-x-6 gap-y-3 text-[11px] text-[#6B6B6B]">
+              <div className={`mt-7 flex flex-wrap gap-x-6 gap-y-3 text-[11px] text-[#6B6B6B] ${textAlign.justify}`}>
                 {hero.trustIndicators.map((ti) => {
                   const Icon = ICON_MAP[ti.icon] || ShieldCheck;
                   return (
@@ -289,12 +354,12 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
               </div>
             </div>
 
-            {/* RIGHT IMAGE */}
+            {/* IMAGE — product photo card. Hover/pause state is owned by the outer
+                swipe surface above; this only needs to release an in-flight drag
+                when the cursor leaves the image specifically. */}
             <div
-              className="relative z-10 mx-auto w-full max-w-[430px]"
-              onMouseEnter={() => setIsHovering(true)}
+              className="relative z-10 mx-auto w-full max-w-[430px] pb-8 lg:mx-0 lg:shrink-0"
               onMouseLeave={() => {
-                setIsHovering(false);
                 if (isDragging) handleDragEnd();
               }}
             >
@@ -302,8 +367,15 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
               {/* Gold glow */}
               <div className="absolute -inset-5 rounded-[35px] bg-[#E3B84B]/10 blur-2xl" />
 
-              {/* Image card */}
-              <div className="relative overflow-hidden rounded-[20px] border border-[#E8D5A8] bg-[#0B0B0B] shadow-[0_20px_50px_rgba(11,11,11,0.16)]">
+              {/* Outer / main image card */}
+              <div
+                className="relative overflow-hidden rounded-[20px] border border-[#E8D5A8] bg-[#0B0B0B] shadow-[0_20px_50px_rgba(11,11,11,0.16)] ease-out"
+                style={{
+                  transform: `translate3d(${parallax.x * 6}px, ${parallax.y * 6}px, 0)`,
+                  transitionProperty: 'transform',
+                  transitionDuration: '400ms',
+                }}
+              >
 
                 <div className="relative aspect-[0.91] w-full">
 
@@ -356,7 +428,10 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
               <button
                 key={slide.id}
                 type="button"
-                onClick={() => goToIndex(idx)}
+                onClick={() => {
+                  pauseAutoplayBriefly();
+                  goToIndex(idx);
+                }}
                 aria-label={`Go to slide ${idx + 1}`}
                 className={`h-2 rounded-full transition-all cursor-pointer ${
                   idx === displayIndex ? 'w-6 bg-[#F05A7E]' : 'w-2 bg-[#E8D5A8]'

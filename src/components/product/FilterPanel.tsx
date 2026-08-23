@@ -286,7 +286,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                     onClick={() => handleToggle('shades', shade.id)}
                     title={shade.name}
                     className={`w-6 h-6 rounded-full border-2 transition-all cursor-pointer ${
-                      isSelected ? 'border-[#F05A7E] scale-110 ring-2 ring-[#F05A7E]/30' : 'border-black/10 hover:scale-105'
+                      isSelected ? 'border-[#F05A7E] scale-110 ring-2 ring-[#F05A7E]/30' : 'border-[#0B0B0B]/10 hover:scale-105'
                     }`}
                     style={{ backgroundColor: shade.hex }}
                     aria-label={`Filter by shade ${shade.name}`}
@@ -355,7 +355,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={onCloseMobile}
-              className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 transition-opacity lg:hidden"
+              className="fixed inset-0 bg-[#0B0B0B]/60 backdrop-blur-xs z-50 transition-opacity lg:hidden"
             />
 
             <motion.div

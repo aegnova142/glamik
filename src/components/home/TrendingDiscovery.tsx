@@ -54,11 +54,11 @@ export const TrendingDiscovery: React.FC<TrendingDiscoveryProps> = ({
               <span className="text-[10px] font-bold tracking-wider uppercase text-[#F05A7E] px-2.5 py-0.5 bg-[#FCE8ED] rounded-full inline-block">
                 Iconic Formulation
               </span>
-              <div className="aspect-[4/3] bg-[#FCE8ED] rounded-2xl overflow-hidden">
+              <div className="aspect-[4/3] bg-[#FCE8ED] rounded-2xl overflow-hidden flex items-center justify-center">
                 <img
                   src={trendingProduct.images.primary}
                   alt={trendingProduct.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700"
                 />
               </div>
               <h3 className="text-lg font-bold text-[#121212] group-hover:text-[#F05A7E] transition-colors leading-snug">
@@ -83,11 +83,11 @@ export const TrendingDiscovery: React.FC<TrendingDiscoveryProps> = ({
               <span className="text-[10px] font-bold tracking-wider uppercase text-[#F05A7E] px-2.5 py-0.5 bg-[#FCE8ED] rounded-full inline-block">
                 Featured Beauty Edit
               </span>
-              <div className="aspect-[4/3] bg-[#FCE8ED] rounded-2xl overflow-hidden">
+              <div className="aspect-[4/3] bg-[#FCE8ED] rounded-2xl overflow-hidden flex items-center justify-center">
                 <img
                   src={trendingLook.image}
                   alt={trendingLook.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700"
                 />
               </div>
               <h3 className="text-lg font-bold text-[#121212] group-hover:text-[#F05A7E] transition-colors leading-snug">

@@ -47,7 +47,7 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
           <button
             key={idx}
             onClick={() => setActiveIndex(idx)}
-            className={`w-16 h-20 md:w-20 md:h-24 flex-shrink-0 rounded-xl overflow-hidden bg-[#FCE8ED] border transition-all duration-200 cursor-pointer ${
+            className={`w-16 h-20 md:w-20 md:h-24 flex-shrink-0 rounded-xl overflow-hidden bg-[#FCE8ED] border transition-all duration-200 cursor-pointer flex items-center justify-center ${
               activeIndex === idx
                 ? 'border-[#F05A7E] ring-2 ring-[#F05A7E]/30 opacity-100 shadow-sm'
                 : 'border-[#E8D5A8] opacity-60 hover:opacity-100'
@@ -57,14 +57,14 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
             <img
               src={img}
               alt={`${productName} thumbnail ${idx + 1}`}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
             />
           </button>
         ))}
       </div>
 
       {/* Main Large Visual Frame */}
-      <div className="relative flex-1 aspect-[4/5] bg-[#FCE8ED] border border-[#E8D5A8] rounded-2xl md:rounded-3xl overflow-hidden group shadow-xs">
+      <div className="relative flex-1 aspect-[4/5] bg-[#FCE8ED] border border-[#E8D5A8] rounded-2xl md:rounded-3xl overflow-hidden group shadow-xs flex items-center justify-center">
         <AnimatePresence mode="wait">
           <motion.img
             key={activeIndex}
@@ -74,7 +74,7 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="w-full h-full object-cover object-center group-hover:scale-103 transition-transform duration-700 ease-out"
+            className="w-full h-full object-contain object-center group-hover:scale-103 transition-transform duration-700 ease-out"
           />
         </AnimatePresence>
 

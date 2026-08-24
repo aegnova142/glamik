@@ -16,6 +16,8 @@ import {
   CMSBenefit,
   CMSBenefitsSection,
   CMSShadeJourney,
+  CMSShadeFinderTeaser,
+  CMSPromoBannerConfig,
   Product,
   JournalArticle,
   SupportFaq,
@@ -891,6 +893,62 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
     titleHighlight: 'trust.',
   };
 
+  const initialPromoBanners: CMSPromoBannerConfig = {
+    enabled: false,
+    banners: [],
+    intervalMs: 4000,
+  };
+
+  const initialShadeFinderTeaser: CMSShadeFinderTeaser = {
+    badgeText: 'Shade Intelligence',
+    heading: 'Find Your Perfect Match',
+    subheading: 'Formulated precisely for Indian skin tones.',
+    description: 'Every skin tone carries a unique melody of melanin and undertone depth. Glamirk’s color curation removes the guesswork, recommending precision velvet lipsticks and ceremonial sindoor tailored to your exact profile.',
+    ctaText: 'Find My Signature Shade',
+    profiles: [
+      {
+        id: 'warm',
+        label: 'Warm',
+        title: 'Warm & Golden',
+        description: 'Your skin glows with golden, peachy, or caramel undertones. Rich terracotta, toasted cinnamon, and spiced rose create radiant warmth.',
+        recommendedLip: 'Spice Velvet & Nude Suede',
+        recommendedSindoor: 'Ceremonial Scarlet',
+        swatchHexes: ['#C9972B', '#E8D5A8', '#F05A7E'],
+        visual: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=85',
+      },
+      {
+        id: 'neutral',
+        label: 'Neutral',
+        title: 'Balanced Neutral',
+        description: 'A harmonious balance of warm and cool notes. You can effortlessly carry dusty rose, classic ruby, and muted crimson pigments.',
+        recommendedLip: 'Royal Rose & Crimson Sovereign',
+        recommendedSindoor: 'Ceremonial Scarlet & Heritage Maroon',
+        swatchHexes: ['#F05A7E', '#171717', '#F05A7E'],
+        visual: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=85',
+      },
+      {
+        id: 'cool',
+        label: 'Cool',
+        title: 'Cool & Roseate',
+        description: 'Hints of blue, pink, or deep berry undertones. Deep berry wines, blue-based red lips, and heritage maroon sindoor illuminate your complexion.',
+        recommendedLip: 'Plum Opulence & Crimson Sovereign',
+        recommendedSindoor: 'Heritage Maroon',
+        swatchHexes: ['#121212', '#171717', '#121212'],
+        visual: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=800&q=85',
+      },
+      {
+        id: 'olive',
+        label: 'Olive',
+        title: 'Olive & Earthy',
+        description: 'Subtle greenish-gold or neutral undertones that require depth. Earthy terracottas, toasted nudes, and opulent scarlet create striking definition.',
+        recommendedLip: 'Spice Velvet & Plum Opulence',
+        recommendedSindoor: 'Ceremonial Scarlet',
+        swatchHexes: ['#C9972B', '#121212', '#F05A7E'],
+        visual: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=800&q=85',
+      },
+    ],
+  };
+
   const initialAuditLogs: CMSAuditLog[] = [
     {
       id: 'log-1',
@@ -924,6 +982,8 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
     benefitsSection: initialBenefitsSection,
     looks: GLAMIRK_LOOKS,
     shadeJourney: initialShadeJourney,
+    promoBanners: initialPromoBanners,
+    shadeFinderTeaser: initialShadeFinderTeaser,
   };
 }
 
@@ -972,6 +1032,12 @@ export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
       }
       if (!cachedDb.looks || cachedDb.looks.length === 0) {
         cachedDb.looks = initial.looks;
+      }
+      if (!cachedDb.promoBanners) {
+        cachedDb.promoBanners = initial.promoBanners;
+      }
+      if (!cachedDb.shadeFinderTeaser) {
+        cachedDb.shadeFinderTeaser = initial.shadeFinderTeaser;
       }
       // Backfill stock on products persisted before the stock field existed
       cachedDb.products = cachedDb.products.map((p) => {

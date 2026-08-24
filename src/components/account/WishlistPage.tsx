@@ -75,13 +75,13 @@ export const WishlistPage: React.FC<WishlistPageProps> = ({
               >
                 <div>
                   <div
-                    className="aspect-[4/5] bg-[#FAF9F6] overflow-hidden mb-4 cursor-pointer"
+                    className="aspect-[4/5] bg-[#FAF9F6] overflow-hidden mb-4 cursor-pointer flex items-center justify-center"
                     onClick={() => onSelectProduct(product)}
                   >
                     <img
                       src={product.images.primary}
                       alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
                     />
                   </div>
 

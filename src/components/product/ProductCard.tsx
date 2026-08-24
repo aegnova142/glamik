@@ -44,7 +44,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           src={displayImage}
           alt={product.name}
           loading="lazy"
-          className="h-full w-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-105"
+          className="h-full w-full object-contain object-center transition-transform duration-700 ease-out group-hover:scale-105"
         />
 
         {/* Reference Pink Pill Product Badge */}

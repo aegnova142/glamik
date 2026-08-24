@@ -10,6 +10,7 @@ import {
   subscribeToEvents,
   broadcastEvent,
   StoredUser,
+  InternalCMSDatabaseSchema,
 } from './db';
 import {
   CMSAuditLog,
@@ -59,6 +60,45 @@ function uploadBufferToCloudinary(buffer: Buffer): Promise<{ url: string; public
     );
     stream.end(buffer);
   });
+}
+
+// Admin "replace" actions (logo, hero image, look video, etc.) only ever
+// swap a reference field to a new URL — the old Cloudinary asset would
+// otherwise sit around forever as orphaned storage. Call this with the
+// value being overwritten and the value replacing it; if the old one was a
+// tracked upload and is no longer in use, it's deleted from both Cloudinary
+// and the media library.
+//
+// IMPORTANT: call this only after `db` has been updated to its prospective
+// final state (the new value already assigned in place of the old one).
+// The "still referenced elsewhere" check below scans the whole document, so
+// if it ran against a stale `db` still holding the old value, every release
+// would look like a false match against itself and cleanup would never fire.
+async function releaseReplacedMedia(
+  db: InternalCMSDatabaseSchema,
+  oldUrl: string | undefined | null,
+  newUrl: string | undefined | null
+): Promise<void> {
+  if (!oldUrl || oldUrl === newUrl) return;
+  // The same asset can legitimately be reused across multiple fields/records
+  // (admin pastes the same media-library URL twice). Only delete it once no
+  // other part of the document points at it anymore. `media` itself is
+  // excluded from this scan — every tracked asset's own library entry
+  // contains its own url, which would otherwise always false-match itself.
+  const { media, ...contentOnly } = db;
+  if (JSON.stringify(contentOnly).includes(oldUrl)) return;
+  const item = (db.media || []).find((m) => m.url === oldUrl);
+  if (!item) return; // not a tracked upload (e.g. a seed/stock photo) — leave it alone
+  if (item.publicId) {
+    try {
+      await cloudinary.uploader.destroy(item.publicId, {
+        resource_type: item.mimeType?.startsWith('video/') ? 'video' : 'image',
+      });
+    } catch (err) {
+      console.warn('Could not delete replaced asset from Cloudinary:', err);
+    }
+  }
+  db.media = db.media.filter((m) => m.id !== item.id);
 }
 
 // ==========================================
@@ -248,6 +288,8 @@ router.get('/cms/content', async (req: Request, res: Response) => {
     looks: db.looks || [],
     shadeJourney: db.shadeJourney,
     benefitsSection: db.benefitsSection,
+    promoBanners: db.promoBanners || { enabled: false, banners: [], intervalMs: 4000 },
+    shadeFinderTeaser: db.shadeFinderTeaser,
     serverTime: new Date().toISOString(),
   };
 
@@ -699,7 +741,11 @@ router.put('/admin/looks/:id', requireAdmin, async (req: AuthenticatedRequest, r
     return res.status(400).json({ error: 'Image cannot be empty.' });
   }
 
-  db.looks[idx] = { ...db.looks[idx], ...req.body };
+  const oldLook = db.looks[idx];
+  db.looks[idx] = { ...oldLook, ...req.body };
+
+  await releaseReplacedMedia(db, oldLook.image, db.looks[idx].image);
+  await releaseReplacedMedia(db, oldLook.video, db.looks[idx].video);
 
   await saveDatabase(db);
   await logAudit(req, 'UPDATE_LOOK', 'LOOK', db.looks[idx].id, db.looks[idx].title);
@@ -716,6 +762,8 @@ router.delete('/admin/looks/:id', requireAdmin, async (req: AuthenticatedRequest
   }
 
   db.looks = db.looks.filter((l) => l.id !== req.params.id);
+  await releaseReplacedMedia(db, look.image, undefined);
+  await releaseReplacedMedia(db, look.video, undefined);
   await saveDatabase(db);
   await logAudit(req, 'DELETE_LOOK', 'LOOK', look.id, look.title);
   broadcastEvent('CMS_UPDATE', 'looks', { deletedId: look.id });
@@ -747,12 +795,79 @@ router.put('/admin/footer', requireAdmin, async (req: AuthenticatedRequest, res:
 // --- Homepage Hero Content ---
 router.put('/admin/hero', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   const db = await loadDatabase();
-  db.heroContent = req.body;
+  const oldHero = db.heroContent;
+  const newHero = req.body;
+
+  // Assign the prospective final state first — releaseReplacedMedia scans the
+  // whole document to make sure an asset isn't still referenced elsewhere
+  // before deleting it, so `db` must already reflect the new content.
+  db.heroContent = newHero;
+
+  await releaseReplacedMedia(db, oldHero?.image, newHero?.image);
+
+  // Slides and backgrounds are id-keyed lists — release an image whenever its
+  // slot was replaced in place, or the slot itself was removed entirely.
+  const oldSlides = oldHero?.slides || [];
+  const newSlidesById = new Map<string, any>((newHero?.slides || []).map((s: any) => [s.id, s]));
+  for (const oldSlide of oldSlides) {
+    await releaseReplacedMedia(db, oldSlide.image, newSlidesById.get(oldSlide.id)?.image);
+  }
+
+  const oldBackgrounds = oldHero?.backgrounds || [];
+  const newBackgroundsById = new Map<string, any>((newHero?.backgrounds || []).map((b: any) => [b.id, b]));
+  for (const oldBg of oldBackgrounds) {
+    await releaseReplacedMedia(db, oldBg.image, newBackgroundsById.get(oldBg.id)?.image);
+  }
+
   await saveDatabase(db);
   await logAudit(req, 'UPDATE_HERO', 'HERO', 'hero-main', 'Homepage Hero Content Updated');
   broadcastEvent('CMS_UPDATE', 'heroContent', db.heroContent);
 
   res.json(db.heroContent);
+});
+
+// --- Homepage Promotional Banner Popup ---
+router.put('/admin/promo-banners', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const oldConfig = db.promoBanners;
+  const newConfig = req.body;
+
+  db.promoBanners = newConfig;
+
+  // Release any banner image replaced in place (same id, different url) or
+  // whose slot was removed entirely.
+  const oldBanners = oldConfig?.banners || [];
+  const newBannersById = new Map<string, any>((newConfig?.banners || []).map((b: any) => [b.id, b]));
+  for (const oldBanner of oldBanners) {
+    await releaseReplacedMedia(db, oldBanner.image, newBannersById.get(oldBanner.id)?.image);
+  }
+
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_PROMO_BANNERS', 'PROMO_BANNERS', 'promo-banners-main', 'Promotional Banner Popup Updated');
+  broadcastEvent('CMS_UPDATE', 'promoBanners', db.promoBanners);
+
+  res.json(db.promoBanners);
+});
+
+// --- Homepage Shade Intelligence Teaser ---
+router.put('/admin/shade-finder-teaser', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const oldTeaser = db.shadeFinderTeaser;
+  const newTeaser = req.body;
+
+  db.shadeFinderTeaser = newTeaser;
+
+  const oldProfiles = oldTeaser?.profiles || [];
+  const newProfilesById = new Map<string, any>((newTeaser?.profiles || []).map((p: any) => [p.id, p]));
+  for (const oldProfile of oldProfiles) {
+    await releaseReplacedMedia(db, oldProfile.visual, newProfilesById.get(oldProfile.id)?.visual);
+  }
+
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_SHADE_FINDER_TEASER', 'SHADE_FINDER_TEASER', 'shade-finder-teaser-main', 'Homepage Shade Intelligence Teaser Updated');
+  broadcastEvent('CMS_UPDATE', 'shadeFinderTeaser', db.shadeFinderTeaser);
+
+  res.json(db.shadeFinderTeaser);
 });
 
 // --- About Page Content ---
@@ -883,7 +998,9 @@ router.delete('/admin/faqs/:id', requireAdmin, async (req: AuthenticatedRequest,
 // --- Global Settings ---
 router.put('/admin/settings', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   const db = await loadDatabase();
+  const oldLogoUrl = db.globalSettings?.logoUrl;
   db.globalSettings = { ...db.globalSettings, ...req.body };
+  await releaseReplacedMedia(db, oldLogoUrl, db.globalSettings.logoUrl);
   await saveDatabase(db);
   await logAudit(req, 'UPDATE_SETTINGS', 'GLOBAL_SETTINGS', 'settings', 'Global Store Settings Updated');
   broadcastEvent('CMS_UPDATE', 'globalSettings', db.globalSettings);
@@ -945,7 +1062,9 @@ router.delete('/admin/media/:id', requireAdmin, async (req: AuthenticatedRequest
   // Remove the asset from Cloudinary if it was uploaded there
   if (item.publicId) {
     try {
-      await cloudinary.uploader.destroy(item.publicId);
+      await cloudinary.uploader.destroy(item.publicId, {
+        resource_type: item.mimeType?.startsWith('video/') ? 'video' : 'image',
+      });
     } catch (err) {
       console.warn('Could not delete asset from Cloudinary:', err);
     }

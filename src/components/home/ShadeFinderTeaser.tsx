@@ -1,49 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, ArrowRight } from 'lucide-react';
+import { useCMS } from '../../context/CMSContext';
 
 interface ShadeFinderTeaserProps {
   onOpenShadeFinderModal: () => void;
 }
 
 export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShadeFinderModal }) => {
-  const [activeUndertone, setActiveUndertone] = useState<'Warm' | 'Neutral' | 'Cool' | 'Olive'>('Warm');
+  const { shadeFinderTeaser } = useCMS();
+  const profiles = shadeFinderTeaser?.profiles || [];
+  const [activeId, setActiveId] = useState<string | null>(null);
 
-  const undertoneProfiles = {
-    Warm: {
-      title: 'Warm & Golden',
-      description: 'Your skin glows with golden, peachy, or caramel undertones. Rich terracotta, toasted cinnamon, and spiced rose create radiant warmth.',
-      recommendedLip: 'Spice Velvet & Nude Suede',
-      recommendedSindoor: 'Ceremonial Scarlet',
-      swatchHexes: ['#C9972B', '#E8D5A8', '#F05A7E'],
-      visual: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=85'
-    },
-    Neutral: {
-      title: 'Balanced Neutral',
-      description: 'A harmonious balance of warm and cool notes. You can effortlessly carry dusty rose, classic ruby, and muted crimson pigments.',
-      recommendedLip: 'Royal Rose & Crimson Sovereign',
-      recommendedSindoor: 'Ceremonial Scarlet & Heritage Maroon',
-      swatchHexes: ['#F05A7E', '#171717', '#F05A7E'],
-      visual: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=85'
-    },
-    Cool: {
-      title: 'Cool & Roseate',
-      description: 'Hints of blue, pink, or deep berry undertones. Deep berry wines, blue-based red lips, and heritage maroon sindoor illuminate your complexion.',
-      recommendedLip: 'Plum Opulence & Crimson Sovereign',
-      recommendedSindoor: 'Heritage Maroon',
-      swatchHexes: ['#121212', '#171717', '#121212'],
-      visual: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=800&q=85'
-    },
-    Olive: {
-      title: 'Olive & Earthy',
-      description: 'Subtle greenish-gold or neutral undertones that require depth. Earthy terracottas, toasted nudes, and opulent scarlet create striking definition.',
-      recommendedLip: 'Spice Velvet & Plum Opulence',
-      recommendedSindoor: 'Ceremonial Scarlet',
-      swatchHexes: ['#C9972B', '#121212', '#F05A7E'],
-      visual: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=800&q=85'
+  // Keep the active selection valid as admin-edited profiles load/change.
+  useEffect(() => {
+    if (profiles.length === 0) return;
+    if (!activeId || !profiles.some((p) => p.id === activeId)) {
+      setActiveId(profiles[0].id);
     }
-  };
+  }, [profiles, activeId]);
 
-  const profile = undertoneProfiles[activeUndertone];
+  if (!shadeFinderTeaser || profiles.length === 0) return null;
+
+  const profile = profiles.find((p) => p.id === activeId) || profiles[0];
 
   return (
     <section id="shade-finder-teaser" className="py-20 lg:py-28 bg-white border-b border-[#E8D5A8] relative overflow-hidden">
@@ -56,23 +34,23 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#FCE8ED] text-[#F05A7E] rounded-full border border-[#E8D5A8] shadow-xs">
               <Sparkles className="w-4 h-4" />
               <span className="text-[11px] font-bold tracking-wider uppercase">
-                Shade Intelligence
+                {shadeFinderTeaser.badgeText}
               </span>
             </div>
 
             <div className="space-y-2">
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#121212] leading-tight">
-                Find Your Perfect Match
+                {shadeFinderTeaser.heading}
               </h2>
               <p className="text-xl sm:text-2xl text-[#F05A7E] font-bold">
-                Formulated precisely for Indian skin tones.
+                {shadeFinderTeaser.subheading}
               </p>
             </div>
 
             <div className="w-12 h-1 bg-[#F05A7E] rounded-full" />
 
             <p className="text-base text-[#6B6B6B] leading-relaxed">
-              Every skin tone carries a unique melody of melanin and undertone depth. Glamirk’s color curation removes the guesswork, recommending precision velvet lipsticks and ceremonial sindoor tailored to your exact profile.
+              {shadeFinderTeaser.description}
             </p>
 
             {/* Interactive Undertone Selector Pills */}
@@ -81,17 +59,17 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
                 Select Your Undertone Profile:
               </span>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(['Warm', 'Neutral', 'Cool', 'Olive'] as const).map((tone) => (
+                {profiles.map((p) => (
                   <button
-                    key={tone}
-                    onClick={() => setActiveUndertone(tone)}
+                    key={p.id}
+                    onClick={() => setActiveId(p.id)}
                     className={`py-2.5 px-4 text-xs font-bold rounded-full border transition-all text-center cursor-pointer ${
-                      activeUndertone === tone
+                      profile.id === p.id
                         ? 'bg-[#F05A7E] text-white border-[#F05A7E] shadow-[0_4px_12px_rgba(240, 90, 126,0.25)]'
                         : 'bg-white text-[#6B6B6B] border-[#E8D5A8] hover:border-[#F05A7E]'
                     }`}
                   >
-                    {tone}
+                    {p.label}
                   </button>
                 ))}
               </div>
@@ -130,7 +108,7 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
                 className="w-full sm:w-auto px-8 py-4 bg-[#F05A7E] hover:bg-[#F05A7E] text-white text-xs sm:text-sm font-bold rounded-full shadow-[0_4px_16px_rgba(240, 90, 126,0.3)] hover:scale-102 active:scale-95 transition-all flex items-center justify-center gap-2.5 group cursor-pointer"
               >
                 <Sparkles className="w-4 h-4" />
-                <span>Find My Signature Shade</span>
+                <span>{shadeFinderTeaser.ctaText}</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
@@ -139,11 +117,11 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
 
           {/* Right Column: Visual Composition */}
           <div className="lg:col-span-5 relative">
-            <div className="relative aspect-[4/5] max-w-sm sm:max-w-md mx-auto lg:mx-0 overflow-hidden rounded-3xl bg-[#FCE8ED] border border-[#E8D5A8] shadow-[0_16px_40px_rgba(240, 90, 126,0.08)]">
+            <div className="relative aspect-[4/5] max-w-sm sm:max-w-md mx-auto lg:mx-0 overflow-hidden rounded-3xl bg-[#FCE8ED] border border-[#E8D5A8] shadow-[0_16px_40px_rgba(240, 90, 126,0.08)] flex items-center justify-center">
               <img
                 src={profile.visual}
                 alt={`Glamirk Shade Matching - ${profile.title}`}
-                className="w-full h-full object-cover transition-all duration-700"
+                className="w-full h-full object-contain transition-all duration-700"
               />
 
               <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B]/60 via-transparent to-transparent" />

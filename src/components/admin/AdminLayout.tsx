@@ -28,11 +28,13 @@ import { AdminHero } from './AdminHero';
 import { AdminAbout } from './AdminAbout';
 import { AdminBenefits } from './AdminBenefits';
 import { AdminShadeFinder } from './AdminShadeFinder';
+import { AdminShadeIntelligence } from './AdminShadeIntelligence';
 import { AdminLooks } from './AdminLooks';
 import { AdminPages } from './AdminPages';
 import { AdminProducts } from './AdminProducts';
 import { AdminCategories } from './AdminCategories';
 import { AdminOffers } from './AdminOffers';
+import { AdminPromoBanners } from './AdminPromoBanners';
 import { AdminNavigation } from './AdminNavigation';
 import { AdminFooter } from './AdminFooter';
 import { AdminBlog } from './AdminBlog';
@@ -51,11 +53,13 @@ type AdminTab =
   | 'about'
   | 'benefits'
   | 'shadeFinder'
+  | 'shadeIntelligence'
   | 'looks'
   | 'pages'
   | 'products'
   | 'categories'
   | 'offers'
+  | 'promoBanners'
   | 'navigation'
   | 'footer'
   | 'blog'
@@ -83,6 +87,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         { id: 'about', label: 'About Page', icon: FileText },
         { id: 'benefits', label: 'Benefits & Optimization', icon: ShieldCheck },
         { id: 'shadeFinder', label: 'Find My Shade Journey', icon: Sparkles },
+        { id: 'shadeIntelligence', label: 'Shade Intelligence (Home)', icon: Sparkles },
         { id: 'looks', label: 'Shop The Look', icon: Sparkles },
         { id: 'blog', label: 'Journal & Guides', icon: BookOpen },
         { id: 'pages', label: 'Pages & Sections Builder', icon: FileText },
@@ -97,7 +102,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
     },
     {
       label: 'Marketing',
-      items: [{ id: 'offers', label: 'Offers & Campaigns', icon: Tag }],
+      items: [
+        { id: 'offers', label: 'Offers & Campaigns', icon: Tag },
+        { id: 'promoBanners', label: 'Promo Banner Popup', icon: ImageIcon },
+      ],
     },
     {
       label: 'Site Structure',
@@ -293,11 +301,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
             {activeTab === 'about' && <AdminAbout />}
             {activeTab === 'benefits' && <AdminBenefits />}
             {activeTab === 'shadeFinder' && <AdminShadeFinder />}
+            {activeTab === 'shadeIntelligence' && <AdminShadeIntelligence />}
             {activeTab === 'looks' && <AdminLooks />}
             {activeTab === 'pages' && <AdminPages />}
             {activeTab === 'products' && <AdminProducts />}
             {activeTab === 'categories' && <AdminCategories />}
             {activeTab === 'offers' && <AdminOffers />}
+            {activeTab === 'promoBanners' && <AdminPromoBanners />}
             {activeTab === 'navigation' && <AdminNavigation />}
             {activeTab === 'footer' && <AdminFooter />}
             {activeTab === 'blog' && <AdminBlog />}

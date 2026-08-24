@@ -23,6 +23,8 @@ import {
   Look,
   CMSShadeJourney,
   CMSBenefitsSection,
+  CMSPromoBannerConfig,
+  CMSShadeFinderTeaser,
 } from '../types';
 import { apiFetch, getAdminToken, setAdminAuth, clearAdminAuth, getStoredAdminUser } from '../utils/cmsClient';
 
@@ -46,6 +48,8 @@ export interface CMSContextType {
   benefits: CMSBenefit[];
   looks: Look[];
   offers: CMSOffer[];
+  promoBanners: CMSPromoBannerConfig | null;
+  shadeFinderTeaser: CMSShadeFinderTeaser | null;
   journalArticles: JournalArticle[];
   faqs: SupportFaq[];
   globalSettings: CMSGlobalSettings | null;
@@ -79,6 +83,8 @@ export interface CMSContextType {
   saveNavigation: (nav: CMSNavigationItem[]) => Promise<boolean>;
   saveFooter: (footer: CMSFooterConfig) => Promise<boolean>;
   saveHeroContent: (hero: CMSHeroContent) => Promise<boolean>;
+  savePromoBanners: (config: CMSPromoBannerConfig) => Promise<boolean>;
+  saveShadeFinderTeaser: (teaser: CMSShadeFinderTeaser) => Promise<boolean>;
   saveAboutContent: (about: CMSAboutContent) => Promise<boolean>;
   saveShadeJourney: (journey: CMSShadeJourney) => Promise<boolean>;
   saveBenefitsSection: (section: CMSBenefitsSection) => Promise<boolean>;
@@ -177,6 +183,8 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [benefits, setBenefits] = useState<CMSBenefit[]>([]);
   const [looks, setLooks] = useState<Look[]>(GLAMIRK_LOOKS);
   const [offers, setOffers] = useState<CMSOffer[]>([]);
+  const [promoBanners, setPromoBanners] = useState<CMSPromoBannerConfig | null>(null);
+  const [shadeFinderTeaser, setShadeFinderTeaser] = useState<CMSShadeFinderTeaser | null>(null);
   const [journalArticles, setJournalArticles] = useState<JournalArticle[]>(GLAMIRK_JOURNAL_ARTICLES_EXTENDED);
   const [faqs, setFaqs] = useState<SupportFaq[]>(SUPPORT_FAQS.map((f, i) => ({ ...f, order: i + 1, isVisible: true })));
   const [globalSettings, setGlobalSettings] = useState<CMSGlobalSettings | null>({
@@ -225,6 +233,8 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (res.data.benefits) setBenefits(res.data.benefits);
         if (res.data.looks) setLooks(res.data.looks);
         if (res.data.offers) setOffers(res.data.offers);
+        if (res.data.promoBanners) setPromoBanners(res.data.promoBanners);
+        if (res.data.shadeFinderTeaser) setShadeFinderTeaser(res.data.shadeFinderTeaser);
         if (res.data.journalArticles) setJournalArticles(res.data.journalArticles);
         if (res.data.faqs) setFaqs(res.data.faqs);
         if (res.data.globalSettings) setGlobalSettings(res.data.globalSettings);
@@ -477,6 +487,24 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
+  const savePromoBanners = async (config: CMSPromoBannerConfig): Promise<boolean> => {
+    const res = await apiFetch('/api/admin/promo-banners', { method: 'PUT', body: JSON.stringify(config) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
+  const saveShadeFinderTeaser = async (teaser: CMSShadeFinderTeaser): Promise<boolean> => {
+    const res = await apiFetch('/api/admin/shade-finder-teaser', { method: 'PUT', body: JSON.stringify(teaser) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
   const saveAboutContent = async (about: CMSAboutContent): Promise<boolean> => {
     const res = await apiFetch('/api/admin/about', { method: 'PUT', body: JSON.stringify(about) });
     if (res.status < 400) {
@@ -641,6 +669,8 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     benefits,
     looks,
     offers,
+    promoBanners,
+    shadeFinderTeaser,
     journalArticles,
     faqs,
     globalSettings,
@@ -668,6 +698,8 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     saveNavigation,
     saveFooter,
     saveHeroContent,
+    savePromoBanners,
+    saveShadeFinderTeaser,
     saveAboutContent,
     saveShadeJourney,
     saveBenefitsSection,

@@ -1004,10 +1004,56 @@ export interface CMSShadeJourney {
   steps: CMSJourneyStep[];
 }
 
+/** One selectable undertone profile in the homepage Shade Intelligence teaser. */
+export interface CMSShadeUndertoneProfile {
+  id: string;
+  /** Short pill label, e.g. "Warm". */
+  label: string;
+  title: string;
+  description: string;
+  recommendedLip: string;
+  recommendedSindoor: string;
+  /** Exactly the swatch dots shown next to the match card title. */
+  swatchHexes: string[];
+  /** Right-column visual for this profile. */
+  visual: string;
+}
+
+/** Homepage "Shade Intelligence" teaser section — distinct from CMSShadeJourney,
+ * which powers the separate /find-my-shade page's step-by-step journey. */
+export interface CMSShadeFinderTeaser {
+  badgeText: string;
+  heading: string;
+  subheading: string;
+  description: string;
+  ctaText: string;
+  profiles: CMSShadeUndertoneProfile[];
+}
+
 export interface CMSBenefitsSection {
   eyebrow: string;
   title: string;
   titleHighlight: string;
+}
+
+/** One slide in the homepage promotional popup carousel. Only created once an
+ * image is uploaded, so there is no "empty slot" state to filter out. */
+export interface CMSPromoBanner {
+  id: string;
+  image: string;
+  altText?: string;
+  /** Optional destination — external (http/https) opens a new tab, internal navigates in-app. */
+  link?: string;
+  /** Whether this banner appears in the live popup. Default true. */
+  isActive?: boolean;
+}
+
+export interface CMSPromoBannerConfig {
+  /** Master on/off switch — popup never shows when false, regardless of banners. */
+  enabled: boolean;
+  banners: CMSPromoBanner[];
+  /** Auto-advance interval in ms. Default 4000. */
+  intervalMs?: number;
 }
 
 export interface CMSDatabaseSchema {
@@ -1029,5 +1075,7 @@ export interface CMSDatabaseSchema {
   benefitsSection: CMSBenefitsSection;
   looks: Look[];
   shadeJourney: CMSShadeJourney;
+  promoBanners: CMSPromoBannerConfig;
+  shadeFinderTeaser: CMSShadeFinderTeaser;
 }
 

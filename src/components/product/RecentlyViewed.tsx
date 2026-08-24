@@ -46,11 +46,11 @@ export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
               onClick={() => onSelectProduct(product)}
               className="bg-white border border-[#E8D5A8] rounded-[20px] overflow-hidden group cursor-pointer hover:border-[#F05A7E] hover:shadow-[0_12px_30px_rgba(240,90,126,0.12)] transition-all flex flex-col min-h-[400px]"
             >
-              <div className="w-full h-[192px] shrink-0 bg-[#FCE8ED] overflow-hidden">
+              <div className="w-full h-[192px] shrink-0 bg-[#FCE8ED] overflow-hidden flex items-center justify-center">
                 <img
                   src={product.images.primary}
                   alt={product.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
                 />
               </div>
 

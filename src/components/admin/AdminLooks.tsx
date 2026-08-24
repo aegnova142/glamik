@@ -176,7 +176,7 @@ export const AdminLooks: React.FC = () => {
               </button>
             </div>
             {editingLook.image && (
-              <img src={editingLook.image} alt="" className="mt-2 w-full h-40 object-cover rounded-lg border border-[#E8D5A8]/20" />
+              <img src={editingLook.image} alt="" className="mt-2 w-full h-40 object-contain bg-[#0B0B0B] rounded-lg border border-[#E8D5A8]/20" />
             )}
             {isUploadOpen && (
               <ImageCropUploadModal
@@ -208,7 +208,7 @@ export const AdminLooks: React.FC = () => {
               <div className="space-y-2">
                 <video
                   src={editingLook.video}
-                  className="w-full h-40 object-cover rounded-lg border border-[#E8D5A8]/20"
+                  className="w-full h-40 object-contain bg-[#0B0B0B] rounded-lg border border-[#E8D5A8]/20"
                   autoPlay
                   muted
                   loop
@@ -326,8 +326,8 @@ export const AdminLooks: React.FC = () => {
             key={look.id}
             className="rounded-xl bg-[#171717] border border-[#E8D5A8]/30 overflow-hidden flex flex-col justify-between"
           >
-            <div className="h-44 relative bg-[#0B0B0B]">
-              <img src={look.image} alt={look.title} className="w-full h-full object-cover" />
+            <div className="h-44 relative bg-[#0B0B0B] flex items-center justify-center">
+              <img src={look.image} alt={look.title} className="w-full h-full object-contain" />
               <span className="absolute top-2 left-2 px-2 py-0.5 bg-[#C9972B] text-[#0B0B0B] text-[9px] font-bold uppercase tracking-wider rounded-full">
                 {look.category}
               </span>

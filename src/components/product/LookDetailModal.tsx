@@ -63,11 +63,11 @@ export const LookDetailModal: React.FC<LookDetailModalProps> = ({
             </button>
 
             {/* Left Image */}
-            <div className="md:col-span-5 relative aspect-[3/4] md:aspect-auto overflow-hidden bg-[#FAF9F6]">
+            <div className="md:col-span-5 relative aspect-[3/4] md:aspect-auto overflow-hidden bg-[#FAF9F6] flex items-center justify-center">
               <img
                 src={look.image}
                 alt={look.title}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B]/60 via-transparent to-transparent" />
               <div className="absolute bottom-4 left-4 right-4 text-white">

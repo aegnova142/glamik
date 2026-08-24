@@ -20,7 +20,7 @@ import {
   Tag,
   Sparkles,
 } from 'lucide-react';
-import { ImageCropUploadModal } from './ImageCropUploadModal';
+import { useFileUpload } from '../../hooks/useFileUpload';
 
 type ProductImageSlot = 'primary' | 'secondary' | 'detail' | 'texture' | 'lifestyle' | 'swatch';
 
@@ -31,7 +31,22 @@ export const AdminProducts: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [uploadTargetSlot, setUploadTargetSlot] = useState<ProductImageSlot | null>(null);
+  const [uploadingSlot, setUploadingSlot] = useState<ProductImageSlot | null>(null);
+
+  const { upload, error: uploadError } = useFileUpload({
+    acceptedTypes: ['image/'],
+    maxSizeBytes: 8 * 1024 * 1024,
+    typeErrorMessage: 'Please choose an image file (JPG, PNG, or WebP).',
+  });
+
+  const handleSlotUpload = async (slot: ProductImageSlot, file: File | undefined) => {
+    setUploadingSlot(slot);
+    const mediaItem = await upload(file);
+    setUploadingSlot(null);
+    if (mediaItem) {
+      setEditingProduct((prev) => (prev ? { ...prev, images: { ...prev.images, [slot]: mediaItem.url } } : prev));
+    }
+  };
 
   const filteredProducts = (products || []).filter((p) => {
     const matchesSearch =
@@ -450,17 +465,18 @@ export const AdminProducts: React.FC = () => {
             <div className="p-5 rounded-xl bg-[#171717] border border-[#E8D5A8]/30 space-y-4">
               <h3 className="font-serif text-base text-[#FAF9F6]">Product Media</h3>
               <p className="text-[11px] text-[#6B6B6B]">
-                Primary &amp; Secondary drive the shop/best-seller card and are locked to a 4:3 crop for consistent card sizing.
+                Primary &amp; Secondary drive the shop/best-seller card. Upload any size or ratio — the card automatically fits the full image without cropping.
               </p>
+              {uploadError && <p className="text-[11px] text-[#F05A7E]">{uploadError}</p>}
 
               {([
-                { key: 'primary', label: 'Primary Image (card + hover default)', crop: true, required: true },
-                { key: 'secondary', label: 'Secondary / Hover Image', crop: true, required: false },
-                { key: 'detail', label: 'Detail Shot (product page gallery)', crop: false, required: false },
-                { key: 'texture', label: 'Texture Shot (product page gallery)', crop: false, required: false },
-                { key: 'lifestyle', label: 'Lifestyle Shot (product page gallery)', crop: false, required: false },
-                { key: 'swatch', label: 'Swatch Shot (product page gallery)', crop: false, required: false },
-              ] as { key: ProductImageSlot; label: string; crop: boolean; required: boolean }[]).map((slot) => {
+                { key: 'primary', label: 'Primary Image (card + hover default)', uploadable: true, required: true },
+                { key: 'secondary', label: 'Secondary / Hover Image', uploadable: true, required: false },
+                { key: 'detail', label: 'Detail Shot (product page gallery)', uploadable: false, required: false },
+                { key: 'texture', label: 'Texture Shot (product page gallery)', uploadable: false, required: false },
+                { key: 'lifestyle', label: 'Lifestyle Shot (product page gallery)', uploadable: false, required: false },
+                { key: 'swatch', label: 'Swatch Shot (product page gallery)', uploadable: false, required: false },
+              ] as { key: ProductImageSlot; label: string; uploadable: boolean; required: boolean }[]).map((slot) => {
                 const url = (editingProduct.images as any)[slot.key] || '';
                 return (
                   <div key={slot.key}>
@@ -477,47 +493,33 @@ export const AdminProducts: React.FC = () => {
                             images: { ...editingProduct.images, [slot.key]: e.target.value },
                           })
                         }
-                        placeholder="https://... or use Upload & Crop"
+                        placeholder="https://... or use Upload"
                         className="flex-1 px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
                       />
-                      {slot.crop && (
-                        <button
-                          type="button"
-                          onClick={() => setUploadTargetSlot(slot.key)}
-                          className="px-3 py-2 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] transition-colors cursor-pointer whitespace-nowrap"
-                        >
-                          Upload &amp; Crop
-                        </button>
+                      {slot.uploadable && (
+                        <label className="px-3 py-2 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] transition-colors cursor-pointer whitespace-nowrap">
+                          {uploadingSlot === slot.key ? 'Uploading...' : 'Upload'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={uploadingSlot !== null}
+                            onChange={(e) => {
+                              handleSlotUpload(slot.key, e.target.files?.[0]);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
                       )}
                     </div>
                     {url && (
-                      <div className="mt-2 w-full h-28 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B]">
-                        <img src={url} alt={slot.label} className="w-full h-full object-cover" />
+                      <div className="mt-2 w-full h-28 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B] flex items-center justify-center">
+                        <img src={url} alt={slot.label} className="w-full h-full object-contain" />
                       </div>
                     )}
                   </div>
                 );
               })}
-
-              {uploadTargetSlot && (
-                <ImageCropUploadModal
-                  isOpen
-                  onClose={() => setUploadTargetSlot(null)}
-                  title={`Upload ${uploadTargetSlot === 'primary' ? 'Primary' : 'Secondary'} Image`}
-                  aspectRatio={4 / 3}
-                  minWidth={600}
-                  minHeight={450}
-                  recommendedWidth={1200}
-                  recommendedHeight={900}
-                  outputWidth={1200}
-                  outputHeight={900}
-                  onUploaded={({ url }) =>
-                    setEditingProduct((prev) =>
-                      prev ? { ...prev, images: { ...prev.images, [uploadTargetSlot]: url } } : prev
-                    )
-                  }
-                />
-              )}
             </div>
 
             {/* Card Button Visibility */}
@@ -629,11 +631,11 @@ export const AdminProducts: React.FC = () => {
                 <tr key={p.id} className="hover:bg-[#0B0B0B]/50 transition-colors">
                   <td className="p-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B] shrink-0">
+                      <div className="w-10 h-10 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B] shrink-0 flex items-center justify-center">
                         <img
                           src={p.images.primary}
                           alt={p.name}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain"
                         />
                       </div>
                       <div>

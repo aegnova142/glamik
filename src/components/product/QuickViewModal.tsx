@@ -86,11 +86,11 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
             <div className="md:col-span-6 p-6 sm:p-8 bg-[#FCE8ED]/50 border-r border-[#E8D5A8] flex flex-col justify-between overflow-y-auto">
               <div className="space-y-4">
                 {/* Main Large Visual */}
-                <div className="relative aspect-[4/5] bg-white rounded-2xl overflow-hidden border border-[#E8D5A8] shadow-sm">
+                <div className="relative aspect-[4/5] bg-white rounded-2xl overflow-hidden border border-[#E8D5A8] shadow-sm flex items-center justify-center">
                   <img
                     src={imagesList[activeImageIndex] || product.images.primary}
                     alt={product.name}
-                    className="w-full h-full object-cover transition-all duration-500"
+                    className="w-full h-full object-contain transition-all duration-500"
                   />
                   {product.tag && (
                     <span className="absolute top-3 left-3 px-3 py-1 bg-[#F05A7E] text-white text-[10px] font-bold tracking-wider uppercase rounded-full shadow-sm">
@@ -106,13 +106,13 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       <button
                         key={idx}
                         onClick={() => setActiveImageIndex(idx)}
-                        className={`aspect-square overflow-hidden rounded-xl border transition-all cursor-pointer ${
+                        className={`aspect-square overflow-hidden rounded-xl border transition-all cursor-pointer bg-white flex items-center justify-center ${
                           activeImageIndex === idx
                             ? 'border-[#F05A7E] ring-2 ring-[#F05A7E]/30 scale-102'
                             : 'border-[#E8D5A8] opacity-70 hover:opacity-100'
                         }`}
                       >
-                        <img src={img} alt="Thumbnail" className="w-full h-full object-cover" />
+                        <img src={img} alt="Thumbnail" className="w-full h-full object-contain" />
                       </button>
                     ))}
                   </div>

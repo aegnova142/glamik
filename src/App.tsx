@@ -48,6 +48,7 @@ import { ArticleDetailPage } from './components/content/ArticleDetailPage';
 import { BeautyGuidesPage } from './components/content/BeautyGuidesPage';
 import { SocialCommerceHub } from './components/social/SocialCommerceHub';
 import { CampaignLandingPage } from './components/marketing/CampaignLandingPage';
+import { PromoBannerPopup } from './components/marketing/PromoBannerPopup';
 import { BeautyQuizModal } from './components/discovery/BeautyQuizModal';
 import { PersonalizedHomeBanner } from './components/home/PersonalizedHomeBanner';
 import { TrendingDiscovery } from './components/home/TrendingDiscovery';
@@ -1174,6 +1175,9 @@ function AppContent() {
         onClose={() => setIsConciergeOpen(false)}
         onOpenAssistant={() => setIsAssistantOpen(true)}
       />
+
+      {/* Premium homepage promotional popup carousel — isolated overlay, admin-managed */}
+      {currentRoute.page === 'home' && <PromoBannerPopup />}
 
       {/* Phase 3 AI Beauty Assistant Drawer */}
       <BeautyAssistantDrawer

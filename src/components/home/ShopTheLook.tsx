@@ -45,7 +45,7 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({ onSelectLook }) => {
               className="group relative bg-white border border-[#E8D5A8] rounded-3xl overflow-hidden hover:shadow-[0_16px_36px_rgba(240, 90, 126,0.1)] hover:border-[#F05A7E] transition-all duration-300 flex flex-col justify-between"
             >
               {/* Campaign Visual with subtle hover zoom */}
-              <div className="relative aspect-[3/4] overflow-hidden bg-[#FCE8ED]">
+              <div className="relative aspect-[3/4] overflow-hidden bg-[#FCE8ED] flex items-center justify-center">
                 {look.video ? (
                   <video
                     src={look.video}
@@ -54,13 +54,13 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({ onSelectLook }) => {
                     muted
                     loop
                     playsInline
-                    className="w-full h-full object-cover transform group-hover:scale-104 transition-transform duration-500 ease-out"
+                    className="w-full h-full object-contain transform group-hover:scale-104 transition-transform duration-500 ease-out"
                   />
                 ) : (
                   <img
                     src={look.image}
                     alt={look.title}
-                    className="w-full h-full object-cover transform group-hover:scale-104 transition-transform duration-500 ease-out"
+                    className="w-full h-full object-contain transform group-hover:scale-104 transition-transform duration-500 ease-out"
                     loading="lazy"
                   />
                 )}

@@ -167,7 +167,7 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
               className="bg-[#FAF9F6] border border-[#E8D5A8] grid grid-cols-1 lg:grid-cols-12 overflow-hidden shadow-xs"
             >
               {/* Left Look Editorial Image (5 cols) */}
-              <div className="lg:col-span-5 relative aspect-[4/5] lg:aspect-auto overflow-hidden bg-[#FAF9F6]">
+              <div className="lg:col-span-5 relative aspect-[4/5] lg:aspect-auto overflow-hidden bg-[#FAF9F6] flex items-center justify-center">
                 {look.video ? (
                   <video
                     src={look.video}
@@ -176,13 +176,13 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
                     muted
                     loop
                     playsInline
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                   />
                 ) : (
                   <img
                     src={look.image}
                     alt={look.title}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                   />
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B]/75 via-transparent to-transparent lg:hidden" />

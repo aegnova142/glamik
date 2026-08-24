@@ -91,7 +91,8 @@ import {
   Address,
 } from './types';
 import { GLAMIRK_PRODUCTS } from './data/products';
-import { DEFAULT_ADDRESSES, SAMPLE_ORDERS } from './data/commerce';
+import { customerApiFetch } from './utils/cmsClient';
+import { AddToCartConfirmModal } from './components/cart-checkout/AddToCartConfirmModal';
 import {
   GLAMIRK_JOURNAL_ARTICLES_EXTENDED,
   GLAMIRK_BEAUTY_GUIDES,
@@ -161,12 +162,37 @@ function AppContent() {
 
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
 
-  // Phase 4 Orders & Addresses State
-  const [savedAddresses, setSavedAddresses] = useState<Address[]>(DEFAULT_ADDRESSES);
-  const [orders, setOrders] = useState<Order[]>(SAMPLE_ORDERS);
+  // Phase 4 Orders & Addresses State — a new user always starts with none;
+  // real data is fetched from the backend once signed in, never seeded locally.
+  const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [confirmedOrderWhatsappUrl, setConfirmedOrderWhatsappUrl] = useState<string | undefined>(undefined);
   const [trackingOrderId, setTrackingOrderId] = useState<string | undefined>(undefined);
+
+  // Add-to-Cart confirmation modal state
+  const [addToCartConfirm, setAddToCartConfirm] = useState<{
+    product: Product;
+    shade?: Shade;
+    size?: string;
+    quantity: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isCustomerLoggedIn) {
+      setSavedAddresses([]);
+      setOrders([]);
+      return;
+    }
+    (async () => {
+      const [addrRes, ordersRes] = await Promise.all([
+        customerApiFetch<{ addresses: Address[] }>('/api/customer/addresses'),
+        customerApiFetch<{ orders: Order[] }>('/api/customer/orders'),
+      ]);
+      if (addrRes.data) setSavedAddresses(addrRes.data.addresses || []);
+      if (ordersRes.data) setOrders(ordersRes.data.orders || []);
+    })();
+  }, [isCustomerLoggedIn]);
 
   // Phase 3 Stored Beauty Profile State
   const [beautyProfile, setBeautyProfile] = useState<BeautyProfile | null>(() => {
@@ -434,9 +460,7 @@ function AppContent() {
       trackRecentlyViewed(product.id);
       const res = await commerceRef.current.addToCart(product, shade, quantity);
       if (res.success) {
-        const shadeInfo = shade ? ` (${shade.name})` : '';
-        const sizeInfo = size ? ` [${size}]` : '';
-        showToast(`Added ${product.name}${shadeInfo}${sizeInfo} to bag`);
+        setAddToCartConfirm({ product, shade, size, quantity });
       } else {
         showToast(res.error || 'Could not add this item to your bag.');
       }
@@ -489,10 +513,30 @@ function AppContent() {
     showToast('Coupon code removed');
   };
 
-  // Address adding
-  const handleAddNewAddress = (newAddr: Address) => {
-    setSavedAddresses((prev) => [...prev, newAddr]);
-    showToast('New destination address saved');
+  // Address adding — persisted server-side, scoped to the authenticated customer.
+  const handleAddNewAddress = async (newAddr: Address) => {
+    const res = await customerApiFetch<{ addresses: Address[] }>('/api/customer/addresses', {
+      method: 'POST',
+      body: JSON.stringify(newAddr),
+    });
+    if (res.data) {
+      setSavedAddresses(res.data.addresses || []);
+      showToast('New destination address saved');
+    } else {
+      showToast(res.error || 'Could not save this address.');
+    }
+  };
+
+  const handleDeleteAddress = async (addressId: string) => {
+    const res = await customerApiFetch<{ addresses: Address[] }>(`/api/customer/addresses/${addressId}`, {
+      method: 'DELETE',
+    });
+    if (res.data) {
+      setSavedAddresses(res.data.addresses || []);
+      showToast('Address removed');
+    } else {
+      showToast(res.error || 'Could not remove this address.');
+    }
   };
 
   // Order Placement Success Handler — server already cleared the cart during checkout.
@@ -774,6 +818,8 @@ function AppContent() {
             recentlyViewedIds={recentlyViewedIds}
             orders={orders}
             savedAddresses={savedAddresses}
+            onAddNewAddress={handleAddNewAddress}
+            onDeleteAddress={handleDeleteAddress}
             onOpenShadeFinder={navigateToFindMyShade}
             onOpenTryOn={(product, shade) => openVirtualTryOn(product, shade)}
             onAddToBag={handleAddToCart}
@@ -811,6 +857,7 @@ function AppContent() {
             cartItems={cartItems}
             appliedCoupon={appliedCoupon}
             savedAddresses={savedAddresses}
+            hasWhatsappOrderNumber={!!globalSettings?.whatsappOrderNumber}
             onAddNewAddress={handleAddNewAddress}
             onPlaceOrderSuccess={handlePlaceOrderSuccess}
             onBackToCart={navigateToCart}
@@ -1098,6 +1145,10 @@ function AppContent() {
         onAddToBag={(product, shade, size, quantity) => {
           handleAddToCart(product, shade, size, quantity);
         }}
+        onBuyNow={(product, shade, size) => {
+          setQuickViewProduct(null);
+          handleBuyNow(product, shade, size);
+        }}
         onTryItOn={() => {
           const p = quickViewProduct;
           setQuickViewProduct(null);
@@ -1105,6 +1156,19 @@ function AppContent() {
         }}
         onViewDetails={(product) => {
           navigateToProduct(product);
+        }}
+      />
+
+      <AddToCartConfirmModal
+        isOpen={!!addToCartConfirm}
+        product={addToCartConfirm?.product || null}
+        shade={addToCartConfirm?.shade}
+        size={addToCartConfirm?.size}
+        quantity={addToCartConfirm?.quantity || 1}
+        onClose={() => setAddToCartConfirm(null)}
+        onGoToCart={() => {
+          setAddToCartConfirm(null);
+          navigateToCart();
         }}
       />
 

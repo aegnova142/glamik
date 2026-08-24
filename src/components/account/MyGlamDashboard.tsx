@@ -41,8 +41,6 @@ import {
 } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import {
-  SAMPLE_ORDERS,
-  DEFAULT_ADDRESSES,
   DEFAULT_LOYALTY,
   SAMPLE_REVIEWS,
   SUPPORT_FAQS,
@@ -56,6 +54,8 @@ interface MyGlamDashboardProps {
   recentlyViewedIds: string[];
   orders?: Order[];
   savedAddresses?: Address[];
+  onAddNewAddress?: (address: Address) => void;
+  onDeleteAddress?: (addressId: string) => void;
   onOpenShadeFinder: () => void;
   onOpenTryOn: (product: Product, shade?: Shade) => void;
   onAddToBag: (product: Product, shade?: Shade, size?: string, quantity?: number) => void;
@@ -83,8 +83,10 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
   profile,
   wishlist,
   recentlyViewedIds,
-  orders = SAMPLE_ORDERS,
-  savedAddresses = DEFAULT_ADDRESSES,
+  orders = [],
+  savedAddresses = [],
+  onAddNewAddress,
+  onDeleteAddress,
   onOpenShadeFinder,
   onOpenTryOn,
   onAddToBag,
@@ -96,9 +98,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
   onNavigateAdmin,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('PROFILE');
-  const [userAddresses, setUserAddresses] = useState<Address[]>(savedAddresses);
   const [loyalty, setLoyalty] = useState<LoyaltyAccount>(DEFAULT_LOYALTY);
-  const [userOrders, setUserOrders] = useState<Order[]>(orders.length > 0 ? orders : SAMPLE_ORDERS);
   const [reviewsList, setReviewsList] = useState<Review[]>(SAMPLE_REVIEWS);
 
   // Authentication Modal State — real identity comes from CustomerAuthContext (Postgres-backed)
@@ -108,23 +108,30 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
     ? { name: customerUser.name, email: customerUser.email, phone: customerUser.phone || '' }
     : null;
 
+  // Orders/Addresses are server-persisted for the signed-in customer — the
+  // props passed down are already the source of truth, kept in sync here only
+  // for local UI mutations (e.g. optimistic return requests).
+  const userAddresses = savedAddresses;
+  const userOrders = orders;
+
   // Referral Copy feedback
   const [copiedReferral, setCopiedReferral] = useState(false);
 
   // Address Modal State
   const [isAddAddressOpen, setIsAddAddressOpen] = useState(false);
-  const [newAddress, setNewAddress] = useState<Omit<Address, 'id'>>({
-    name: 'Aanya Sen',
+  const emptyAddressForm: Omit<Address, 'id'> = {
+    name: currentUser?.name || '',
     type: 'Home',
-    phone: '+91 98201 44521',
-    email: 'aanya.sen@glamirk.me',
+    phone: currentUser?.phone || '',
+    email: currentUser?.email || '',
     addressLine1: '',
     addressLine2: '',
-    city: 'Mumbai',
-    state: 'Maharashtra',
+    city: '',
+    state: '',
     pinCode: '',
     isDefault: false,
-  });
+  };
+  const [newAddress, setNewAddress] = useState<Omit<Address, 'id'>>(emptyAddressForm);
 
   // Review Modal State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -136,23 +143,10 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
 
   // Return Modal State
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
-  const [selectedOrderForReturn, setSelectedOrderForReturn] = useState<Order>(userOrders[0]);
+  const [selectedOrderForReturn, setSelectedOrderForReturn] = useState<Order | undefined>(userOrders[0]);
   const [returnReason, setReturnReason] = useState('Damaged in transit');
   const [returnComments, setReturnComments] = useState('');
-  const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([
-    {
-      id: 'ret-101',
-      orderId: 'ord-89104',
-      orderNumber: 'GLM-89104',
-      productId: 'ceremonial-liquid-sindoor',
-      productName: 'Ceremonial Liquid Sindoor',
-      productImage: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=800&q=80',
-      reason: 'Incorrect shade variant received',
-      status: 'APPROVED',
-      requestedAt: '16 Jan 2026',
-      comment: 'Complimentary shade replacement dispatched via Air Courier.',
-    },
-  ]);
+  const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
 
   const wishlistedProducts = GLAMIRK_PRODUCTS.filter((p) => wishlist.includes(p.id));
   const recentProducts = GLAMIRK_PRODUCTS.filter((p) => recentlyViewedIds.includes(p.id));
@@ -166,30 +160,17 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
 
   const handleCreateAddress = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAddress.addressLine1 || !newAddress.city || !newAddress.pinCode) return;
+    if (!newAddress.name.trim() || !newAddress.phone.trim() || !newAddress.addressLine1.trim() || !newAddress.city.trim() || !newAddress.state.trim() || !newAddress.pinCode.trim()) {
+      return;
+    }
 
-    const created: Address = {
-      ...newAddress,
-      id: `addr-${Date.now()}`,
-    };
-    setUserAddresses([...userAddresses, created]);
+    onAddNewAddress?.({ ...newAddress, id: `addr-${Date.now()}` });
     setIsAddAddressOpen(false);
-    setNewAddress({
-      name: 'Aanya Sen',
-      type: 'Home',
-      phone: '+91 98201 44521',
-      email: 'aanya.sen@glamirk.me',
-      addressLine1: '',
-      addressLine2: '',
-      city: 'Mumbai',
-      state: 'Maharashtra',
-      pinCode: '',
-      isDefault: false,
-    });
+    setNewAddress(emptyAddressForm);
   };
 
   const handleDeleteAddress = (id: string) => {
-    setUserAddresses(userAddresses.filter((a) => a.id !== id));
+    onDeleteAddress?.(id);
   };
 
   const handleSubmitReview = (e: React.FormEvent) => {
@@ -202,7 +183,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
       productName: selectedProductForReview.name,
       shadeName: selectedProductForReview.shades?.[0]?.name || 'Signature',
       rating: reviewRating,
-      customerName: 'Aanya Sen',
+      customerName: currentUser?.name || 'Glamirk Customer',
       date: 'Just now',
       title: reviewTitle || 'Verified Customer Review',
       comment: reviewComment,
@@ -235,6 +216,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
 
   const handleSubmitReturn = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedOrderForReturn) return;
     const itemToReturn = selectedOrderForReturn.items[0];
     const newReq: ReturnRequest = {
       id: `ret-${Date.now()}`,
@@ -469,48 +451,52 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
               </div>
             ) : (
               <div className="space-y-6 max-w-2xl mx-auto">
-                {/* Account Sign In Access Box */}
-                <div className="p-8 sm:p-10 bg-gradient-to-br from-[#171717] via-[#171717] to-[#0B0B0B] border border-[#C9972B]/40 rounded-2xl text-[#FAF9F6] space-y-7 shadow-[0_20px_50px_rgba(201,151,43,0.12)]">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                    <div className="space-y-2">
-                      <span className="inline-flex items-center gap-2 text-[10.5px] font-mono uppercase tracking-[0.24em] text-[#C9972B]">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        GLAMIRK ATELIER ACCESS
-                      </span>
-                      <h3 className="font-serif text-2xl sm:text-3xl text-[#FAF9F6]">
-                        Sign In to Unlock Your Glam Suite
-                      </h3>
-                      <p className="text-[#6B6B6B] text-xs sm:text-[13px] leading-relaxed max-w-md">
-                        One account for everything Glamirk — track every order, revisit your shade quiz
-                        results, manage saved addresses, and watch your Privé rewards grow with every purchase.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsAuthModalOpen(true)}
-                      className="px-6 py-3.5 bg-gradient-to-r from-[#C9972B] to-[#E3B84B] hover:brightness-110 text-[#0B0B0B] text-xs font-bold uppercase tracking-wider rounded-full transition-all cursor-pointer shadow-[0_8px_20px_rgba(201,151,43,0.35)] flex items-center justify-center gap-2 shrink-0"
-                    >
-                      <User className="w-4 h-4" />
-                      <span>Sign In / Create Account</span>
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-6 border-t border-[#E8D5A8]/15">
-                    {[
-                      { icon: Package, label: 'Order Tracking' },
-                      { icon: Sparkles, label: 'Shade Quiz Matches' },
-                      { icon: MapPin, label: 'Saved Addresses' },
-                      { icon: Award, label: 'Privé Rewards' },
-                    ].map((item) => (
-                      <div key={item.label} className="flex flex-col items-center text-center gap-2">
-                        <div className="w-10 h-10 rounded-full bg-[#C9972B]/10 border border-[#C9972B]/30 flex items-center justify-center text-[#E3B84B]">
-                          <item.icon className="w-4 h-4" />
-                        </div>
-                        <span className="text-[10.5px] text-[#6B6B6B] leading-tight">{item.label}</span>
+                {/* Account Sign In Access Box — only for guests; a logged-in
+                    customer without a shade profile yet just needs the quiz
+                    prompt below, not another "sign in" call to action. */}
+                {!currentUser && (
+                  <div className="p-8 sm:p-10 bg-gradient-to-br from-[#171717] via-[#171717] to-[#0B0B0B] border border-[#C9972B]/40 rounded-2xl text-[#FAF9F6] space-y-7 shadow-[0_20px_50px_rgba(201,151,43,0.12)]">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                      <div className="space-y-2">
+                        <span className="inline-flex items-center gap-2 text-[10.5px] font-mono uppercase tracking-[0.24em] text-[#C9972B]">
+                          <Sparkles className="w-3.5 h-3.5" />
+                          GLAMIRK ATELIER ACCESS
+                        </span>
+                        <h3 className="font-serif text-2xl sm:text-3xl text-[#FAF9F6]">
+                          Sign In to Unlock Your Glam Suite
+                        </h3>
+                        <p className="text-[#6B6B6B] text-xs sm:text-[13px] leading-relaxed max-w-md">
+                          One account for everything Glamirk — track every order, revisit your shade quiz
+                          results, manage saved addresses, and watch your Privé rewards grow with every purchase.
+                        </p>
                       </div>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={() => setIsAuthModalOpen(true)}
+                        className="px-6 py-3.5 bg-gradient-to-r from-[#C9972B] to-[#E3B84B] hover:brightness-110 text-[#0B0B0B] text-xs font-bold uppercase tracking-wider rounded-full transition-all cursor-pointer shadow-[0_8px_20px_rgba(201,151,43,0.35)] flex items-center justify-center gap-2 shrink-0"
+                      >
+                        <User className="w-4 h-4" />
+                        <span>Sign In / Create Account</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-6 border-t border-[#E8D5A8]/15">
+                      {[
+                        { icon: Package, label: 'Order Tracking' },
+                        { icon: Sparkles, label: 'Shade Quiz Matches' },
+                        { icon: MapPin, label: 'Saved Addresses' },
+                        { icon: Award, label: 'Privé Rewards' },
+                      ].map((item) => (
+                        <div key={item.label} className="flex flex-col items-center text-center gap-2">
+                          <div className="w-10 h-10 rounded-full bg-[#C9972B]/10 border border-[#C9972B]/30 flex items-center justify-center text-[#E3B84B]">
+                            <item.icon className="w-4 h-4" />
+                          </div>
+                          <span className="text-[10.5px] text-[#6B6B6B] leading-tight">{item.label}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="p-8 text-center bg-white border border-[#E8D5A8] rounded-xl space-y-4">
                   <Sparkles className="w-10 h-10 text-[#C9972B] mx-auto" />

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CartItem, Address, Order, Coupon } from '../../types';
-import { DEFAULT_ADDRESSES, FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE } from '../../data/commerce';
+import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE } from '../../data/commerce';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
   ShieldCheck,
   Lock,
@@ -28,6 +29,9 @@ interface CheckoutPageProps {
   cartItems: CartItem[];
   appliedCoupon: Coupon | null;
   savedAddresses: Address[];
+  /** Whether the admin has configured a WhatsApp number in Global Store
+   * Settings — when false, there's no point pre-opening a tab for it. */
+  hasWhatsappOrderNumber?: boolean;
   onAddNewAddress: (address: Address) => void;
   onPlaceOrderSuccess: (order: Order, whatsappUrl?: string) => void;
   onBackToCart: () => void;
@@ -44,32 +48,33 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   cartItems,
   appliedCoupon,
   savedAddresses,
+  hasWhatsappOrderNumber,
   onAddNewAddress,
   onPlaceOrderSuccess,
   onBackToCart,
   onCheckout,
 }) => {
+  const { customerUser } = useCustomerAuth();
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('details');
 
-  // Customer Details Form State
-  const [customerName, setCustomerName] = useState('Aanya Sen');
-  const [customerPhone, setCustomerPhone] = useState('9820144521');
-  const [customerEmail, setCustomerEmail] = useState('aanya.sen@glamirk.me');
+  // Customer Details Form State — prefilled only from the real signed-in
+  // account, never from a fake/demo persona.
+  const [customerName, setCustomerName] = useState(customerUser?.name || '');
+  const [customerPhone, setCustomerPhone] = useState(customerUser?.phone || '');
+  const [customerEmail, setCustomerEmail] = useState(customerUser?.email || '');
 
-  // Address Selection
-  const [selectedAddressId, setSelectedAddressId] = useState<string>(
-    savedAddresses[0]?.id || 'addr-1'
-  );
+  // Address Selection — no address is selected until the user has one saved.
+  const [selectedAddressId, setSelectedAddressId] = useState<string>(savedAddresses[0]?.id || '');
   const [isAddingNewAddress, setIsAddingNewAddress] = useState(false);
   const [newAddressForm, setNewAddressForm] = useState<Omit<Address, 'id'>>({
-    name: 'Aanya Sen',
+    name: customerUser?.name || '',
     type: 'Home',
-    phone: '+91 98201 44521',
-    email: 'aanya.sen@glamirk.me',
+    phone: customerUser?.phone || '',
+    email: customerUser?.email || '',
     addressLine1: '',
     addressLine2: '',
-    city: 'Mumbai',
-    state: 'Maharashtra',
+    city: '',
+    state: '',
     pinCode: '',
     isDefault: false,
   });
@@ -95,8 +100,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const shippingFee = cartItems.length === 0 || isShippingFree ? 0 : STANDARD_SHIPPING_FEE;
   const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee);
 
-  const activeAddress =
-    savedAddresses.find((a) => a.id === selectedAddressId) || savedAddresses[0] || DEFAULT_ADDRESSES[0];
+  // Never silently falls back to a demo/default address — undefined until the
+  // user actually has and selects a real saved address.
+  const activeAddress = savedAddresses.find((a) => a.id === selectedAddressId);
 
   // Validation logic
   const validateDetails = () => {
@@ -107,6 +113,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }
     if (!customerEmail.trim() || !customerEmail.includes('@')) {
       errs.email = 'Please enter a valid email address.';
+    }
+    if (!activeAddress) {
+      errs.address = 'Please add and select a delivery address before continuing.';
     }
     setValidationErrors(errs);
     return Object.keys(errs).length === 0;
@@ -140,8 +149,22 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   };
 
   const handleConfirmOrder = async () => {
+    if (!activeAddress) {
+      setErrorMessage('Please add and select a delivery address before placing your order.');
+      setCurrentStep('details');
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage(null);
+
+    // Must open synchronously, right inside this click handler — opening it
+    // only after the `await onCheckout(...)` below resolves loses the
+    // browser's "user activation" window, so most browsers silently block
+    // it as an unsolicited popup and the WhatsApp tab never appears.
+    // Opening a blank tab now and pointing it at the real URL once the
+    // order is confirmed keeps it inside that window.
+    const whatsappTab = hasWhatsappOrderNumber ? window.open('', '_blank', 'noopener,noreferrer') : null;
 
     const addressForOrder: Address = {
       ...activeAddress,
@@ -160,6 +183,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     setIsSubmitting(false);
 
     if (!result.success || !result.order) {
+      whatsappTab?.close();
       setErrorMessage(result.error || 'We couldn’t place your order. Your bag contents remain safe and unchanged.');
       return;
     }
@@ -176,8 +200,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     // Best-effort: opens the customer's own WhatsApp with the order pre-filled
     // to the admin's number. Requires one tap to actually send — there's no
     // WhatsApp Business API wired up, so this can't happen silently server-side.
-    if (result.whatsappUrl) {
-      window.open(result.whatsappUrl, '_blank', 'noopener,noreferrer');
+    if (result.whatsappUrl && whatsappTab) {
+      whatsappTab.location.href = result.whatsappUrl;
+    } else {
+      whatsappTab?.close();
     }
 
     onPlaceOrderSuccess(enrichedOrder, result.whatsappUrl);
@@ -324,7 +350,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       type="text"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="e.g. Aanya Sen"
+                      placeholder="Enter your full name"
                       className={`w-full p-3 text-xs bg-[#FAF9F6] border ${
                         validationErrors.name ? 'border-[#F05A7E]' : 'border-[#E8D5A8]'
                       } focus:border-[#0B0B0B] focus:outline-hidden`}
@@ -348,7 +374,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                           maxLength={10}
                           value={customerPhone}
                           onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, ''))}
-                          placeholder="9820144521"
+                          placeholder="10-digit mobile number"
                           className={`flex-1 p-3 text-xs bg-[#FAF9F6] border ${
                             validationErrors.phone ? 'border-[#F05A7E]' : 'border-[#E8D5A8]'
                           } focus:border-[#0B0B0B] focus:outline-hidden font-mono`}
@@ -367,7 +393,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         type="email"
                         value={customerEmail}
                         onChange={(e) => setCustomerEmail(e.target.value)}
-                        placeholder="aanya.sen@glamirk.me"
+                        placeholder="you@example.com"
                         className={`w-full p-3 text-xs bg-[#FAF9F6] border ${
                           validationErrors.email ? 'border-[#F05A7E]' : 'border-[#E8D5A8]'
                         } focus:border-[#0B0B0B] focus:outline-hidden`}
@@ -384,6 +410,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
                     SAVED ADDRESSES:
                   </label>
+
+                  {savedAddresses.length === 0 && !isAddingNewAddress && (
+                    <p className="text-xs text-[#6B6B6B]">
+                      You don't have a saved address yet. Add one below to continue.
+                    </p>
+                  )}
+                  {validationErrors.address && (
+                    <p className="text-[11px] text-[#F05A7E]">{validationErrors.address}</p>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {savedAddresses.map((addr) => {
@@ -673,19 +708,25 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         EDIT
                       </button>
                     </div>
-                    <h4 className="font-serif text-sm font-medium text-[#121212]">
-                      {activeAddress.name} ({activeAddress.type})
-                    </h4>
-                    <p className="text-xs text-[#6B6B6B]">
-                      {activeAddress.addressLine1}
-                      {activeAddress.addressLine2 && `, ${activeAddress.addressLine2}`}
-                    </p>
-                    <p className="text-xs text-[#6B6B6B]">
-                      {activeAddress.city}, {activeAddress.state} - {activeAddress.pinCode}
-                    </p>
-                    <p className="text-[11px] text-[#6B6B6B] font-mono">
-                      Phone: {activeAddress.phone}
-                    </p>
+                    {activeAddress ? (
+                      <>
+                        <h4 className="font-serif text-sm font-medium text-[#121212]">
+                          {activeAddress.name} ({activeAddress.type})
+                        </h4>
+                        <p className="text-xs text-[#6B6B6B]">
+                          {activeAddress.addressLine1}
+                          {activeAddress.addressLine2 && `, ${activeAddress.addressLine2}`}
+                        </p>
+                        <p className="text-xs text-[#6B6B6B]">
+                          {activeAddress.city}, {activeAddress.state} - {activeAddress.pinCode}
+                        </p>
+                        <p className="text-[11px] text-[#6B6B6B] font-mono">
+                          Phone: {activeAddress.phone}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-[#F05A7E]">No delivery address selected.</p>
+                    )}
                   </div>
 
                   {/* Payment Summary Block */}
@@ -769,10 +810,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <div className="pt-4 border-t border-[#E8D5A8] space-y-3">
                   <button
                     id="checkout-place-order-final-btn"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !activeAddress}
                     onClick={handleConfirmOrder}
                     className={`w-full py-4.5 bg-[#0B0B0B] text-[#FAF9F6] text-xs sm:text-[13px] font-semibold tracking-[0.24em] uppercase transition-all duration-300 flex items-center justify-center gap-3 shadow-lg cursor-pointer ${
-                      isSubmitting ? 'opacity-80 cursor-wait' : 'hover:bg-[#0B0B0B]'
+                      isSubmitting || !activeAddress ? 'opacity-80 cursor-not-allowed' : 'hover:bg-[#0B0B0B]'
                     }`}
                   >
                     {isSubmitting ? (

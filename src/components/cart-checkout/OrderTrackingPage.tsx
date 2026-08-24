@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Order, OrderStatus } from '../../types';
-import { SAMPLE_ORDERS } from '../../data/commerce';
 import {
   Truck,
   CheckCircle2,
@@ -12,6 +11,7 @@ import {
   Headphones,
   RotateCcw,
   Sparkles,
+  ShoppingBag,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -32,12 +32,12 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
   onOpenSupport,
   onReorder,
 }) => {
-  const allAvailableOrders = orders.length > 0 ? orders : SAMPLE_ORDERS;
+  const allAvailableOrders = orders;
   const defaultOrder =
     allAvailableOrders.find((o) => o.id === initialOrderId || o.orderNumber === initialOrderId) ||
     allAvailableOrders[0];
 
-  const [selectedOrder, setSelectedOrder] = useState<Order>(defaultOrder);
+  const [selectedOrder, setSelectedOrder] = useState<Order | undefined>(defaultOrder);
   const [searchQuery, setSearchQuery] = useState(defaultOrder?.orderNumber || '');
 
   const handleSearchOrder = (e: React.FormEvent) => {
@@ -52,6 +52,28 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
       alert(`Order "${searchQuery}" not found. Please verify the order number.`);
     }
   };
+
+  if (!selectedOrder) {
+    return (
+      <div className="bg-[#FAF9F6] min-h-screen py-16 sm:py-24 flex items-center justify-center px-4">
+        <div className="max-w-md w-full text-center space-y-5">
+          <div className="w-14 h-14 rounded-full bg-white border border-[#E8D5A8] flex items-center justify-center mx-auto text-[#C9972B]">
+            <ShoppingBag className="w-6 h-6" />
+          </div>
+          <h1 className="font-serif text-2xl text-[#121212]">No Orders Yet</h1>
+          <p className="text-xs text-[#6B6B6B]">
+            You haven't placed any orders yet. Once you do, you'll be able to track their live dispatch status here.
+          </p>
+          <button
+            onClick={onExploreShop}
+            className="px-8 py-3.5 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-[0.2em] uppercase hover:bg-[#0B0B0B] transition-colors cursor-pointer"
+          >
+            EXPLORE THE SHOP
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const steps: { status: OrderStatus; label: string; description: string }[] = [
     {
@@ -253,10 +275,10 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
                 CARRIER & AWB TRACKING
               </span>
               <p className="font-medium text-[#121212]">
-                {selectedOrder.courierPartner || 'Blue Dart Air Express'}
+                {selectedOrder.courierPartner || 'Assigned after dispatch'}
               </p>
               <p className="font-mono text-[#6B6B6B]">
-                AWB Reference: {selectedOrder.trackingNumber || 'BLUEDART-88291047'}
+                AWB Reference: {selectedOrder.trackingNumber || 'Pending dispatch'}
               </p>
             </div>
 

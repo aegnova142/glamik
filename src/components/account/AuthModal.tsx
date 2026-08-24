@@ -13,7 +13,6 @@ import {
   Phone,
   ArrowRight,
   CheckCircle,
-  Sparkles,
   Eye,
   EyeOff,
   Check,
@@ -41,9 +40,6 @@ interface AuthModalProps {
   // token pre-filled instead of the normal sign-in form.
   initialResetToken?: string;
 }
-
-const DEMO_CUSTOMER_EMAIL = 'demo@glamirkbeauty.app';
-const DEMO_CUSTOMER_PASSWORD = 'GlamirkDemo123';
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
@@ -153,34 +149,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       });
       onClose();
     }, 600);
-  };
-
-  const handleQuickCustomerDemo = async () => {
-    setCustomerError(null);
-    setCustomerLoading(true);
-
-    let res = await customerLogin(DEMO_CUSTOMER_EMAIL, DEMO_CUSTOMER_PASSWORD);
-    if (!res.success) {
-      // First time — the demo account doesn't exist yet, create it.
-      res = await customerRegister('Demo Customer', DEMO_CUSTOMER_EMAIL, DEMO_CUSTOMER_PASSWORD);
-    }
-
-    setCustomerLoading(false);
-
-    if (!res.success) {
-      setCustomerError(res.error || 'Could not start the demo session.');
-      return;
-    }
-
-    setCustomerSuccess(true);
-    setTimeout(() => {
-      onCustomerLoginSuccess?.({
-        name: 'Demo Customer',
-        email: DEMO_CUSTOMER_EMAIL,
-        phone: '',
-      });
-      onClose();
-    }, 500);
   };
 
   const handleGoogleSignIn = async () => {
@@ -324,7 +292,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         <input
                           type="email"
                           required
-                          placeholder="aanya.sen@glamirk.me"
+                          placeholder="you@example.com"
                           value={customerEmail}
                           onChange={(e) => setCustomerEmail(e.target.value)}
                           className="w-full pl-9 pr-3 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
@@ -513,7 +481,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         <input
                           type="text"
                           required
-                          placeholder="Aanya Sen"
+                          placeholder="Enter your full name"
                           value={customerName}
                           onChange={(e) => setCustomerName(e.target.value)}
                           className="w-full pl-9 pr-3 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
@@ -531,7 +499,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <input
                         type="email"
                         required
-                        placeholder="aanya.sen@glamirk.me"
+                        placeholder="you@example.com"
                         value={customerEmail}
                         onChange={(e) => setCustomerEmail(e.target.value)}
                         className="w-full pl-9 pr-3 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
@@ -754,19 +722,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     {customerFormMode === 'login' ? 'Create Account' : 'Login'}
                   </button>
                 </p>
-
-                {/* Instant 1-Click Demo Login — creates/uses a real persisted demo account */}
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={handleQuickCustomerDemo}
-                    disabled={customerLoading}
-                    className="w-full py-2.5 px-3 bg-[#0B0B0B] hover:bg-[#C9972B]/20 border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#E8D5A8] flex items-center justify-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-[#C9972B]" />
-                    <span>Instant 1-Click Demo Login</span>
-                  </button>
-                </div>
               </div>
             )}
           </div>

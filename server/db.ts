@@ -131,6 +131,22 @@ function ensureSchema(): Promise<void> {
         price NUMERIC NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
+
+      CREATE TABLE IF NOT EXISTS customer_addresses (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'Home',
+        phone TEXT NOT NULL,
+        email TEXT,
+        address_line1 TEXT NOT NULL,
+        address_line2 TEXT,
+        city TEXT NOT NULL,
+        state TEXT NOT NULL,
+        pin_code TEXT NOT NULL,
+        is_default BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
     `).then(() => undefined);
   }
   return schemaReady;
@@ -180,16 +196,16 @@ export function broadcastEvent(type: string, entity: string, data?: any) {
 
 function getInitialDatabase(): InternalCMSDatabaseSchema {
   const salt = bcrypt.genSaltSync(10);
-  const demoAdminPasswordHash = bcrypt.hashSync('12345', salt);
+  const adminPasswordHash = bcrypt.hashSync('QAZPLMoknwsx$#@980', salt);
 
   const initialUsers: StoredUser[] = [
     {
       id: 'usr-admin-1',
-      email: 'tryweb@gmail.com',
+      email: 'shelja.sharma@glamirk.com',
       name: 'Glamirk Executive Admin',
       role: 'admin',
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-      passwordHash: demoAdminPasswordHash,
+      passwordHash: adminPasswordHash,
       createdAt: new Date().toISOString(),
     },
   ];
@@ -980,7 +996,7 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
     {
       id: 'log-1',
       userId: 'usr-admin-1',
-      userEmail: 'tryweb@gmail.com',
+      userEmail: 'shelja.sharma@glamirk.com',
       action: 'SYSTEM_BOOTSTRAP',
       objectType: 'DATABASE',
       objectId: 'cms-database',

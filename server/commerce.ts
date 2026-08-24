@@ -258,6 +258,61 @@ router.get('/auth/me', requireCustomer, async (req: AuthenticatedCustomerRequest
 });
 
 // ==========================================
+// ADDRESSES — always scoped to the authenticated customer
+// ==========================================
+
+function mapAddressRow(row: any) {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    phone: row.phone,
+    email: row.email || undefined,
+    addressLine1: row.address_line1,
+    addressLine2: row.address_line2 || undefined,
+    city: row.city,
+    state: row.state,
+    pinCode: row.pin_code,
+    isDefault: row.is_default,
+  };
+}
+
+router.get('/addresses', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const result = await pool.query(
+    'SELECT * FROM customer_addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at ASC',
+    [req.customer!.id]
+  );
+  res.json({ addresses: result.rows.map(mapAddressRow) });
+});
+
+router.post('/addresses', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const { name, type, phone, email, addressLine1, addressLine2, city, state, pinCode, isDefault } = req.body || {};
+  if (!name?.trim() || !phone?.trim() || !addressLine1?.trim() || !city?.trim() || !state?.trim() || !pinCode?.trim()) {
+    return res.status(400).json({ error: 'Please fill in all required address fields.' });
+  }
+
+  const id = 'addr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  await pool.query(
+    `INSERT INTO customer_addresses
+      (id, user_id, name, type, phone, email, address_line1, address_line2, city, state, pin_code, is_default)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+    [id, req.customer!.id, name, type || 'Home', phone, email || null, addressLine1, addressLine2 || null, city, state, pinCode, !!isDefault]
+  );
+
+  const result = await pool.query('SELECT * FROM customer_addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at ASC', [req.customer!.id]);
+  res.json({ addresses: result.rows.map(mapAddressRow) });
+});
+
+router.delete('/addresses/:id', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const result = await pool.query('DELETE FROM customer_addresses WHERE id = $1 AND user_id = $2 RETURNING id', [req.params.id, req.customer!.id]);
+  if (result.rows.length === 0) {
+    return res.status(404).json({ error: 'Address not found.' });
+  }
+  const remaining = await pool.query('SELECT * FROM customer_addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at ASC', [req.customer!.id]);
+  res.json({ addresses: remaining.rows.map(mapAddressRow) });
+});
+
+// ==========================================
 // SHARED HELPERS
 // ==========================================
 
@@ -680,6 +735,55 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
     console.error('Checkout failed:', err);
     res.status(500).json({ error: 'Checkout failed. Please try again.' });
   }
+});
+
+// ==========================================
+// ORDER HISTORY — reconstructed from the persisted orders/order_items rows,
+// never from client-side sample data.
+// ==========================================
+
+router.get('/orders', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const db = await loadDatabase();
+  const ordersRes = await pool.query('SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC', [req.customer!.id]);
+
+  const orders: Order[] = await Promise.all(
+    ordersRes.rows.map(async (row) => {
+      const itemsRes = await pool.query('SELECT * FROM order_items WHERE order_id = $1 ORDER BY created_at ASC', [row.id]);
+      const items: OrderItem[] = itemsRes.rows.map((it) => {
+        const product = findProduct(db.products, it.product_id);
+        return {
+          productId: it.product_id,
+          productName: it.product_name,
+          productImage: product?.images?.primary || '',
+          shade: product ? findShade(product, it.variant_id) : undefined,
+          price: Number(it.price),
+          quantity: it.quantity,
+        };
+      });
+
+      const createdAt = new Date(row.created_at).toISOString();
+      return {
+        id: row.id,
+        orderNumber: row.order_number,
+        createdAt,
+        status: row.status,
+        items,
+        subtotal: Number(row.subtotal),
+        discount: Number(row.discount),
+        shipping: Number(row.shipping),
+        tax: 0,
+        total: Number(row.total),
+        deliveryAddress: row.shipping_address,
+        payment: { method: row.payment_method, status: row.payment_status },
+        estimatedDelivery: new Date(new Date(row.created_at).getTime() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+        timeline: [
+          { status: row.status, timestamp: createdAt, note: 'Order status last updated', completed: true },
+        ],
+      } as Order;
+    })
+  );
+
+  res.json({ orders });
 });
 
 export default router;

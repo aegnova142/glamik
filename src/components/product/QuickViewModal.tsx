@@ -10,6 +10,7 @@ interface QuickViewModalProps {
   isWishlisted: boolean;
   onToggleWishlist: (productId: string) => void;
   onAddToBag: (product: Product, shade?: Shade, size?: string, quantity?: number) => void;
+  onBuyNow?: (product: Product, shade?: Shade, size?: string) => void;
   onTryItOn: (product: Product) => void;
   onViewDetails?: (product: Product) => void;
 }
@@ -21,6 +22,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
   isWishlisted,
   onToggleWishlist,
   onAddToBag,
+  onBuyNow,
   onTryItOn,
   onViewDetails,
 }) => {
@@ -335,12 +337,25 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       onAddToBag(product, selectedShade, selectedSize, quantity);
                       onClose();
                     }}
-                    className="flex-grow py-3.5 px-6 bg-[#F05A7E] hover:bg-[#F05A7E] text-white text-xs font-bold rounded-full transition-all flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(240, 90, 126,0.3)] hover:scale-102 active:scale-95 cursor-pointer"
+                    className="flex-grow py-3.5 px-6 bg-white border border-[#0B0B0B] hover:bg-[#FCE8ED] text-[#121212] text-xs font-bold rounded-full transition-all flex items-center justify-center gap-2 hover:scale-102 active:scale-95 cursor-pointer"
                   >
                     <ShoppingBag className="w-4 h-4" />
-                    <span>Add To Bag • ₹{currentPrice! * quantity}</span>
+                    <span>Add To Bag</span>
                   </button>
                 </div>
+
+                {onBuyNow && (
+                  <button
+                    id="quickview-buy-now-btn"
+                    onClick={() => {
+                      onBuyNow(product, selectedShade, selectedSize);
+                    }}
+                    className="w-full py-3.5 px-6 bg-[#F05A7E] hover:bg-[#F05A7E] text-white text-xs font-bold rounded-full transition-all flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(240, 90, 126,0.3)] hover:scale-102 active:scale-95 cursor-pointer"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Buy Now • ₹{currentPrice! * quantity}</span>
+                  </button>
+                )}
 
                 {onViewDetails && (
                   <button

@@ -51,7 +51,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
           </div>
 
           <h1 className="font-serif text-3xl sm:text-4xl md:text-5xl text-[#121212] tracking-tight">
-            Order Confirmed Successfully!
+            Order Confirmed Successfully! 🎉
           </h1>
 
           <span className="text-sm font-semibold tracking-wider text-[#C9972B] block font-mono">

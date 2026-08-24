@@ -11,7 +11,7 @@ import { resolveHeroLayout, heroRowOrderClass, heroTextAlignClasses } from './he
 const EMPTY_BACKGROUNDS: CMSHeroBackground[] = [];
 
 const TRUST_BAR_VISIBLE_LIMIT = 3;
-const AUTOPLAY_MS = 2000;
+const AUTOPLAY_MS = 3000;
 const AUTOPLAY_FADE_MS = 200; // automatic slide change — quick move
 const MANUAL_FADE_MS = 100; // button/dot/swipe — instant-feeling
 const DRAG_THRESHOLD_PX = 60;
@@ -106,6 +106,7 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
   const parallaxFrameRef = useRef<number | null>(null);
   const dragStartX = useRef<number | null>(null);
+  const dragStartY = useRef<number | null>(null);
   const dragDeltaX = useRef(0);
   const fadeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guards against double-click/rapid-click skipping multiple slides while a
@@ -181,14 +182,30 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [goPrev, goNext]);
 
-  const handleDragStart = (clientX: number) => {
+  const handleDragStart = (clientX: number, clientY?: number) => {
     dragStartX.current = clientX;
+    dragStartY.current = clientY ?? null;
     dragDeltaX.current = 0;
     setIsDragging(true);
   };
 
-  const handleDragMove = (clientX: number) => {
+  const handleDragMove = (clientX: number, clientY?: number) => {
     if (dragStartX.current === null) return;
+    // Touch only: a thumb scrolling the page vertically almost always drifts
+    // a few px sideways too. If the gesture reads as more vertical than
+    // horizontal, treat it as a page scroll — not a slide swipe — and bail
+    // out before it can snap the hero sideways mid-scroll.
+    if (clientY !== undefined && dragStartY.current !== null) {
+      const deltaY = clientY - dragStartY.current;
+      const deltaX = clientX - dragStartX.current;
+      if (Math.abs(deltaY) > 10 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        dragStartX.current = null;
+        dragStartY.current = null;
+        dragDeltaX.current = 0;
+        setIsDragging(false);
+        return;
+      }
+    }
     dragDeltaX.current = clientX - dragStartX.current;
   };
 
@@ -200,6 +217,7 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
       goNext();
     }
     dragStartX.current = null;
+    dragStartY.current = null;
     dragDeltaX.current = 0;
     setIsDragging(false);
   };
@@ -271,8 +289,8 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
             pauseAutoplayBriefly();
             resetParallax();
           }}
-          onTouchStart={(e) => handleDragStart(e.touches[0].clientX)}
-          onTouchMove={(e) => handleDragMove(e.touches[0].clientX)}
+          onTouchStart={(e) => handleDragStart(e.touches[0].clientX, e.touches[0].clientY)}
+          onTouchMove={(e) => handleDragMove(e.touches[0].clientX, e.touches[0].clientY)}
           onTouchEnd={handleDragEnd}
         >
           {/* HERO COMPOSITION — content + layered image, order/alignment driven by admin layout config */}

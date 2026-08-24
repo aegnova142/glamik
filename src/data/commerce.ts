@@ -126,6 +126,7 @@ export const SAMPLE_ORDERS: Order[] = [
     deliveryAddress: DEFAULT_ADDRESSES[0],
     payment: {
       method: 'upi',
+      status: 'PAID',
       upiId: 'aanya@okhdfcbank',
       paidAt: '12 Jan 2026, 03:42 PM',
     },
@@ -196,6 +197,7 @@ export const SAMPLE_ORDERS: Order[] = [
     deliveryAddress: DEFAULT_ADDRESSES[0],
     payment: {
       method: 'card',
+      status: 'PAID',
       cardLast4: '4092',
       cardNetwork: 'Visa Platinum',
       paidAt: '18 Feb 2026, 11:20 AM',

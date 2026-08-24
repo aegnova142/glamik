@@ -290,6 +290,8 @@ router.get('/cms/content', async (req: Request, res: Response) => {
     benefitsSection: db.benefitsSection,
     promoBanners: db.promoBanners || { enabled: false, banners: [], intervalMs: 4000 },
     shadeFinderTeaser: db.shadeFinderTeaser,
+    journalSectionCopy: db.journalSectionCopy,
+    findMyShadeResultsCopy: db.findMyShadeResultsCopy,
     serverTime: new Date().toISOString(),
   };
 
@@ -868,6 +870,28 @@ router.put('/admin/shade-finder-teaser', requireAdmin, async (req: Authenticated
   broadcastEvent('CMS_UPDATE', 'shadeFinderTeaser', db.shadeFinderTeaser);
 
   res.json(db.shadeFinderTeaser);
+});
+
+// --- Homepage "The Glamirk Journal" Section Heading ---
+router.put('/admin/journal-section-copy', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  db.journalSectionCopy = req.body;
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_JOURNAL_SECTION_COPY', 'JOURNAL_SECTION_COPY', 'journal-section-copy-main', 'Homepage Journal Section Heading Updated');
+  broadcastEvent('CMS_UPDATE', 'journalSectionCopy', db.journalSectionCopy);
+
+  res.json(db.journalSectionCopy);
+});
+
+// --- Find My Shade Quiz Results Headings ---
+router.put('/admin/find-my-shade-results-copy', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  db.findMyShadeResultsCopy = req.body;
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_FIND_MY_SHADE_RESULTS_COPY', 'FIND_MY_SHADE_RESULTS_COPY', 'find-my-shade-results-copy-main', 'Find My Shade Results Headings Updated');
+  broadcastEvent('CMS_UPDATE', 'findMyShadeResultsCopy', db.findMyShadeResultsCopy);
+
+  res.json(db.findMyShadeResultsCopy);
 });
 
 // --- About Page Content ---

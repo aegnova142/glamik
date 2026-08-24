@@ -20,3 +20,15 @@ services:
         sync: false
       - key: APP_URL
         sync: false
+      - key: VITE_GOOGLE_CLIENT_ID
+        value: 285566126841-e4o0578pseacsvc5ambgavphfnl20gcj.apps.googleusercontent.com
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false

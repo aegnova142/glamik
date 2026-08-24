@@ -11,11 +11,16 @@ import {
   CreditCard,
   Download,
   Share2,
+  MessageCircle,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface OrderConfirmationPageProps {
   order: Order;
+  /** Set only when the admin has a WhatsApp number configured — lets the
+   * customer (re)send the order details if the auto-opened tab at checkout
+   * was blocked or they closed it without hitting send. */
+  whatsappUrl?: string;
   onTrackOrder: (orderId: string) => void;
   onContinueShopping: () => void;
   onNavigateMyGlam: () => void;
@@ -23,6 +28,7 @@ interface OrderConfirmationPageProps {
 
 export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
   order,
+  whatsappUrl,
   onTrackOrder,
   onContinueShopping,
   onNavigateMyGlam,
@@ -44,16 +50,16 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
             <CheckCircle className="w-8 h-8 stroke-[1.5]" />
           </div>
 
-          <span className="text-[10.5px] font-semibold tracking-[0.26em] uppercase text-[#C9972B] block">
-            ORDER CONFIRMED • {order.orderNumber}
-          </span>
-
           <h1 className="font-serif text-3xl sm:text-4xl md:text-5xl text-[#121212] tracking-tight">
-            YOUR GLAM IS ON ITS WAY.
+            Order Confirmed Successfully!
           </h1>
 
+          <span className="text-sm font-semibold tracking-wider text-[#C9972B] block font-mono">
+            Order ID: #{order.orderNumber}
+          </span>
+
           <p className="text-xs sm:text-sm text-[#6B6B6B] max-w-md mx-auto font-light leading-relaxed">
-            Thank you for choosing Glamirk. Your formulations are being prepared and bottled in our signature luxury gift packaging.
+            Thank you for your order. Your formulations are being prepared and bottled in our signature luxury gift packaging.
           </p>
 
           {/* Privé Reward Badge */}
@@ -95,12 +101,12 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
                 PAYMENT METHOD
               </span>
               <span className="font-medium text-[#121212] uppercase mt-0.5 block">
-                {order.payment.method}
+                {order.payment.method === 'cod' ? 'Cash on Delivery' : order.payment.method}
               </span>
             </div>
             <div>
               <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] block">
-                TOTAL PAID
+                {order.payment.status === 'PAID' ? 'TOTAL PAID' : 'AMOUNT DUE'}
               </span>
               <span className="font-serif text-base font-semibold text-[#121212] mt-0.5 block">
                 ₹{order.total}
@@ -139,6 +145,30 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
                   </span>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* Price Breakdown */}
+          <div className="space-y-1.5 pt-4 border-t border-[#E8D5A8] text-xs text-[#6B6B6B] max-w-xs ml-auto">
+            <div className="flex justify-between">
+              <span>Subtotal</span>
+              <span className="font-mono text-[#121212]">₹{order.subtotal}</span>
+            </div>
+            {order.discount > 0 && (
+              <div className="flex justify-between text-[#C9972B] font-medium">
+                <span>Discount</span>
+                <span className="font-mono">-₹{order.discount}</span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span>Shipping</span>
+              <span className="font-mono text-[#121212]">
+                {order.shipping === 0 ? 'FREE' : `₹${order.shipping}`}
+              </span>
+            </div>
+            <div className="flex justify-between pt-1.5 border-t border-[#E8D5A8]">
+              <span className="font-serif text-sm text-[#121212] font-medium">Total</span>
+              <span className="font-serif text-base font-semibold text-[#121212]">₹{order.total}</span>
             </div>
           </div>
 
@@ -183,13 +213,28 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
 
           {/* Action CTAs */}
           <div className="pt-6 border-t border-[#E8D5A8] flex flex-col sm:flex-row items-center justify-between gap-4">
-            <button
-              onClick={() => onTrackOrder(order.id)}
-              className="w-full sm:w-auto px-8 py-3.5 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-[0.2em] uppercase hover:bg-[#0B0B0B] transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-            >
-              <Truck className="w-4 h-4 text-[#C9972B]" />
-              <span>LIVE ORDER TRACKING</span>
-            </button>
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <button
+                onClick={() => onTrackOrder(order.id)}
+                className="flex-1 sm:flex-initial px-8 py-3.5 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-[0.2em] uppercase hover:bg-[#0B0B0B] transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              >
+                <Truck className="w-4 h-4 text-[#C9972B]" />
+                <span>LIVE ORDER TRACKING</span>
+              </button>
+
+              {whatsappUrl && (
+                <a
+                  href={whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-3.5 border border-[#E8D5A8] text-[#121212] text-xs font-semibold tracking-wider uppercase hover:bg-[#FAF9F6] transition-colors cursor-pointer flex items-center justify-center gap-2"
+                  title="Send this order to Glamirk via WhatsApp"
+                >
+                  <MessageCircle className="w-4 h-4 text-[#C9972B]" />
+                  <span className="hidden sm:inline">SEND VIA WHATSAPP</span>
+                </a>
+              )}
+            </div>
 
             <div className="flex items-center gap-3 w-full sm:w-auto">
               <button

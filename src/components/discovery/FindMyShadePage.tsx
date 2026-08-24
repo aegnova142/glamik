@@ -53,7 +53,14 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
   onToggleWishlist,
   wishlist,
 }) => {
-  const { shadeJourney } = useCMS();
+  const { shadeJourney, findMyShadeResultsCopy } = useCMS();
+  const resultsCopy = findMyShadeResultsCopy || {
+    resultsBadge: 'YOUR GLAMIRK MATCH',
+    resultsHeading: 'YOUR PERSONAL BEAUTY EDIT',
+    resultsSubtitle: 'Calibrated for your verified undertone, signature aesthetic, and occasion.',
+    alternativesEyebrow: 'CURATED VARIATIONS',
+    alternativesHeading: 'MORE SHADES YOU MAY LOVE',
+  };
 
   // Step state: 0 = Landing, 1 to 5 = Questions, 6 = Optional Photo, 7 = Loading, 8 = Results
   const [currentStep, setCurrentStep] = useState<number>(0);
@@ -818,13 +825,13 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
           <div className="text-center space-y-3">
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#FAF9F6] border border-[#E8D5A8] text-[10.5px] font-semibold tracking-[0.24em] uppercase text-[#C9972B]">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>YOUR GLAMIRK MATCH</span>
+              <span>{resultsCopy.resultsBadge}</span>
             </div>
             <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl text-[#121212]">
-              YOUR PERSONAL BEAUTY EDIT
+              {resultsCopy.resultsHeading}
             </h2>
             <p className="text-sm sm:text-base text-[#6B6B6B] font-light max-w-xl mx-auto">
-              Calibrated for your verified undertone, signature aesthetic, and occasion.
+              {resultsCopy.resultsSubtitle}
             </p>
 
             {/* Profile Summary Pills */}
@@ -988,10 +995,10 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
           <div className="space-y-6">
             <div className="border-b border-[#E8D5A8] pb-4">
               <span className="text-[10px] font-semibold tracking-[0.24em] uppercase text-[#C9972B]">
-                CURATED VARIATIONS
+                {resultsCopy.alternativesEyebrow}
               </span>
               <h3 className="font-serif text-2xl sm:text-3xl text-[#121212] mt-0.5">
-                MORE SHADES YOU MAY LOVE
+                {resultsCopy.alternativesHeading}
               </h3>
             </div>
 

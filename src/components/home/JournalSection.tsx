@@ -9,8 +9,15 @@ interface JournalSectionProps {
   onReadArticle: (article: JournalArticle) => void;
 }
 
+const DEFAULT_COPY = {
+  badgeText: 'Editorial Perspectives',
+  heading: 'The Glamirk Journal',
+  subtitle: 'Perspectives on color theory, formulation mastery, and modern rituals crafted for Indian complexions.',
+};
+
 export const JournalSection: React.FC<JournalSectionProps> = ({ onReadArticle }) => {
-  const { journalArticles } = useCMS();
+  const { journalArticles, journalSectionCopy } = useCMS();
+  const copy = journalSectionCopy || DEFAULT_COPY;
   const articles = journalArticles && journalArticles.length > 0 ? journalArticles.slice(0, 3) : GLAMIRK_JOURNAL_ARTICLES;
 
   return (
@@ -23,14 +30,14 @@ export const JournalSection: React.FC<JournalSectionProps> = ({ onReadArticle })
             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#FCE8ED] border border-[#E8D5A8] rounded-full">
               <Sparkles className="w-3.5 h-3.5 text-[#F05A7E]" />
               <span className="text-[10.5px] font-bold tracking-wider uppercase text-[#F05A7E]">
-                Editorial Perspectives
+                {copy.badgeText}
               </span>
             </div>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#121212] tracking-tight">
-              The Glamirk Journal
+              {copy.heading}
             </h2>
             <p className="text-sm sm:text-base text-[#6B6B6B] font-normal leading-relaxed">
-              Perspectives on color theory, formulation mastery, and modern rituals crafted for Indian complexions.
+              {copy.subtitle}
             </p>
           </div>
 

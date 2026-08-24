@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useCMS } from '../../context/CMSContext';
-import { CMSShadeJourney, CMSJourneyStep } from '../../types';
+import { CMSShadeJourney, CMSJourneyStep, CMSFindMyShadeResultsCopy } from '../../types';
 import { useSyncOnce } from '../../hooks/useSyncOnce';
 import {
   Plus,
@@ -43,14 +43,24 @@ const DEFAULT_JOURNEY: CMSShadeJourney = {
   steps: [],
 };
 
+const DEFAULT_RESULTS_COPY: CMSFindMyShadeResultsCopy = {
+  resultsBadge: 'YOUR GLAMIRK MATCH',
+  resultsHeading: 'YOUR PERSONAL BEAUTY EDIT',
+  resultsSubtitle: 'Calibrated for your verified undertone, signature aesthetic, and occasion.',
+  alternativesEyebrow: 'CURATED VARIATIONS',
+  alternativesHeading: 'MORE SHADES YOU MAY LOVE',
+};
+
 export const AdminShadeFinder: React.FC = () => {
-  const { shadeJourney, saveShadeJourney } = useCMS();
+  const { shadeJourney, saveShadeJourney, findMyShadeResultsCopy, saveFindMyShadeResultsCopy } = useCMS();
   const [journeyState, setJourneyState] = useState<CMSShadeJourney>(shadeJourney || DEFAULT_JOURNEY);
+  const [resultsCopyState, setResultsCopyState] = useState<CMSFindMyShadeResultsCopy>(findMyShadeResultsCopy || DEFAULT_RESULTS_COPY);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useSyncOnce(shadeJourney, setJourneyState);
+  useSyncOnce(findMyShadeResultsCopy, setResultsCopyState);
 
   const handleSave = async () => {
     setError(null);
@@ -59,9 +69,12 @@ export const AdminShadeFinder: React.FC = () => {
       return;
     }
     setIsSaving(true);
-    const ok = await saveShadeJourney(journeyState);
+    const [journeyOk, resultsOk] = await Promise.all([
+      saveShadeJourney(journeyState),
+      saveFindMyShadeResultsCopy(resultsCopyState),
+    ]);
     setIsSaving(false);
-    if (ok) {
+    if (journeyOk && resultsOk) {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 1500);
     } else {
@@ -165,6 +178,68 @@ export const AdminShadeFinder: React.FC = () => {
           Live preview: {journeyState.eyebrow} — {journeyState.title}
           <span className="text-[#F05A7E] font-semibold">{journeyState.titleHighlight}</span>
         </p>
+      </div>
+
+      {/* Quiz Results Page Headings */}
+      <div className="p-6 rounded-xl bg-[#171717] border border-[#E8D5A8]/30 space-y-4 max-w-2xl">
+        <div>
+          <h3 className="text-sm font-bold text-[#FAF9F6] uppercase tracking-wider">Quiz Results Page Headings</h3>
+          <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+            Shown after a customer completes the shade quiz — "Your Personal Beauty Edit" and "More Shades You May Love".
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Results Badge</label>
+            <input
+              type="text"
+              value={resultsCopyState.resultsBadge}
+              onChange={(e) => setResultsCopyState({ ...resultsCopyState, resultsBadge: e.target.value })}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Results Heading</label>
+            <input
+              type="text"
+              value={resultsCopyState.resultsHeading}
+              onChange={(e) => setResultsCopyState({ ...resultsCopyState, resultsHeading: e.target.value })}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Results Subtitle</label>
+          <input
+            type="text"
+            value={resultsCopyState.resultsSubtitle}
+            onChange={(e) => setResultsCopyState({ ...resultsCopyState, resultsSubtitle: e.target.value })}
+            className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-[#E8D5A8]/15">
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Alternatives Eyebrow</label>
+            <input
+              type="text"
+              value={resultsCopyState.alternativesEyebrow}
+              onChange={(e) => setResultsCopyState({ ...resultsCopyState, alternativesEyebrow: e.target.value })}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Alternatives Heading</label>
+            <input
+              type="text"
+              value={resultsCopyState.alternativesHeading}
+              onChange={(e) => setResultsCopyState({ ...resultsCopyState, alternativesHeading: e.target.value })}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Steps list */}

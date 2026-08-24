@@ -18,6 +18,8 @@ import {
   CMSShadeJourney,
   CMSShadeFinderTeaser,
   CMSPromoBannerConfig,
+  CMSJournalSectionCopy,
+  CMSFindMyShadeResultsCopy,
   Product,
   JournalArticle,
   SupportFaq,
@@ -109,6 +111,15 @@ function ensureSchema(): Promise<void> {
         idempotency_key TEXT UNIQUE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
+
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name TEXT;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_phone TEXT;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_email TEXT;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount NUMERIC NOT NULL DEFAULT 0;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping NUMERIC NOT NULL DEFAULT 0;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code TEXT;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT NOT NULL DEFAULT 'cod';
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'PENDING';
 
       CREATE TABLE IF NOT EXISTS order_items (
         id TEXT PRIMARY KEY,
@@ -330,6 +341,8 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
       { platform: 'Instagram', url: 'https://instagram.com/glamirkbeauty', handle: '@glamirkbeauty' },
       { platform: 'YouTube', url: 'https://youtube.com/@glamirkbeauty', handle: 'Glamirk Atelier' },
       { platform: 'Pinterest', url: 'https://pinterest.com/glamirkbeauty', handle: 'Glamirk Beauty' },
+      { platform: 'LinkedIn', url: 'https://linkedin.com/company/glamirkbeauty', handle: 'Glamirk Beauty' },
+      { platform: 'X', url: 'https://x.com/glamirkbeauty', handle: '@glamirkbeauty' },
     ],
     contactEmail: 'care@glamirk.com',
     contactPhone: '+91 800 452 6475',
@@ -899,6 +912,20 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
     intervalMs: 4000,
   };
 
+  const initialJournalSectionCopy: CMSJournalSectionCopy = {
+    badgeText: 'Editorial Perspectives',
+    heading: 'The Glamirk Journal',
+    subtitle: 'Perspectives on color theory, formulation mastery, and modern rituals crafted for Indian complexions.',
+  };
+
+  const initialFindMyShadeResultsCopy: CMSFindMyShadeResultsCopy = {
+    resultsBadge: 'YOUR GLAMIRK MATCH',
+    resultsHeading: 'YOUR PERSONAL BEAUTY EDIT',
+    resultsSubtitle: 'Calibrated for your verified undertone, signature aesthetic, and occasion.',
+    alternativesEyebrow: 'CURATED VARIATIONS',
+    alternativesHeading: 'MORE SHADES YOU MAY LOVE',
+  };
+
   const initialShadeFinderTeaser: CMSShadeFinderTeaser = {
     badgeText: 'Shade Intelligence',
     heading: 'Find Your Perfect Match',
@@ -984,6 +1011,8 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
     shadeJourney: initialShadeJourney,
     promoBanners: initialPromoBanners,
     shadeFinderTeaser: initialShadeFinderTeaser,
+    journalSectionCopy: initialJournalSectionCopy,
+    findMyShadeResultsCopy: initialFindMyShadeResultsCopy,
   };
 }
 
@@ -1038,6 +1067,12 @@ export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
       }
       if (!cachedDb.shadeFinderTeaser) {
         cachedDb.shadeFinderTeaser = initial.shadeFinderTeaser;
+      }
+      if (!cachedDb.journalSectionCopy) {
+        cachedDb.journalSectionCopy = initial.journalSectionCopy;
+      }
+      if (!cachedDb.findMyShadeResultsCopy) {
+        cachedDb.findMyShadeResultsCopy = initial.findMyShadeResultsCopy;
       }
       // Backfill stock on products persisted before the stock field existed
       cachedDb.products = cachedDb.products.map((p) => {

@@ -5,19 +5,41 @@
 
 import React, { useState } from 'react';
 import { useCMS } from '../../context/CMSContext';
-import { JournalArticle } from '../../types';
+import { JournalArticle, CMSJournalSectionCopy } from '../../types';
 import { Plus, Trash2, Save, Check, ArrowLeft } from 'lucide-react';
 import { ImageCropUploadModal } from './ImageCropUploadModal';
+import { useSyncOnce } from '../../hooks/useSyncOnce';
 
 const CATEGORY_OPTIONS = ['BEAUTY GUIDES', 'MAKEUP', 'SKIN', 'NAILS', 'GLAMIRK STORIES', 'TRENDS'];
 
+const DEFAULT_SECTION_COPY: CMSJournalSectionCopy = {
+  badgeText: 'Editorial Perspectives',
+  heading: 'The Glamirk Journal',
+  subtitle: 'Perspectives on color theory, formulation mastery, and modern rituals crafted for Indian complexions.',
+};
+
 export const AdminBlog: React.FC = () => {
-  const { journalArticles, saveArticle, deleteArticle } = useCMS();
+  const { journalArticles, saveArticle, deleteArticle, journalSectionCopy, saveJournalSectionCopy } = useCMS();
   const [editingArticle, setEditingArticle] = useState<JournalArticle | null>(null);
   const [contentDraft, setContentDraft] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+
+  const [sectionCopyState, setSectionCopyState] = useState<CMSJournalSectionCopy>(journalSectionCopy || DEFAULT_SECTION_COPY);
+  const [isSavingCopy, setIsSavingCopy] = useState(false);
+  const [copySaveSuccess, setCopySaveSuccess] = useState(false);
+  useSyncOnce(journalSectionCopy, setSectionCopyState);
+
+  const handleSaveSectionCopy = async () => {
+    setIsSavingCopy(true);
+    const ok = await saveJournalSectionCopy(sectionCopyState);
+    setIsSavingCopy(false);
+    if (ok) {
+      setCopySaveSuccess(true);
+      setTimeout(() => setCopySaveSuccess(false), 1500);
+    }
+  };
 
   const openEditor = (art: JournalArticle) => {
     setEditingArticle(art);
@@ -305,6 +327,56 @@ export const AdminBlog: React.FC = () => {
           <Plus className="w-4 h-4" />
           <span>New Article</span>
         </button>
+      </div>
+
+      {/* Homepage "The Glamirk Journal" Section Heading */}
+      <div className="p-6 rounded-xl bg-[#171717] border border-[#E8D5A8]/30 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-[#FAF9F6] uppercase tracking-wider">Homepage Section Heading</h3>
+            <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+              The "The Glamirk Journal" preview section on the homepage — the 3 articles shown there come from the list below.
+            </p>
+          </div>
+          <button
+            onClick={handleSaveSectionCopy}
+            disabled={isSavingCopy}
+            className="flex items-center gap-2 px-4 py-2 bg-[#F05A7E] hover:bg-[#E3B84B] hover:text-[#0B0B0B] text-white font-semibold text-xs uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-md disabled:opacity-50 shrink-0"
+          >
+            {copySaveSuccess ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+            <span>{copySaveSuccess ? 'Saved!' : isSavingCopy ? 'Saving...' : 'Save'}</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Badge Text</label>
+            <input
+              type="text"
+              value={sectionCopyState.badgeText}
+              onChange={(e) => setSectionCopyState({ ...sectionCopyState, badgeText: e.target.value })}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Heading</label>
+            <input
+              type="text"
+              value={sectionCopyState.heading}
+              onChange={(e) => setSectionCopyState({ ...sectionCopyState, heading: e.target.value })}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Subtitle</label>
+          <input
+            type="text"
+            value={sectionCopyState.subtitle}
+            onChange={(e) => setSectionCopyState({ ...sectionCopyState, subtitle: e.target.value })}
+            className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

@@ -165,6 +165,7 @@ function AppContent() {
   const [savedAddresses, setSavedAddresses] = useState<Address[]>(DEFAULT_ADDRESSES);
   const [orders, setOrders] = useState<Order[]>(SAMPLE_ORDERS);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
+  const [confirmedOrderWhatsappUrl, setConfirmedOrderWhatsappUrl] = useState<string | undefined>(undefined);
   const [trackingOrderId, setTrackingOrderId] = useState<string | undefined>(undefined);
 
   // Phase 3 Stored Beauty Profile State
@@ -495,9 +496,10 @@ function AppContent() {
   };
 
   // Order Placement Success Handler — server already cleared the cart during checkout.
-  const handlePlaceOrderSuccess = (newOrder: Order) => {
+  const handlePlaceOrderSuccess = (newOrder: Order, whatsappUrl?: string) => {
     setOrders((prev) => [newOrder, ...prev]);
     setConfirmedOrder(newOrder);
+    setConfirmedOrderWhatsappUrl(whatsappUrl);
     setAppliedCoupon(null);
     setCurrentRoute({ page: 'order-confirmation', orderId: newOrder.id });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -567,7 +569,7 @@ function AppContent() {
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-2">
             <LiveOfferCountdown
               targetDate={activeOffers.find((o) => o.showCountdown)!.endDate!}
             />
@@ -816,7 +818,7 @@ function AppContent() {
               const p = GLAMIRK_PRODUCTS.find((item) => item.id === productId);
               if (p) navigateToProduct(p);
             }}
-            onCheckout={(addr) => commerceRef.current.checkout(addr)}
+            onCheckout={(addr, details) => commerceRef.current.checkout(addr, details)}
           />
         )}
 
@@ -824,6 +826,7 @@ function AppContent() {
         {currentRoute.page === 'order-confirmation' && (
           <OrderConfirmationPage
             order={confirmedOrder || orders[0]}
+            whatsappUrl={confirmedOrderWhatsappUrl}
             onTrackOrder={(orderId) => navigateToOrderTracking(orderId)}
             onContinueShopping={() => navigateToShop()}
             onNavigateMyGlam={navigateToMyGlam}

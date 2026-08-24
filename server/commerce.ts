@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
-import { pool, loadDatabase, saveDatabase, withStockLock, broadcastEvent } from './db';
+import { pool, loadDatabase, saveDatabase, withStockLock, broadcastEvent, evaluateOffers } from './db';
 import { Product, Shade, ServerCartItem, Order, OrderItem } from '../src/types';
 
 const router = express.Router();
@@ -442,9 +442,82 @@ router.delete('/cart/items/:id', requireCustomer, async (req: AuthenticatedCusto
 // atomically deducts stock, creates the order, and clears the cart.
 // ==========================================
 
+// Formats the full order into a wa.me deep link so the customer's own
+// WhatsApp opens with the message pre-filled to the admin's number — no
+// WhatsApp Business API/credentials required. Returns null if the admin
+// hasn't configured a number in Global Store Settings yet.
+function buildWhatsAppOrderLink(params: {
+  adminNumber: string | undefined | null;
+  orderNumber: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  address: any;
+  items: OrderItem[];
+  subtotal: number;
+  discount: number;
+  shipping: number;
+  total: number;
+  paymentMethod: string;
+  paymentStatus: string;
+  createdAt: string;
+}): string | null {
+  const digitsOnly = (params.adminNumber || '').replace(/\D/g, '');
+  if (!digitsOnly) return null;
+
+  const addressLines = params.address
+    ? [
+        params.address.addressLine1,
+        params.address.addressLine2,
+        `${params.address.city || ''}, ${params.address.state || ''} - ${params.address.pinCode || ''}`,
+      ]
+        .filter(Boolean)
+        .join(', ')
+    : 'Not provided';
+
+  const itemLines = params.items
+    .map((it, i) => {
+      const variant = it.shade ? ` (${it.shade.name})` : it.size ? ` (${it.size})` : '';
+      return `${i + 1}. ${it.productName}${variant} x${it.quantity} — ₹${it.price * it.quantity}`;
+    })
+    .join('\n');
+
+  const lines = [
+    '🛍️ *New Order Received*',
+    '',
+    `*Order ID:* #${params.orderNumber}`,
+    `*Date:* ${params.createdAt}`,
+    '',
+    `*Customer:* ${params.customerName}`,
+    `*Phone:* ${params.customerPhone}`,
+    `*Email:* ${params.customerEmail}`,
+    `*Delivery Address:* ${addressLines}`,
+    '',
+    '*Items:*',
+    itemLines,
+    '',
+    `*Subtotal:* ₹${params.subtotal}`,
+    `*Discount:* -₹${params.discount}`,
+    `*Shipping:* ₹${params.shipping}`,
+    `*Total:* ₹${params.total}`,
+    '',
+    `*Payment Method:* ${params.paymentMethod.toUpperCase()}`,
+    `*Payment Status:* ${params.paymentStatus}`,
+  ];
+
+  return `https://wa.me/${digitsOnly}?text=${encodeURIComponent(lines.join('\n'))}`;
+}
+
 router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
-  const { shippingAddress, idempotencyKey } = req.body || {};
+  const { shippingAddress, idempotencyKey, customerName, customerPhone, customerEmail, paymentMethod, couponCode } = req.body || {};
   const userId = req.customer!.id;
+
+  // Online payment isn't wired to a real gateway yet — the checkout UI only
+  // ever offers COD, but reject it here too rather than silently accepting
+  // a client that somehow sent something else.
+  if (paymentMethod && paymentMethod !== 'cod') {
+    return res.status(400).json({ error: 'Online payment is coming soon. Please select Cash on Delivery for now.' });
+  }
 
   try {
     const result = await withStockLock(async () => {
@@ -507,17 +580,43 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
         };
       }
 
-      await saveDatabase(db);
-      broadcastEvent('CMS_UPDATE', 'products', null);
+      // Discount is computed here, never trusted from the client — look up
+      // the coupon against the live, currently-active offer list.
+      let discount = 0;
+      let appliedCouponCode: string | null = null;
+      if (couponCode) {
+        const liveOffers = evaluateOffers(db.offers || []);
+        const offer = liveOffers.find(
+          (o) => o.status === 'active' && o.couponCode && o.couponCode.toUpperCase() === String(couponCode).toUpperCase()
+        );
+        if (offer && subtotal >= (offer.minOrderValue || 0)) {
+          if (offer.discountType === 'percentage') {
+            discount = Math.round((subtotal * offer.discountValue) / 100);
+          } else if (offer.discountType === 'flat') {
+            discount = offer.discountValue;
+          }
+          discount = Math.min(discount, subtotal);
+          appliedCouponCode = offer.couponCode!;
+        }
+      }
 
-      const shipping = subtotal >= 999 ? 0 : 99;
-      const total = subtotal + shipping;
+      const shipping = subtotal - discount >= 999 ? 0 : 99;
+      const total = Math.max(0, subtotal - discount + shipping);
       const orderId = 'ord-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
       const orderNumber = 'GLM' + Date.now().toString().slice(-8);
+      const resolvedName = customerName || shippingAddress?.name || '';
+      const resolvedPhone = customerPhone || shippingAddress?.phone || '';
+      const resolvedEmail = customerEmail || shippingAddress?.email || '';
 
       await pool.query(
-        'INSERT INTO orders (id, user_id, order_number, status, subtotal, total, shipping_address, idempotency_key) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-        [orderId, userId, orderNumber, 'CONFIRMED', subtotal, total, shippingAddress ? JSON.stringify(shippingAddress) : null, idempotencyKey || null]
+        `INSERT INTO orders
+          (id, user_id, order_number, status, subtotal, discount, shipping, total, shipping_address, idempotency_key, customer_name, customer_phone, customer_email, coupon_code, payment_method, payment_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+        [
+          orderId, userId, orderNumber, 'CONFIRMED', subtotal, discount, shipping, total,
+          shippingAddress ? JSON.stringify(shippingAddress) : null, idempotencyKey || null,
+          resolvedName, resolvedPhone, resolvedEmail, appliedCouponCode, 'cod', 'PENDING',
+        ]
       );
 
       for (const item of orderItems) {
@@ -530,26 +629,44 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
 
       await pool.query('DELETE FROM cart_items WHERE user_id = $1', [userId]);
 
+      const createdAt = new Date().toISOString();
       const order: Order = {
         id: orderId,
         orderNumber,
-        createdAt: new Date().toISOString(),
+        createdAt,
         status: 'CONFIRMED',
         items: orderItems,
         subtotal,
-        discount: 0,
+        discount,
         shipping,
         tax: 0,
         total,
         deliveryAddress: shippingAddress,
-        payment: { method: 'COD' } as any,
+        payment: { method: 'cod', status: 'PENDING' },
         estimatedDelivery: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
         timeline: [
-          { status: 'CONFIRMED', timestamp: new Date().toISOString(), note: 'Order confirmed', completed: true },
+          { status: 'CONFIRMED', timestamp: createdAt, note: 'Order confirmed', completed: true },
         ],
       };
 
-      return { order };
+      const whatsappUrl = buildWhatsAppOrderLink({
+        adminNumber: db.globalSettings?.whatsappOrderNumber,
+        orderNumber,
+        customerName: resolvedName,
+        customerPhone: resolvedPhone,
+        customerEmail: resolvedEmail,
+        address: shippingAddress,
+        items: orderItems,
+        subtotal,
+        discount,
+        shipping,
+        total,
+        paymentMethod: 'COD',
+        paymentStatus: 'PENDING',
+        createdAt: new Date(createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      });
+
+      return { order, whatsappUrl };
     });
 
     if ('error' in result) {
@@ -558,7 +675,7 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
     if ('alreadyProcessed' in result) {
       return res.json({ order: result.order, alreadyProcessed: true });
     }
-    res.json({ order: result.order });
+    res.json({ order: result.order, whatsappUrl: result.whatsappUrl });
   } catch (err) {
     console.error('Checkout failed:', err);
     res.status(500).json({ error: 'Checkout failed. Please try again.' });

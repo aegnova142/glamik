@@ -5,6 +5,8 @@ import {
   Instagram,
   Youtube,
   Globe,
+  Linkedin,
+  X as XLogo,
   ShieldCheck,
   RotateCcw,
   Headphones,
@@ -21,6 +23,14 @@ import {
 } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 import { CMSFooterLink } from '../../types';
+
+// lucide-react has no Pinterest glyph — a small single-color brand mark,
+// styled the same as every other social icon (sized via className).
+const PinterestLogo: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M12 0C5.373 0 0 5.373 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.03-.655 2.569-.994 3.995-.283 1.194.598 2.169 1.775 2.169 2.129 0 3.768-2.245 3.768-5.487 0-2.868-2.061-4.874-5.005-4.874-3.41 0-5.409 2.557-5.409 5.199 0 1.03.397 2.132.892 2.732a.36.36 0 0 1 .083.345c-.09.375-.293 1.194-.333 1.361-.052.221-.174.267-.4.161-1.492-.694-2.424-2.876-2.424-4.627 0-3.769 2.738-7.229 7.892-7.229 4.144 0 7.365 2.953 7.365 6.899 0 4.117-2.595 7.431-6.199 7.431-1.211 0-2.35-.629-2.738-1.373 0 0-.599 2.282-.744 2.84-.269 1.037-.998 2.336-1.487 3.128C9.399 23.837 10.679 24 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0Z"/>
+  </svg>
+);
 
 interface FooterProps {
   onOpenShadeFinder: () => void;
@@ -45,7 +55,11 @@ const SOCIAL_ICON_MAP: Record<string, React.ComponentType<{ className?: string }
   Instagram,
   YouTube: Youtube,
   Youtube,
-  Pinterest: Globe,
+  Pinterest: PinterestLogo,
+  LinkedIn: Linkedin,
+  Linkedin,
+  X: XLogo,
+  Twitter: XLogo,
 };
 
 const TRUST_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {

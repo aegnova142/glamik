@@ -5,7 +5,7 @@ import { useCMS } from '../../context/CMSContext';
 
 const SESSION_KEY = 'glamirk_promo_banner_popup_shown';
 const OPEN_DELAY_MS = 800;
-const MAX_DISPLAY_MS = 15000;
+const MAX_DISPLAY_MS = 60000;
 const DEFAULT_INTERVAL_MS = 4000;
 const SWIPE_THRESHOLD_PX = 50;
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -144,7 +144,13 @@ export const PromoBannerPopup: React.FC = () => {
             onTouchEnd={handleTouchEnd}
             className="relative z-10 max-w-full max-h-full sm:max-w-[78vw] sm:max-h-[85vh] lg:max-w-[1200px]"
           >
-            <AnimatePresence mode="wait">
+            {/* True crossfade: "popLayout" pulls the outgoing banner out of
+                document flow (frozen at its own size) while it fades out, so
+                the incoming banner lays out and fades in at the same time
+                instead of waiting for the old one to fully disappear first
+                — no sequential "flash", and the container never collapses
+                since the in-flow (entering) image still drives its size. */}
+            <AnimatePresence mode="popLayout">
               <motion.img
                 key={current.id}
                 src={current.image}
@@ -152,7 +158,7 @@ export const PromoBannerPopup: React.FC = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.45, ease: EASE }}
+                transition={{ duration: 0.8, ease: EASE }}
                 onClick={handleBannerClick}
                 draggable={false}
                 className={`block w-auto h-auto max-w-full max-h-full sm:max-w-[78vw] sm:max-h-[85vh] lg:max-w-[1200px] rounded-[18px] shadow-2xl object-contain ${

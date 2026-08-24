@@ -343,11 +343,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               </AnimatePresence>
             </div>
 
-            {/* Wishlist button */}
+            {/* Wishlist button — the mobile bottom tab bar already covers this below md, so it's desktop/tablet only here to keep the mobile header from overflowing */}
             <button
               id="nav-wishlist-button"
               onClick={onOpenWishlist}
-              className={`relative p-2 rounded-full hover:bg-[#FCE8ED] transition-colors cursor-pointer ${
+              className={`hidden md:block relative p-2 rounded-full hover:bg-[#FCE8ED] transition-colors cursor-pointer ${
                 currentRoute.page === 'wishlist'
                   ? 'text-[#F05A7E]'
                   : 'text-[#121212] hover:text-[#F05A7E]'
@@ -363,15 +363,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </button>
 
-            {/* Reference-Style Pink Cart Pill Button */}
+            {/* Reference-Style Pink Cart Pill Button — likewise mobile-covered by the bottom tab bar's Bag tab */}
             <button
               id="nav-bag-button"
               onClick={onOpenCart}
-              className="relative flex items-center justify-center p-2.5 sm:px-3.5 sm:py-2 bg-[#F05A7E] text-white rounded-full hover:bg-[#F05A7E] transition-all shadow-[0_4px_14px_rgba(240, 90, 126,0.3)] hover:scale-105 group cursor-pointer"
+              className="hidden md:flex relative items-center justify-center px-3.5 py-2 bg-[#F05A7E] text-white rounded-full hover:bg-[#F05A7E] transition-all shadow-[0_4px_14px_rgba(240, 90, 126,0.3)] hover:scale-105 group cursor-pointer"
               title="Shopping Cart"
               aria-label="Shopping Cart"
             >
-              <ShoppingBag className="w-4 h-4 sm:w-[18px] sm:h-[18px] stroke-[2]" />
+              <ShoppingBag className="w-[18px] h-[18px] stroke-[2]" />
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-white text-[#F05A7E] text-[9.5px] font-bold rounded-full flex items-center justify-center shadow-xs border border-[#E8D5A8]">
                   {cartCount}

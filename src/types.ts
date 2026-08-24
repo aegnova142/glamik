@@ -452,10 +452,11 @@ export interface Address {
   isDefault?: boolean;
 }
 
-export type PaymentMethodType = 'upi' | 'card' | 'netbanking' | 'cod';
+export type PaymentMethodType = 'upi' | 'card' | 'netbanking' | 'cod' | 'online';
 
 export interface PaymentDetails {
   method: PaymentMethodType;
+  status: 'PENDING' | 'PAID';
   upiId?: string;
   cardLast4?: string;
   cardNetwork?: string;
@@ -793,6 +794,8 @@ export interface CMSGlobalSettings {
   logoUrl?: string;
   contactEmail: string;
   contactPhone: string;
+  /** WhatsApp number that receives new-order notifications, e.g. "+919876543210". Leave blank to disable the WhatsApp step at checkout. */
+  whatsappOrderNumber?: string;
   address: string;
   currency: string;
   currencySymbol: string;
@@ -1056,6 +1059,25 @@ export interface CMSPromoBannerConfig {
   intervalMs?: number;
 }
 
+/** Homepage "The Glamirk Journal" section heading — the 3 preview articles
+ * themselves are already CMS-managed via journalArticles. */
+export interface CMSJournalSectionCopy {
+  badgeText: string;
+  heading: string;
+  subtitle: string;
+}
+
+/** Headings on the Find My Shade quiz results view (Step 8 of FindMyShadePage) —
+ * distinct from CMSShadeJourney, which covers the "how it works" steps shown
+ * before the quiz starts. */
+export interface CMSFindMyShadeResultsCopy {
+  resultsBadge: string;
+  resultsHeading: string;
+  resultsSubtitle: string;
+  alternativesEyebrow: string;
+  alternativesHeading: string;
+}
+
 export interface CMSDatabaseSchema {
   users: CMSUser[];
   pages: CMSPage[];
@@ -1077,5 +1099,7 @@ export interface CMSDatabaseSchema {
   shadeJourney: CMSShadeJourney;
   promoBanners: CMSPromoBannerConfig;
   shadeFinderTeaser: CMSShadeFinderTeaser;
+  journalSectionCopy: CMSJournalSectionCopy;
+  findMyShadeResultsCopy: CMSFindMyShadeResultsCopy;
 }
 

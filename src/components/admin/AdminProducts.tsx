@@ -470,13 +470,13 @@ export const AdminProducts: React.FC = () => {
               {uploadError && <p className="text-[11px] text-[#F05A7E]">{uploadError}</p>}
 
               {([
-                { key: 'primary', label: 'Primary Image (card + hover default)', uploadable: true, required: true },
-                { key: 'secondary', label: 'Secondary / Hover Image', uploadable: true, required: false },
-                { key: 'detail', label: 'Detail Shot (product page gallery)', uploadable: false, required: false },
-                { key: 'texture', label: 'Texture Shot (product page gallery)', uploadable: false, required: false },
-                { key: 'lifestyle', label: 'Lifestyle Shot (product page gallery)', uploadable: false, required: false },
-                { key: 'swatch', label: 'Swatch Shot (product page gallery)', uploadable: false, required: false },
-              ] as { key: ProductImageSlot; label: string; uploadable: boolean; required: boolean }[]).map((slot) => {
+                { key: 'primary', label: 'Primary Image (card + hover default)', required: true },
+                { key: 'secondary', label: 'Secondary / Hover Image', required: false },
+                { key: 'detail', label: 'Detail Shot (product page gallery)', required: false },
+                { key: 'texture', label: 'Texture Shot (product page gallery)', required: false },
+                { key: 'lifestyle', label: 'Lifestyle Shot (product page gallery)', required: false },
+                { key: 'swatch', label: 'Swatch Shot (product page gallery)', required: false },
+              ] as { key: ProductImageSlot; label: string; required: boolean }[]).map((slot) => {
                 const url = (editingProduct.images as any)[slot.key] || '';
                 return (
                   <div key={slot.key}>
@@ -496,21 +496,19 @@ export const AdminProducts: React.FC = () => {
                         placeholder="https://... or use Upload"
                         className="flex-1 px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
                       />
-                      {slot.uploadable && (
-                        <label className="px-3 py-2 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] transition-colors cursor-pointer whitespace-nowrap">
-                          {uploadingSlot === slot.key ? 'Uploading...' : 'Upload'}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            disabled={uploadingSlot !== null}
-                            onChange={(e) => {
-                              handleSlotUpload(slot.key, e.target.files?.[0]);
-                              e.target.value = '';
-                            }}
-                          />
-                        </label>
-                      )}
+                      <label className="px-3 py-2 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] transition-colors cursor-pointer whitespace-nowrap">
+                        {uploadingSlot === slot.key ? 'Uploading...' : 'Upload'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={uploadingSlot === slot.key}
+                          onChange={(e) => {
+                            handleSlotUpload(slot.key, e.target.files?.[0]);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
                     </div>
                     {url && (
                       <div className="mt-2 w-full h-28 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B] flex items-center justify-center">

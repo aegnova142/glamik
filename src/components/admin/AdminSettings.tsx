@@ -19,6 +19,7 @@ export const AdminSettings: React.FC = () => {
       logoUrl: '',
       contactEmail: 'care@glamirk.com',
       contactPhone: '+91 800 452 6475',
+      whatsappOrderNumber: '',
       address: 'Atelier 08, Lodha World Towers, Lower Parel, Mumbai, Maharashtra 400013',
       currency: 'INR',
       currencySymbol: '₹',
@@ -254,6 +255,22 @@ export const AdminSettings: React.FC = () => {
               onChange={(e) => setSettings({ ...settings, contactPhone: e.target.value })}
               className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+              WhatsApp Order Notifications
+            </label>
+            <input
+              type="text"
+              value={settings.whatsappOrderNumber || ''}
+              onChange={(e) => setSettings({ ...settings, whatsappOrderNumber: e.target.value })}
+              placeholder="+91 98765 43210"
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+            <p className="text-[10.5px] text-[#6B6B6B] mt-1">
+              When a customer confirms an order, this number receives a pre-filled WhatsApp message with the full order details. Leave blank to disable.
+            </p>
           </div>
         </div>
 

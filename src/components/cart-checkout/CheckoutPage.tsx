@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CartItem, Address, PaymentMethodType, Order, Coupon } from '../../types';
+import { CartItem, Address, Order, Coupon } from '../../types';
 import { DEFAULT_ADDRESSES, FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE } from '../../data/commerce';
 import {
   ShieldCheck,
@@ -8,10 +8,7 @@ import {
   ChevronRight,
   Plus,
   ArrowLeft,
-  Truck,
   CreditCard,
-  Smartphone,
-  Building2,
   Banknote,
   AlertCircle,
   Clock,
@@ -19,18 +16,29 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+interface CheckoutDetails {
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  paymentMethod: 'cod';
+  couponCode?: string;
+}
+
 interface CheckoutPageProps {
   cartItems: CartItem[];
   appliedCoupon: Coupon | null;
   savedAddresses: Address[];
   onAddNewAddress: (address: Address) => void;
-  onPlaceOrderSuccess: (order: Order) => void;
+  onPlaceOrderSuccess: (order: Order, whatsappUrl?: string) => void;
   onBackToCart: () => void;
   onOpenProduct: (productId: string) => void;
-  onCheckout: (shippingAddress: Address) => Promise<{ success: boolean; order?: Order; error?: string }>;
+  onCheckout: (
+    shippingAddress: Address,
+    details: CheckoutDetails
+  ) => Promise<{ success: boolean; order?: Order; whatsappUrl?: string; error?: string }>;
 }
 
-type CheckoutStep = 'details' | 'delivery' | 'payment' | 'review';
+type CheckoutStep = 'details' | 'payment' | 'review';
 
 export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   cartItems,
@@ -66,17 +74,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     isDefault: false,
   });
 
-  // Delivery Method Selection
-  const [deliverySpeed, setDeliverySpeed] = useState<'standard' | 'express'>('standard');
-
-  // Payment Selection
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('upi');
-  const [upiId, setUpiId] = useState('aanya@okhdfcbank');
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [selectedBank, setSelectedBank] = useState('HDFC Bank');
-
   // Processing & Error State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -95,9 +92,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     : 0;
 
   const isShippingFree = subtotal >= FREE_SHIPPING_THRESHOLD || appliedCoupon?.code === 'PRIVESHIP';
-  const baseShippingFee = isShippingFree ? 0 : STANDARD_SHIPPING_FEE;
-  const expressSurcharge = deliverySpeed === 'express' ? 99 : 0;
-  const shippingFee = cartItems.length === 0 ? 0 : baseShippingFee + expressSurcharge;
+  const shippingFee = cartItems.length === 0 || isShippingFree ? 0 : STANDARD_SHIPPING_FEE;
   const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee);
 
   const activeAddress =
@@ -144,7 +139,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     setValidationErrors({});
   };
 
-  const handlePlaceOrder = async () => {
+  const handleConfirmOrder = async () => {
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -155,33 +150,37 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       email: customerEmail || activeAddress.email,
     };
 
-    const result = await onCheckout(addressForOrder);
+    const result = await onCheckout(addressForOrder, {
+      customerName,
+      customerPhone,
+      customerEmail,
+      paymentMethod: 'cod',
+      couponCode: appliedCoupon?.code,
+    });
     setIsSubmitting(false);
 
     if (!result.success || !result.order) {
-      setErrorMessage(result.error || 'The authorization request was declined. Your bag contents remain safe and unchanged.');
+      setErrorMessage(result.error || 'We couldn’t place your order. Your bag contents remain safe and unchanged.');
       return;
     }
 
-    // Merge server payment method/timing display info (server tracks totals/stock; payment UI stays local).
-    const now = new Date();
-    const formattedDate = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    // Cosmetic dispatch details the server doesn't track (courier assignment
+    // happens after packing, not at order time) — trackingNumber/courierPartner
+    // stay a display placeholder until real fulfillment status feeds this in.
     const enrichedOrder: Order = {
       ...result.order,
-      payment: {
-        method: paymentMethod,
-        upiId: paymentMethod === 'upi' ? upiId : undefined,
-        cardLast4: paymentMethod === 'card' ? (cardNumber ? cardNumber.slice(-4) : '4092') : undefined,
-        cardNetwork: paymentMethod === 'card' ? 'Visa Platinum' : undefined,
-        bankName: paymentMethod === 'netbanking' ? selectedBank : undefined,
-        paidAt: `${formattedDate}, ${now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`,
-      },
-      estimatedDelivery: deliverySpeed === 'express' ? 'Within 24-48 Hours' : '3–4 Business Days',
       trackingNumber: `BLUEDART-${Math.floor(10000000 + Math.random() * 90000000)}`,
       courierPartner: 'Blue Dart Apex Premier Air',
     };
 
-    onPlaceOrderSuccess(enrichedOrder);
+    // Best-effort: opens the customer's own WhatsApp with the order pre-filled
+    // to the admin's number. Requires one tap to actually send — there's no
+    // WhatsApp Business API wired up, so this can't happen silently server-side.
+    if (result.whatsappUrl) {
+      window.open(result.whatsappUrl, '_blank', 'noopener,noreferrer');
+    }
+
+    onPlaceOrderSuccess(enrichedOrder, result.whatsappUrl);
   };
 
   return (
@@ -245,33 +244,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             {/* Step 2 */}
             <button
               onClick={() => {
-                if (validateDetails()) setCurrentStep('delivery');
-              }}
-              className={`flex items-center gap-2 cursor-pointer ${
-                currentStep === 'delivery'
-                  ? 'text-[#121212]'
-                  : ['payment', 'review'].includes(currentStep)
-                  ? 'text-[#C9972B]'
-                  : 'text-[#6B6B6B]'
-              }`}
-            >
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-mono ${
-                currentStep === 'delivery'
-                  ? 'bg-[#0B0B0B] text-white'
-                  : ['payment', 'review'].includes(currentStep)
-                  ? 'bg-[#C9972B] text-white'
-                  : 'bg-[#E8D5A8] text-[#6B6B6B]'
-              }`}>
-                02
-              </span>
-              <span className="hidden sm:inline">DELIVERY</span>
-            </button>
-
-            <span className="flex-1 h-[1px] bg-[#E8D5A8] mx-3" />
-
-            {/* Step 3 */}
-            <button
-              onClick={() => {
                 if (validateDetails()) setCurrentStep('payment');
               }}
               className={`flex items-center gap-2 cursor-pointer ${
@@ -289,14 +261,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   ? 'bg-[#C9972B] text-white'
                   : 'bg-[#E8D5A8] text-[#6B6B6B]'
               }`}>
-                03
+                02
               </span>
               <span className="hidden sm:inline">PAYMENT</span>
             </button>
 
             <span className="flex-1 h-[1px] bg-[#E8D5A8] mx-3" />
 
-            {/* Step 4 */}
+            {/* Step 3 */}
             <button
               onClick={() => {
                 if (validateDetails()) setCurrentStep('review');
@@ -310,7 +282,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   ? 'bg-[#0B0B0B] text-white'
                   : 'bg-[#E8D5A8] text-[#6B6B6B]'
               }`}>
-                04
+                03
               </span>
               <span className="hidden sm:inline">REVIEW</span>
             </button>
@@ -333,10 +305,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               >
                 <div className="border-b border-[#E8D5A8] pb-4">
                   <span className="text-[10px] font-semibold tracking-[0.24em] uppercase text-[#C9972B]">
-                    STEP 01 OF 04
+                    STEP 01 OF 03
                   </span>
                   <h2 className="font-serif text-2xl text-[#121212] mt-1">
-                    CONTACT & DISPATCH DETAILS
+                    CUSTOMER & DELIVERY DETAILS
                   </h2>
                   <p className="text-xs text-[#6B6B6B] mt-1">
                     We will send order tracking, receipt invoices, and delivery PIN confirmations here.
@@ -405,39 +377,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       )}
                     </div>
                   </div>
-                </div>
-
-                <div className="pt-4 border-t border-[#E8D5A8] flex justify-end">
-                  <button
-                    onClick={() => {
-                      if (validateDetails()) setCurrentStep('delivery');
-                    }}
-                    className="px-8 py-3.5 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-[0.2em] uppercase hover:bg-[#0B0B0B] transition-colors flex items-center gap-2 cursor-pointer"
-                  >
-                    <span>CONTINUE TO DELIVERY</span>
-                    <ChevronRight className="w-4 h-4 text-[#C9972B]" />
-                  </button>
-                </div>
-              </motion.div>
-            )}
-
-            {/* STEP 2: DELIVERY ADDRESS & SPEED */}
-            {currentStep === 'delivery' && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-6 sm:p-8 bg-white border border-[#E8D5A8] space-y-6"
-              >
-                <div className="border-b border-[#E8D5A8] pb-4">
-                  <span className="text-[10px] font-semibold tracking-[0.24em] uppercase text-[#C9972B]">
-                    STEP 02 OF 04
-                  </span>
-                  <h2 className="font-serif text-2xl text-[#121212] mt-1">
-                    DELIVERY ADDRESS & COURIER
-                  </h2>
-                  <p className="text-xs text-[#6B6B6B] mt-1">
-                    Select a saved destination or create a new address.
-                  </p>
                 </div>
 
                 {/* Saved Address Cards */}
@@ -613,68 +552,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </motion.form>
                 )}
 
-                {/* Delivery Courier Speed Selection */}
-                <div className="space-y-3 pt-4 border-t border-[#E8D5A8]">
-                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
-                    DELIVERY SPEED & METHOD:
-                  </label>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setDeliverySpeed('standard')}
-                      className={`p-4 text-left border transition-all cursor-pointer ${
-                        deliverySpeed === 'standard'
-                          ? 'border-[#0B0B0B] bg-[#FAF9F6] ring-1 ring-[#0B0B0B]'
-                          : 'border-[#E8D5A8] bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-serif text-sm font-medium text-[#121212]">
-                          Luxury Air Express
-                        </span>
-                        <span className="text-xs font-semibold text-[#C9972B]">
-                          {isShippingFree ? 'FREE' : '₹99'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#6B6B6B] mt-1">
-                        3–4 Business Days across all Indian pin codes via Blue Dart Air.
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setDeliverySpeed('express')}
-                      className={`p-4 text-left border transition-all cursor-pointer ${
-                        deliverySpeed === 'express'
-                          ? 'border-[#0B0B0B] bg-[#FAF9F6] ring-1 ring-[#0B0B0B]'
-                          : 'border-[#E8D5A8] bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-serif text-sm font-medium text-[#121212]">
-                          Atelier Priority 24-Hour
-                        </span>
-                        <span className="text-xs font-semibold text-[#C9972B]">
-                          +₹99
-                        </span>
-                      </div>
-                      <p className="text-xs text-[#6B6B6B] mt-1">
-                        Guaranteed 24–48 hour dispatch with direct VIP courier tracking.
-                      </p>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-[#E8D5A8] flex justify-between">
+                <div className="pt-4 border-t border-[#E8D5A8] flex justify-end">
                   <button
-                    onClick={() => setCurrentStep('details')}
-                    className="px-6 py-3 border border-[#E8D5A8] text-xs font-semibold uppercase tracking-wider text-[#121212] hover:bg-[#FAF9F6]"
-                  >
-                    BACK
-                  </button>
-                  <button
-                    onClick={() => setCurrentStep('payment')}
+                    onClick={() => {
+                      if (validateDetails()) setCurrentStep('payment');
+                    }}
                     className="px-8 py-3.5 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-[0.2em] uppercase hover:bg-[#0B0B0B] transition-colors flex items-center gap-2 cursor-pointer"
                   >
                     <span>CONTINUE TO PAYMENT</span>
@@ -684,7 +566,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </motion.div>
             )}
 
-            {/* STEP 3: PAYMENT METHOD */}
+            {/* STEP 2: PAYMENT METHOD */}
             {currentStep === 'payment' && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
@@ -693,175 +575,54 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               >
                 <div className="border-b border-[#E8D5A8] pb-4">
                   <span className="text-[10px] font-semibold tracking-[0.24em] uppercase text-[#C9972B]">
-                    STEP 03 OF 04
+                    STEP 02 OF 03
                   </span>
                   <h2 className="font-serif text-2xl text-[#121212] mt-1">
                     SELECT PAYMENT METHOD
                   </h2>
                   <p className="text-xs text-[#6B6B6B] mt-1">
-                    All payment gateways run via verified 256-bit bank-level TLS encryption.
+                    Choose how you'd like to pay for this order.
                   </p>
                 </div>
 
-                {/* Method Tabs */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('upi')}
-                    className={`p-3 text-center border text-xs font-semibold tracking-wider uppercase transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
-                      paymentMethod === 'upi'
-                        ? 'bg-[#0B0B0B] text-white border-[#0B0B0B]'
-                        : 'bg-[#FAF9F6] text-[#6B6B6B] border-[#E8D5A8] hover:border-[#0B0B0B]'
-                    }`}
+                {/* Method Tiles — Online is not wired to a real gateway yet */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div
+                    className="p-4 text-left border border-[#E8D5A8] bg-[#FAF9F6] opacity-60 cursor-not-allowed relative overflow-hidden"
+                    title="Online payment is coming soon"
                   >
-                    <Smartphone className="w-4 h-4" />
-                    <span>UPI APPS</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('card')}
-                    className={`p-3 text-center border text-xs font-semibold tracking-wider uppercase transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
-                      paymentMethod === 'card'
-                        ? 'bg-[#0B0B0B] text-white border-[#0B0B0B]'
-                        : 'bg-[#FAF9F6] text-[#6B6B6B] border-[#E8D5A8] hover:border-[#0B0B0B]'
-                    }`}
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>CARD</span>
-                  </button>
+                    <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-[#E8D5A8] text-[#121212] text-[9px] font-bold uppercase tracking-wider">
+                      Coming Soon
+                    </span>
+                    <CreditCard className="w-5 h-5 text-[#6B6B6B] mb-2" />
+                    <span className="font-serif text-sm font-medium text-[#6B6B6B] block">
+                      Online Payment
+                    </span>
+                    <p className="text-xs text-[#6B6B6B] mt-1">
+                      UPI, Cards & Net Banking — arriving soon.
+                    </p>
+                  </div>
 
                   <button
                     type="button"
-                    onClick={() => setPaymentMethod('netbanking')}
-                    className={`p-3 text-center border text-xs font-semibold tracking-wider uppercase transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
-                      paymentMethod === 'netbanking'
-                        ? 'bg-[#0B0B0B] text-white border-[#0B0B0B]'
-                        : 'bg-[#FAF9F6] text-[#6B6B6B] border-[#E8D5A8] hover:border-[#0B0B0B]'
-                    }`}
+                    className="p-4 text-left border border-[#0B0B0B] bg-white ring-1 ring-[#0B0B0B] cursor-default"
                   >
-                    <Building2 className="w-4 h-4" />
-                    <span>NET BANKING</span>
+                    <div className="flex items-center justify-between mb-2">
+                      <Banknote className="w-5 h-5 text-[#C9972B]" />
+                      <Check className="w-4 h-4 text-[#C9972B]" />
+                    </div>
+                    <span className="font-serif text-sm font-medium text-[#121212] block">
+                      Cash on Delivery
+                    </span>
+                    <p className="text-xs text-[#6B6B6B] mt-1">
+                      Pay in cash or UPI when your order arrives.
+                    </p>
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('cod')}
-                    className={`p-3 text-center border text-xs font-semibold tracking-wider uppercase transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
-                      paymentMethod === 'cod'
-                        ? 'bg-[#0B0B0B] text-white border-[#0B0B0B]'
-                        : 'bg-[#FAF9F6] text-[#6B6B6B] border-[#E8D5A8] hover:border-[#0B0B0B]'
-                    }`}
-                  >
-                    <Banknote className="w-4 h-4" />
-                    <span>COD</span>
-                  </button>
-                </div>
-
-                {/* Sub-panels based on paymentMethod */}
-                <div className="p-5 bg-[#FAF9F6] border border-[#E8D5A8] space-y-4">
-                  {paymentMethod === 'upi' && (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between text-xs text-[#6B6B6B]">
-                        <span>Google Pay • PhonePe • Paytm • Cred • Any BHIM UPI</span>
-                        <span className="text-[10px] text-[#C9972B] font-semibold uppercase">INSTANT</span>
-                      </div>
-                      <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
-                        ENTER UPI VPA / ID:
-                      </label>
-                      <input
-                        type="text"
-                        value={upiId}
-                        onChange={(e) => setUpiId(e.target.value)}
-                        placeholder="yourname@okhdfcbank"
-                        className="w-full p-3 text-xs bg-white border border-[#E8D5A8] focus:border-[#0B0B0B] focus:outline-hidden font-mono"
-                      />
-                      <p className="text-[11px] text-[#6B6B6B]">
-                        You will receive an instant payment request on your preferred UPI application.
-                      </p>
-                    </div>
-                  )}
-
-                  {paymentMethod === 'card' && (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
-                          CARD NUMBER (VISA / MASTERCARD / RUPAY)
-                        </label>
-                        <input
-                          type="text"
-                          maxLength={19}
-                          value={cardNumber}
-                          onChange={(e) => setCardNumber(e.target.value)}
-                          placeholder="4111 •••• •••• 4092"
-                          className="w-full p-3 text-xs bg-white border border-[#E8D5A8] focus:border-[#0B0B0B] focus:outline-hidden font-mono"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
-                            EXPIRY DATE
-                          </label>
-                          <input
-                            type="text"
-                            maxLength={5}
-                            value={cardExpiry}
-                            onChange={(e) => setCardExpiry(e.target.value)}
-                            placeholder="MM/YY"
-                            className="w-full p-3 text-xs bg-white border border-[#E8D5A8] focus:border-[#0B0B0B] focus:outline-hidden font-mono"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
-                            CVV / CVC
-                          </label>
-                          <input
-                            type="password"
-                            maxLength={4}
-                            value={cardCvv}
-                            onChange={(e) => setCardCvv(e.target.value)}
-                            placeholder="•••"
-                            className="w-full p-3 text-xs bg-white border border-[#E8D5A8] focus:border-[#0B0B0B] focus:outline-hidden font-mono"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {paymentMethod === 'netbanking' && (
-                    <div className="space-y-3">
-                      <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
-                        SELECT YOUR BANK:
-                      </label>
-                      <select
-                        value={selectedBank}
-                        onChange={(e) => setSelectedBank(e.target.value)}
-                        className="w-full p-3 text-xs bg-white border border-[#E8D5A8] focus:border-[#0B0B0B] focus:outline-hidden"
-                      >
-                        <option value="HDFC Bank">HDFC Bank</option>
-                        <option value="ICICI Bank">ICICI Bank</option>
-                        <option value="State Bank of India">State Bank of India</option>
-                        <option value="Axis Bank">Axis Bank</option>
-                        <option value="Kotak Mahindra Bank">Kotak Mahindra Bank</option>
-                      </select>
-                    </div>
-                  )}
-
-                  {paymentMethod === 'cod' && (
-                    <div className="space-y-2 text-xs text-[#6B6B6B]">
-                      <p className="font-medium text-[#121212]">
-                        Cash / UPI on Delivery available at your delivery location.
-                      </p>
-                      <p>
-                        Please keep exact cash or prepare QR payment upon delivery handover.
-                      </p>
-                    </div>
-                  )}
                 </div>
 
                 <div className="pt-4 border-t border-[#E8D5A8] flex justify-between">
                   <button
-                    onClick={() => setCurrentStep('delivery')}
+                    onClick={() => setCurrentStep('details')}
                     className="px-6 py-3 border border-[#E8D5A8] text-xs font-semibold uppercase tracking-wider text-[#121212] hover:bg-[#FAF9F6]"
                   >
                     BACK
@@ -886,7 +647,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               >
                 <div className="border-b border-[#E8D5A8] pb-4">
                   <span className="text-[10px] font-semibold tracking-[0.24em] uppercase text-[#C9972B]">
-                    STEP 04 OF 04
+                    STEP 03 OF 03
                   </span>
                   <h2 className="font-serif text-2xl text-[#121212] mt-1">
                     REVIEW & CONFIRM ORDER
@@ -906,7 +667,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         DELIVERING TO:
                       </span>
                       <button
-                        onClick={() => setCurrentStep('delivery')}
+                        onClick={() => setCurrentStep('details')}
                         className="text-[11px] font-semibold text-[#C9972B] uppercase hover:underline"
                       >
                         EDIT
@@ -941,16 +702,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       </button>
                     </div>
                     <h4 className="font-serif text-sm font-medium text-[#121212] uppercase">
-                      {paymentMethod === 'upi'
-                        ? `UPI (${upiId})`
-                        : paymentMethod === 'card'
-                        ? `CARD (ending in ${cardNumber.slice(-4) || '4092'})`
-                        : paymentMethod === 'netbanking'
-                        ? `NET BANKING (${selectedBank})`
-                        : 'CASH ON DELIVERY'}
+                      CASH ON DELIVERY
                     </h4>
                     <p className="text-xs text-[#6B6B6B]">
-                      Delivery Speed: {deliverySpeed === 'express' ? 'Atelier 24-48 Hr Express' : 'Standard Air Courier (3-4 Days)'}
+                      Standard Air Courier (3-4 Days)
                     </p>
                   </div>
 
@@ -994,34 +749,28 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <div className="p-5 bg-[#FAF9F6] border border-[#E8D5A8] text-xs text-[#F05A7E] space-y-3">
                     <div className="flex items-center gap-2 font-semibold tracking-wider uppercase text-xs text-[#F05A7E]">
                       <AlertCircle className="w-4 h-4 text-[#F05A7E] shrink-0" />
-                      <span>YOUR PAYMENT DIDN’T GO THROUGH.</span>
+                      <span>YOUR ORDER COULDN'T BE PLACED.</span>
                     </div>
                     <p className="text-[#F05A7E] font-light leading-relaxed">
-                      {errorMessage || 'The authorization request was declined by the issuing bank. Your bag contents remain safe and unchanged.'}
+                      {errorMessage}
                     </p>
                     <div className="flex items-center gap-3 pt-2">
                       <button
-                        onClick={handlePlaceOrder}
+                        onClick={handleConfirmOrder}
                         className="px-4 py-2 bg-[#F05A7E] text-white text-[11px] uppercase tracking-widest font-semibold hover:bg-[#F05A7E] transition-colors"
                       >
                         TRY AGAIN
-                      </button>
-                      <button
-                        onClick={() => setCurrentStep('payment')}
-                        className="px-4 py-2 border border-[#F05A7E] text-[#F05A7E] text-[11px] uppercase tracking-widest font-semibold hover:bg-white transition-colors"
-                      >
-                        CHANGE PAYMENT METHOD
                       </button>
                     </div>
                   </div>
                 )}
 
-                {/* Place Order Final Button */}
+                {/* Confirm Order Final Button */}
                 <div className="pt-4 border-t border-[#E8D5A8] space-y-3">
                   <button
                     id="checkout-place-order-final-btn"
                     disabled={isSubmitting}
-                    onClick={handlePlaceOrder}
+                    onClick={handleConfirmOrder}
                     className={`w-full py-4.5 bg-[#0B0B0B] text-[#FAF9F6] text-xs sm:text-[13px] font-semibold tracking-[0.24em] uppercase transition-all duration-300 flex items-center justify-center gap-3 shadow-lg cursor-pointer ${
                       isSubmitting ? 'opacity-80 cursor-wait' : 'hover:bg-[#0B0B0B]'
                     }`}
@@ -1029,18 +778,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     {isSubmitting ? (
                       <>
                         <Sparkles className="w-4 h-4 text-[#C9972B] animate-spin" />
-                        <span>PLACING YOUR LUXURY ORDER...</span>
+                        <span>CONFIRMING YOUR ORDER...</span>
                       </>
                     ) : (
                       <>
                         <ShieldCheck className="w-4 h-4 text-[#C9972B]" />
-                        <span>PLACE ORDER • ₹{grandTotal}</span>
+                        <span>CONFIRM ORDER • ₹{grandTotal}</span>
                       </>
                     )}
                   </button>
 
                   <p className="text-[10.5px] text-center text-[#6B6B6B]">
-                    By placing your order, you authorize Glamirk Beauty to process your reservation in accordance with our terms of service.
+                    By confirming, you authorize Glamirk Beauty to process this Cash on Delivery order.
                   </p>
                 </div>
               </motion.div>

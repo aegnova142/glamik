@@ -11,6 +11,15 @@ interface MutationResult {
 
 interface CheckoutResult extends MutationResult {
   order?: Order;
+  whatsappUrl?: string;
+}
+
+interface CheckoutDetails {
+  customerName: string;
+  customerPhone: string;
+  customerEmail: string;
+  paymentMethod: 'cod';
+  couponCode?: string;
 }
 
 interface CommerceContextType {
@@ -24,7 +33,7 @@ interface CommerceContextType {
   clearCartLocally: () => void;
   toggleWishlist: (productId: string) => Promise<MutationResult>;
   refreshCommerce: () => Promise<void>;
-  checkout: (shippingAddress: Address) => Promise<CheckoutResult>;
+  checkout: (shippingAddress: Address, details: CheckoutDetails) => Promise<CheckoutResult>;
 }
 
 const CommerceContext = createContext<CommerceContextType | undefined>(undefined);
@@ -140,16 +149,16 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
     return { success: false, error: res.error || 'Could not update your wishlist.' };
   };
 
-  const checkout = async (shippingAddress: Address): Promise<CheckoutResult> => {
+  const checkout = async (shippingAddress: Address, details: CheckoutDetails): Promise<CheckoutResult> => {
     if (!isCustomerLoggedIn) return { success: false, loginRequired: true };
     const idempotencyKey = 'checkout-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
-    const res = await customerApiFetch<{ order: Order }>('/api/customer/checkout', {
+    const res = await customerApiFetch<{ order: Order; whatsappUrl?: string }>('/api/customer/checkout', {
       method: 'POST',
-      body: JSON.stringify({ shippingAddress, idempotencyKey }),
+      body: JSON.stringify({ shippingAddress, idempotencyKey, ...details }),
     });
     if (res.data?.order) {
       clearCartLocally();
-      return { success: true, order: res.data.order };
+      return { success: true, order: res.data.order, whatsappUrl: res.data.whatsappUrl };
     }
     return { success: false, error: res.error || 'Checkout failed. Please try again.' };
   };

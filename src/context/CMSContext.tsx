@@ -749,7 +749,25 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     refreshPublicContent: loadPublicContent,
   };
 
-  return <CMSContext.Provider value={value}>{children}</CMSContext.Provider>;
+  //return <CMSContext.Provider value={value}>{children}</CMSContext.Provider>;
+  return (
+  <CMSContext.Provider value={value}>
+    {isLoading ? (
+      <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-2xl font-semibold tracking-[0.2em] text-[#121212]">
+            GLAMIRK
+          </div>
+          <div className="mt-2 text-[10px] uppercase tracking-[0.3em] text-[#F05A7E]">
+            Luxury Beauty
+          </div>
+        </div>
+      </div>
+    ) : (
+      children
+    )}
+  </CMSContext.Provider>
+);
 };
 
 export function useCMS(): CMSContextType {

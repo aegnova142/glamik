@@ -32,6 +32,10 @@ const PinterestLogo: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
+// Fixed footer logo — intentionally independent from globalSettings.logoUrl
+// (Navbar logo) so the footer can keep a different/light version.
+const FOOTER_LOGO_URL = 'https://res.cloudinary.com/emu1kahg/image/upload/v1787698409/glamirk-beauty/aublkuiqwzjysvpff8r4.png';
+
 interface FooterProps {
   onOpenShadeFinder: () => void;
   onNavigateHome: () => void;
@@ -288,11 +292,7 @@ export const Footer: React.FC<FooterProps> = ({
 
         {/* Brand Block (mobile — desktop version sits as the left column below) */}
         <div className="md:hidden pb-8 border-b border-[#E8D5A8]/15 space-y-3 max-w-md">
-          {globalSettings?.logoUrl ? (
-            <img src={globalSettings.logoUrl} alt={globalSettings.logoText || globalSettings.brandName || 'Logo'} className="h-12 w-auto max-w-[200px] object-contain" />
-          ) : (
-            <span className="font-serif text-xl tracking-widest uppercase text-[#FAF9F6]">{globalSettings?.logoText || 'GLAMIRK'}</span>
-          )}
+          <img src={FOOTER_LOGO_URL} alt={globalSettings?.logoText || globalSettings?.brandName || 'Logo'} className="h-12 w-auto max-w-[200px] object-contain" />
           <p className="text-xs text-[#FAF9F6]/60 leading-relaxed">
             {footer?.tagline || footer?.brandDescription || 'Intelligent color personalization and modern luxury cosmetics calibrated for Indian complexions.'}
           </p>
@@ -370,11 +370,7 @@ export const Footer: React.FC<FooterProps> = ({
         <div className="hidden md:flex md:gap-10 pb-10">
           {/* Brand Column (left side, distinct from Social) */}
           <div className="w-64 shrink-0 pr-8 border-r border-[#E8D5A8]/15 space-y-3">
-            {globalSettings?.logoUrl ? (
-            <img src={globalSettings.logoUrl} alt={globalSettings.logoText || globalSettings.brandName || 'Logo'} className="h-12 w-auto max-w-[200px] object-contain" />
-          ) : (
-            <span className="font-serif text-xl tracking-widest uppercase text-[#FAF9F6]">{globalSettings?.logoText || 'GLAMIRK'}</span>
-          )}
+            <img src={FOOTER_LOGO_URL} alt={globalSettings?.logoText || globalSettings?.brandName || 'Logo'} className="h-12 w-auto max-w-[200px] object-contain" />
             <p className="text-xs text-[#FAF9F6]/60 leading-relaxed">
               {footer?.tagline || footer?.brandDescription || 'Intelligent color personalization and modern luxury cosmetics calibrated for Indian complexions.'}
             </p>

@@ -38,11 +38,52 @@ interface CommerceContextType {
 
 const CommerceContext = createContext<CommerceContextType | undefined>(undefined);
 
+const GUEST_CART_KEY = 'glamirk_guest_cart';
+
+/** Guest cart item shape stored in localStorage — mirrors CartItem but keeps
+ * only what's needed to re-render + re-sync to the server on login. */
+interface GuestCartItem {
+  product: Product;
+  selectedShade?: Shade;
+  selectedSize?: string;
+  quantity: number;
+}
+
+function loadGuestCart(): GuestCartItem[] {
+  try {
+    const saved = localStorage.getItem(GUEST_CART_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveGuestCart(items: GuestCartItem[]) {
+  try {
+    localStorage.setItem(GUEST_CART_KEY, JSON.stringify(items));
+  } catch {
+    // ignore storage errors (e.g. private browsing quota)
+  }
+}
+
+function guestCartSubtotal(items: GuestCartItem[]): number {
+  return items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+}
+
 function mapServerItem(item: ServerCartItem): CartItem {
   return {
     product: item.product,
     selectedShade: item.selectedShade,
     selectedSize: item.product?.selectedSize,
+    quantity: item.quantity,
+  };
+}
+
+function mapGuestItem(item: GuestCartItem): CartItem {
+  return {
+    product: item.product,
+    selectedShade: item.selectedShade,
+    selectedSize: item.selectedSize,
     quantity: item.quantity,
   };
 }
@@ -53,6 +94,13 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [cartSubtotal, setCartSubtotal] = useState(0);
   const [wishlist, setWishlist] = useState<string[]>([]);
   const [isCommerceLoading, setIsCommerceLoading] = useState(false);
+
+  // Guest (logged-out) cart — lives entirely in localStorage until the visitor signs in.
+  const [guestCartItems, setGuestCartItems] = useState<GuestCartItem[]>(() => loadGuestCart());
+
+  useEffect(() => {
+    saveGuestCart(guestCartItems);
+  }, [guestCartItems]);
 
   const refreshCart = useCallback(async () => {
     const res = await customerApiFetch<{ items: ServerCartItem[]; subtotal: number }>('/api/customer/cart');
@@ -76,9 +124,28 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
     setIsCommerceLoading(false);
   }, [isCustomerLoggedIn, refreshCart, refreshWishlist]);
 
+  // Merges whatever was sitting in the guest (localStorage) cart into the
+  // server cart the moment a visitor signs in, then clears the local copy —
+  // so items added before login aren't lost.
+  const mergeGuestCartIntoServer = useCallback(async () => {
+    const pending = loadGuestCart();
+    if (pending.length === 0) return;
+    for (const item of pending) {
+      await customerApiFetch<{ items: ServerCartItem[]; subtotal: number }>('/api/customer/cart/items', {
+        method: 'POST',
+        body: JSON.stringify({ productId: item.product.id, variantId: item.selectedShade?.id, quantity: item.quantity }),
+      });
+    }
+    setGuestCartItems([]);
+    saveGuestCart([]);
+  }, []);
+
   useEffect(() => {
     if (isCustomerLoggedIn) {
-      refreshCommerce();
+      (async () => {
+        await mergeGuestCartIntoServer();
+        await refreshCommerce();
+      })();
     } else {
       setServerCartItems([]);
       setCartSubtotal(0);
@@ -88,7 +155,24 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
   }, [isCustomerLoggedIn]);
 
   const addToCart = async (product: Product, shade?: Shade, quantity: number = 1): Promise<MutationResult> => {
-    if (!isCustomerLoggedIn) return { success: false, loginRequired: true };
+    if (!isCustomerLoggedIn) {
+      // Guest checkout-free flow: keep the item in localStorage, no login required.
+      setGuestCartItems((prev) => {
+        const existingIndex = prev.findIndex(
+          (item) => item.product.id === product.id && item.selectedShade?.id === shade?.id
+        );
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            quantity: updated[existingIndex].quantity + quantity,
+          };
+          return updated;
+        }
+        return [...prev, { product, selectedShade: shade, selectedSize: product.selectedSize, quantity }];
+      });
+      return { success: true };
+    }
     const res = await customerApiFetch<{ items: ServerCartItem[]; subtotal: number }>('/api/customer/cart/items', {
       method: 'POST',
       body: JSON.stringify({ productId: product.id, variantId: shade?.id, quantity }),
@@ -102,6 +186,16 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   const updateCartItemQuantity = async (index: number, quantity: number): Promise<MutationResult> => {
+    if (!isCustomerLoggedIn) {
+      const item = guestCartItems[index];
+      if (!item) return { success: false, error: 'Item not found in bag.' };
+      setGuestCartItems((prev) => {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], quantity };
+        return updated;
+      });
+      return { success: true };
+    }
     const item = serverCartItems[index];
     if (!item) return { success: false, error: 'Item not found in bag.' };
     const res = await customerApiFetch<{ items: ServerCartItem[]; subtotal: number }>(`/api/customer/cart/items/${item.id}`, {
@@ -117,6 +211,12 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   const removeCartItem = async (index: number): Promise<MutationResult> => {
+    if (!isCustomerLoggedIn) {
+      const item = guestCartItems[index];
+      if (!item) return { success: false, error: 'Item not found in bag.' };
+      setGuestCartItems((prev) => prev.filter((_, i) => i !== index));
+      return { success: true };
+    }
     const item = serverCartItems[index];
     if (!item) return { success: false, error: 'Item not found in bag.' };
     const res = await customerApiFetch<{ items: ServerCartItem[]; subtotal: number }>(`/api/customer/cart/items/${item.id}`, {
@@ -133,6 +233,8 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
   const clearCartLocally = () => {
     setServerCartItems([]);
     setCartSubtotal(0);
+    setGuestCartItems([]);
+    saveGuestCart([]);
   };
 
   const toggleWishlist = async (productId: string): Promise<MutationResult> => {
@@ -164,8 +266,8 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
   };
 
   const value: CommerceContextType = {
-    cartItems: serverCartItems.map(mapServerItem),
-    cartSubtotal,
+    cartItems: isCustomerLoggedIn ? serverCartItems.map(mapServerItem) : guestCartItems.map(mapGuestItem),
+    cartSubtotal: isCustomerLoggedIn ? cartSubtotal : guestCartSubtotal(guestCartItems),
     wishlist,
     isCommerceLoading,
     addToCart,

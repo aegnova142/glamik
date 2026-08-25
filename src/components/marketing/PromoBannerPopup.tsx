@@ -130,16 +130,16 @@ export const PromoBannerPopup: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.3, ease: EASE }}
+            transition={{ duration: 0.45, ease: EASE }}
             onClick={handleClose}
             className="absolute inset-0 bg-[#0B0B0B]/45"
           />
 
           <motion.div
-            initial={{ opacity: 0, scale: 0.96 }}
+            initial={{ opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.97 }}
-            transition={{ duration: 0.3, ease: EASE }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.5, ease: EASE }}
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
             className="relative z-10 max-w-full max-h-full sm:max-w-[78vw] sm:max-h-[85vh] lg:max-w-[1200px]"
@@ -155,10 +155,10 @@ export const PromoBannerPopup: React.FC = () => {
                 key={current.id}
                 src={current.image}
                 alt={current.altText || 'Promotional offer'}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.8, ease: EASE }}
+                initial={{ opacity: 0, scale: 1.03 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 1, ease: EASE }}
                 onClick={handleBannerClick}
                 draggable={false}
                 className={`block w-auto h-auto max-w-full max-h-full sm:max-w-[78vw] sm:max-h-[85vh] lg:max-w-[1200px] rounded-[18px] shadow-2xl object-contain ${
@@ -183,7 +183,7 @@ export const PromoBannerPopup: React.FC = () => {
                   type="button"
                   onClick={handlePrev}
                   aria-label="Previous banner"
-                  className="absolute left-2 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-white/85 hover:bg-white text-[#121212] shadow-md backdrop-blur-sm transition-all hover:scale-105 cursor-pointer"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-white/85 hover:bg-white text-[#121212] shadow-md backdrop-blur-sm transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
@@ -191,22 +191,10 @@ export const PromoBannerPopup: React.FC = () => {
                   type="button"
                   onClick={handleNext}
                   aria-label="Next banner"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-white/85 hover:bg-white text-[#121212] shadow-md backdrop-blur-sm transition-all hover:scale-105 cursor-pointer"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-white/85 hover:bg-white text-[#121212] shadow-md backdrop-blur-sm transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
-
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/85 backdrop-blur-sm shadow-md">
-                  <span className="text-[10px] font-mono font-semibold text-[#121212] tracking-wider">
-                    {String(currentIndex + 1).padStart(2, '0')} / {String(validBanners.length).padStart(2, '0')}
-                  </span>
-                  <div className="w-16 h-1 rounded-full bg-[#E8D5A8]/50 overflow-hidden">
-                    <div
-                      className="h-full bg-[#C9972B] rounded-full transition-all duration-300"
-                      style={{ width: `${((currentIndex + 1) / validBanners.length) * 100}%` }}
-                    />
-                  </div>
-                </div>
               </>
             )}
           </motion.div>

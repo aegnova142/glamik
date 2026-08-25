@@ -131,8 +131,10 @@ function AppContent() {
     return [...cmsProducts, ...defaults];
   }, [cmsProducts]);
 
-  // Sign-in gate: cart/wishlist are real, server-persisted, per-account data —
+  // Sign-in gate: wishlist/checkout are real, server-persisted, per-account data —
   // any attempt to mutate them while logged out opens sign-in and replays the action on success.
+  // NOTE: Cart add-to-bag is intentionally NOT gated behind login anymore — guests can add
+  // to their bag freely; login is only required at checkout time.
   const [isAuthGateOpen, setIsAuthGateOpen] = useState(false);
   // Populated when the visitor lands here via a "Forgot Password" email link
   // (?resetToken=...) — opens the auth gate straight into the reset step.
@@ -391,8 +393,11 @@ function AppContent() {
       showToast('Your shopping bag is currently empty.');
       return;
     }
-    setCurrentRoute({ page: 'checkout' });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Checkout still requires a signed-in account (orders/addresses are per-account).
+    requireLogin(() => {
+      setCurrentRoute({ page: 'checkout' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
   };
 
   const navigateToOrderTracking = (orderId?: string) => {
@@ -454,29 +459,27 @@ function AppContent() {
     setIsTryOnOpen(true);
   };
 
-  // Cart actions — server-persisted per signed-in customer; gated behind sign-in when logged out.
-  const handleAddToCart = (product: Product, shade?: Shade, size?: string, quantity: number = 1) => {
-    requireLogin(async () => {
-      trackRecentlyViewed(product.id);
-      const res = await commerceRef.current.addToCart(product, shade, quantity);
-      if (res.success) {
-        setAddToCartConfirm({ product, shade, size, quantity });
-      } else {
-        showToast(res.error || 'Could not add this item to your bag.');
-      }
-    });
+  // Cart actions — server-persisted per signed-in customer when logged in, but guests can
+  // add to bag freely too (no sign-in gate on add-to-cart). Sign-in is only required at
+  // checkout time (see navigateToCheckout above).
+  const handleAddToCart = async (product: Product, shade?: Shade, size?: string, quantity: number = 1) => {
+    trackRecentlyViewed(product.id);
+    const res = await commerceRef.current.addToCart(product, shade, quantity);
+    if (res.success) {
+      setAddToCartConfirm({ product, shade, size, quantity });
+    } else {
+      showToast(res.error || 'Could not add this item to your bag.');
+    }
   };
 
-  const handleBuyNow = (product: Product, shade?: Shade, size?: string) => {
-    requireLogin(async () => {
-      trackRecentlyViewed(product.id);
-      const res = await commerceRef.current.addToCart(product, shade, 1);
-      if (res.success) {
-        navigateToCheckout();
-      } else {
-        showToast(res.error || 'Could not add this item to your bag.');
-      }
-    });
+  const handleBuyNow = async (product: Product, shade?: Shade, size?: string) => {
+    trackRecentlyViewed(product.id);
+    const res = await commerceRef.current.addToCart(product, shade, 1);
+    if (res.success) {
+      navigateToCheckout();
+    } else {
+      showToast(res.error || 'Could not add this item to your bag.');
+    }
   };
 
   const handleUpdateQuantity = async (index: number, quantity: number) => {
@@ -564,15 +567,13 @@ function AppContent() {
   };
 
   // Add multiple look products to bag
-  const handleAddLookToBag = (products: { product: Product; shade?: Shade; size?: string }[]) => {
-    requireLogin(async () => {
-      for (const item of products) {
-        trackRecentlyViewed(item.product.id);
-        await commerceRef.current.addToCart(item.product, item.shade, 1);
-      }
-      showToast('All curated look creations added to shopping bag');
-      setIsCartOpen(true);
-    });
+  const handleAddLookToBag = async (products: { product: Product; shade?: Shade; size?: string }[]) => {
+    for (const item of products) {
+      trackRecentlyViewed(item.product.id);
+      await commerceRef.current.addToCart(item.product, item.shade, 1);
+    }
+    showToast('All curated look creations added to shopping bag');
+    setIsCartOpen(true);
   };
 
   const cartTotalCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
@@ -1093,7 +1094,7 @@ function AppContent() {
         onOpenCart={() => setIsCartOpen(true)}
       />
 
-      {/* Sign-in gate: opened whenever a logged-out visitor tries to touch wishlist/cart/checkout,
+      {/* Sign-in gate: opened whenever a logged-out visitor tries to touch wishlist/checkout,
           or when they land on a ?resetToken=... link from a "Forgot Password" email */}
       <AuthModal
         isOpen={isAuthGateOpen}

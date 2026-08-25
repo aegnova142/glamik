@@ -152,6 +152,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Center Navigation Links (Reference style with active underline) */}
+          {/* NEW ORDER: Home, Shop, Find My Shade, Offers & Looks, Blog & Journal, About */}
           <nav className="hidden lg:flex items-center space-x-6 xl:space-x-8 text-[13px] font-medium text-[#121212]">
             <button
               id="nav-btn-home"
@@ -167,23 +168,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="absolute bottom-0 left-0 w-full h-[2px] bg-[#F05A7E] rounded-full" />
               )}
             </button>
-
-            {onNavigateAbout && (
-              <button
-                id="nav-btn-about"
-                onClick={onNavigateAbout}
-                className={`relative py-1.5 transition-colors cursor-pointer ${
-                  currentRoute.page === 'about'
-                    ? 'text-[#F05A7E] font-semibold'
-                    : 'text-[#121212] hover:text-[#F05A7E]'
-                }`}
-              >
-                About
-                {currentRoute.page === 'about' && (
-                  <span className="absolute bottom-0 left-0 w-full h-[2px] bg-[#F05A7E] rounded-full" />
-                )}
-              </button>
-            )}
 
             {/* Shop Navigation with Product Categories Mega Menu */}
             <div
@@ -249,9 +233,26 @@ export const Navbar: React.FC<NavbarProps> = ({
                 Blog &amp; Journal
               </button>
             )}
+
+            {onNavigateAbout && (
+              <button
+                id="nav-btn-about"
+                onClick={onNavigateAbout}
+                className={`relative py-1.5 transition-colors cursor-pointer ${
+                  currentRoute.page === 'about'
+                    ? 'text-[#F05A7E] font-semibold'
+                    : 'text-[#121212] hover:text-[#F05A7E]'
+                }`}
+              >
+                About
+                {currentRoute.page === 'about' && (
+                  <span className="absolute bottom-0 left-0 w-full h-[2px] bg-[#F05A7E] rounded-full" />
+                )}
+              </button>
+            )}
           </nav>
 
-          {/* Right Header Utilities: Rounded Search Pill + Account + Wishlist + Cart */}
+          {/* Right Header Utilities: Rounded Search Pill + Cart + Wishlist + Account */}
           <div className="flex items-center space-x-3 sm:space-x-4">
             
             {/* Pill Search Input Container (Clicking opens full SearchOverlay) */}
@@ -275,7 +276,43 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Search className="w-5 h-5 stroke-[1.75]" />
             </button>
 
-            {/* Account / My Glam / Admin dropdown container */}
+            {/* Reference-Style Pink Cart Pill Button — now appears first */}
+            <button
+              id="nav-bag-button"
+              onClick={onOpenCart}
+              className="hidden md:flex relative items-center justify-center px-3.5 py-2 bg-[#F05A7E] text-white rounded-full hover:bg-[#F05A7E] transition-all shadow-[0_4px_14px_rgba(240, 90, 126,0.3)] hover:scale-105 group cursor-pointer"
+              title="Shopping Cart"
+              aria-label="Shopping Cart"
+            >
+              <ShoppingBag className="w-[18px] h-[18px] stroke-[2]" />
+              {cartCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-white text-[#F05A7E] text-[9.5px] font-bold rounded-full flex items-center justify-center shadow-xs border border-[#E8D5A8]">
+                  {cartCount}
+                </span>
+              )}
+            </button>
+
+            {/* Wishlist button — the mobile bottom tab bar already covers this below md, so it's desktop/tablet only here to keep the mobile header from overflowing */}
+            <button
+              id="nav-wishlist-button"
+              onClick={onOpenWishlist}
+              className={`hidden md:block relative p-2 rounded-full hover:bg-[#FCE8ED] transition-colors cursor-pointer ${
+                currentRoute.page === 'wishlist'
+                  ? 'text-[#F05A7E]'
+                  : 'text-[#121212] hover:text-[#F05A7E]'
+              }`}
+              title="Saved Wishlist"
+              aria-label="Wishlist"
+            >
+              <Heart className={`w-5 h-5 stroke-[1.75] ${wishlistCount > 0 ? 'fill-[#F05A7E] text-[#F05A7E]' : ''}`} />
+              {wishlistCount > 0 && (
+                <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-[#F05A7E] text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-xs">
+                  {wishlistCount}
+                </span>
+              )}
+            </button>
+
+            {/* Account / My Glam / Admin dropdown container — now appears last */}
             <div className="relative" ref={accountDropdownRef}>
               <button
                 id="nav-account-button"
@@ -342,42 +379,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </AnimatePresence>
             </div>
-
-            {/* Wishlist button — the mobile bottom tab bar already covers this below md, so it's desktop/tablet only here to keep the mobile header from overflowing */}
-            <button
-              id="nav-wishlist-button"
-              onClick={onOpenWishlist}
-              className={`hidden md:block relative p-2 rounded-full hover:bg-[#FCE8ED] transition-colors cursor-pointer ${
-                currentRoute.page === 'wishlist'
-                  ? 'text-[#F05A7E]'
-                  : 'text-[#121212] hover:text-[#F05A7E]'
-              }`}
-              title="Saved Wishlist"
-              aria-label="Wishlist"
-            >
-              <Heart className={`w-5 h-5 stroke-[1.75] ${wishlistCount > 0 ? 'fill-[#F05A7E] text-[#F05A7E]' : ''}`} />
-              {wishlistCount > 0 && (
-                <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-[#F05A7E] text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-xs">
-                  {wishlistCount}
-                </span>
-              )}
-            </button>
-
-            {/* Reference-Style Pink Cart Pill Button — likewise mobile-covered by the bottom tab bar's Bag tab */}
-            <button
-              id="nav-bag-button"
-              onClick={onOpenCart}
-              className="hidden md:flex relative items-center justify-center px-3.5 py-2 bg-[#F05A7E] text-white rounded-full hover:bg-[#F05A7E] transition-all shadow-[0_4px_14px_rgba(240, 90, 126,0.3)] hover:scale-105 group cursor-pointer"
-              title="Shopping Cart"
-              aria-label="Shopping Cart"
-            >
-              <ShoppingBag className="w-[18px] h-[18px] stroke-[2]" />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-white text-[#F05A7E] text-[9.5px] font-bold rounded-full flex items-center justify-center shadow-xs border border-[#E8D5A8]">
-                  {cartCount}
-                </span>
-              )}
-            </button>
           </div>
         </div>
 
@@ -699,18 +700,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                     Discover &amp; Community
                   </span>
                   <div className="space-y-1 bg-[#FCE8ED] p-1.5 rounded-2xl border border-[#E8D5A8]/70">
-                    {onNavigateAbout && (
-                      <button
-                        onClick={() => {
-                          setMobileMenuOpen(false);
-                          onNavigateAbout();
-                        }}
-                        className="w-full text-left font-medium text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white cursor-pointer"
-                      >
-                        <span>About Us</span>
-                        <span className="text-[11px] text-[#6B6B6B]">Our Story</span>
-                      </button>
-                    )}
                     {onNavigateJournal && (
                       <button
                         onClick={() => {
@@ -745,6 +734,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                       >
                         <span>Glamirk On You</span>
                         <span className="text-[11px] text-[#F05A7E] font-semibold">Community</span>
+                      </button>
+                    )}
+                    {onNavigateAbout && (
+                      <button
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          onNavigateAbout();
+                        }}
+                        className="w-full text-left font-medium text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white cursor-pointer"
+                      >
+                        <span>About Us</span>
+                        <span className="text-[11px] text-[#6B6B6B]">Our Story</span>
                       </button>
                     )}
                   </div>
@@ -782,4 +783,3 @@ export const Navbar: React.FC<NavbarProps> = ({
     </>
   );
 };
-

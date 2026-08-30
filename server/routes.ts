@@ -7,11 +7,31 @@ import {
   loadDatabase,
   saveDatabase,
   evaluateOffers,
-  subscribeToEvents,
   broadcastEvent,
+  pool,
+  withStockLock,
   StoredUser,
   InternalCMSDatabaseSchema,
+  JWT_SECRET,
 } from './db';
+import {
+  ORDER_STATUS_SEQUENCE,
+  RETURN_STATUSES,
+  buildOrderFromRow,
+  buildOrdersFromRows,
+  insertOrderStatusHistory,
+  isValidStatusTransition,
+  mapReturnRequestRow,
+  restockOrderItems,
+} from './orders';
+import { mapReviewRow } from './reviews';
+import {
+  notifyOrderStatusChange,
+  notifyReturnStatusChange,
+  notifyAdminOrderDelivered,
+  mapNotificationRow,
+} from './notifications';
+import { sendOrderStatusEmail } from './email';
 import {
   CMSAuditLog,
   CMSPage,
@@ -26,10 +46,10 @@ import {
   SupportFaq,
   CMSBenefit,
   Look,
+  OrderStatus,
 } from '../src/types';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'glamirk_luxury_atelier_jwt_secret_2026';
 
 // Cloudinary configuration for durable media storage (reads CLOUDINARY_URL automatically)
 cloudinary.config();
@@ -164,28 +184,6 @@ async function logAudit(
 }
 
 // ==========================================
-// REAL-TIME SERVER-SENT EVENTS (SSE)
-// ==========================================
-
-router.get('/events', async (req: Request, res: Response) => {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-  });
-
-  res.write('data: ' + JSON.stringify({ type: 'CONNECTED', message: 'Glamirk Real-time CMS Connected' }) + '\n\n');
-
-  const unsubscribe = subscribeToEvents((event) => {
-    res.write('data: ' + JSON.stringify(event) + '\n\n');
-  });
-
-  req.on('close', () => {
-    unsubscribe();
-  });
-});
-
-// ==========================================
 // AUTH ROUTES
 // ==========================================
 
@@ -292,6 +290,7 @@ router.get('/cms/content', async (req: Request, res: Response) => {
     shadeFinderTeaser: db.shadeFinderTeaser,
     journalSectionCopy: db.journalSectionCopy,
     findMyShadeResultsCopy: db.findMyShadeResultsCopy,
+    findMyShadeHero: db.findMyShadeHero,
     serverTime: new Date().toISOString(),
   };
 
@@ -357,6 +356,23 @@ router.get('/looks/:id', async (req: Request, res: Response) => {
 // PROTECTED ADMIN CMS ROUTES
 // ==========================================
 
+router.get('/products/:id/reviews', async (req: Request, res: Response) => {
+  const db = await loadDatabase();
+  const product = db.products.find((p) => p.id === req.params.id);
+  if (!product) return res.status(404).json({ error: 'Product not found.' });
+
+  const result = await pool.query('SELECT * FROM reviews WHERE product_id = $1 ORDER BY created_at DESC', [req.params.id]);
+  const reviews = result.rows.map((row) => mapReviewRow(row, product.name));
+  const count = reviews.length;
+  const average = count > 0 ? Math.round((reviews.reduce((sum, r) => sum + r.rating, 0) / count) * 10) / 10 : 0;
+  const breakdown = [5, 4, 3, 2, 1].map((star) => ({
+    star,
+    count: reviews.filter((r) => Math.round(r.rating) === star).length,
+  }));
+
+  res.json({ reviews, average, count, breakdown });
+});
+
 router.get('/admin/audit-logs', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   const db = await loadDatabase();
   res.json(db.auditLogs);
@@ -395,6 +411,169 @@ router.get('/admin/full-state', requireAdmin, async (req: AuthenticatedRequest, 
     users: safeUsers,
     serverTime: new Date().toISOString(),
   });
+});
+
+// --- Order management ---
+router.get('/admin/orders', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+  const pageSize = Math.min(50, Math.max(1, parseInt(String(req.query.pageSize || '20'), 10) || 20));
+  const offset = (page - 1) * pageSize;
+
+  const whereClause = status ? 'WHERE status = $1' : '';
+  const params = status ? [status] : [];
+
+  const countRes = await pool.query(`SELECT COUNT(*) FROM orders ${whereClause}`, params);
+  const total = parseInt(countRes.rows[0].count, 10);
+
+  const ordersRes = await pool.query(
+    `SELECT * FROM orders ${whereClause} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+    [...params, pageSize, offset]
+  );
+
+  const db = await loadDatabase();
+  const orders = await buildOrdersFromRows(ordersRes.rows, db);
+
+  res.json({ orders, total, page, pageSize });
+});
+
+router.get('/admin/orders/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+  const row = orderRes.rows[0];
+  if (!row) return res.status(404).json({ error: 'Order not found.' });
+
+  const db = await loadDatabase();
+  const order = await buildOrderFromRow(row, db);
+  res.json({ order });
+});
+
+router.get('/admin/analytics/summary', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const [revenueRes, orderCountRes, pendingRes, customerCountRes, recentRes] = await Promise.all([
+    pool.query(`SELECT COALESCE(SUM(total), 0) AS revenue FROM orders WHERE status != 'CANCELLED'`),
+    pool.query('SELECT COUNT(*) FROM orders'),
+    pool.query(`SELECT COUNT(*) FROM orders WHERE status NOT IN ('DELIVERED', 'CANCELLED')`),
+    pool.query('SELECT COUNT(*) FROM customers'),
+    pool.query('SELECT order_number, customer_name, status, total, created_at FROM orders ORDER BY created_at DESC LIMIT 8'),
+  ]);
+
+  res.json({
+    totalRevenue: Number(revenueRes.rows[0].revenue),
+    totalOrders: parseInt(orderCountRes.rows[0].count, 10),
+    pendingOrders: parseInt(pendingRes.rows[0].count, 10),
+    totalCustomers: parseInt(customerCountRes.rows[0].count, 10),
+    recentOrders: recentRes.rows.map((r) => ({
+      orderNumber: r.order_number,
+      customerName: r.customer_name,
+      status: r.status,
+      total: Number(r.total),
+      createdAt: new Date(r.created_at).toISOString(),
+    })),
+  });
+});
+
+// --- Order status lifecycle ---
+router.put('/admin/orders/:id/status', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const { status, note } = req.body || {};
+  const allowedStatuses: OrderStatus[] = [...ORDER_STATUS_SEQUENCE, 'CANCELLED'];
+  if (!status || !allowedStatuses.includes(status)) {
+    return res.status(400).json({ error: 'Invalid order status.' });
+  }
+
+  const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+  const row = orderRes.rows[0];
+  if (!row) return res.status(404).json({ error: 'Order not found.' });
+
+  if (!isValidStatusTransition(row.status, status)) {
+    return res.status(400).json({ error: `Cannot move an order from ${row.status} to ${status}.` });
+  }
+
+  // row.status is a pre-lock snapshot — re-verify it atomically inside the
+  // lock before restocking, so two concurrent status changes on the same
+  // order (e.g. an admin double-click, or racing with the customer's own
+  // cancel endpoint) can't both restock the same order.
+  const updateRes = await withStockLock(async () => {
+    const result = await pool.query(
+      'UPDATE orders SET status = $1 WHERE id = $2 AND status = $3 RETURNING id',
+      [status, row.id, row.status]
+    );
+    if (result.rows.length > 0 && status === 'CANCELLED') {
+      await restockOrderItems(row.id);
+    }
+    return result;
+  });
+  if (updateRes.rows.length === 0) {
+    return res.status(409).json({ error: 'This order was already updated. Please refresh and try again.' });
+  }
+
+  // Independent writes/sends — none read each other's result, so they run
+  // concurrently instead of serializing behind an SMTP round-trip.
+  await Promise.all([
+    insertOrderStatusHistory(row.id, status, note),
+    notifyOrderStatusChange(row.user_id, row.id, row.order_number, status),
+    sendOrderStatusEmail({
+      toEmail: row.customer_email,
+      customerName: row.customer_name,
+      orderId: row.id,
+      orderNumber: row.order_number,
+      status,
+      total: Number(row.total),
+    }),
+    ...(status === 'DELIVERED' ? [notifyAdminOrderDelivered(row.id, row.order_number)] : []),
+    logAudit(req, 'UPDATE_ORDER_STATUS', 'ORDER', row.id, row.order_number, `${row.status} -> ${status}`),
+  ]);
+
+  const db = await loadDatabase();
+  const updatedRes = await pool.query('SELECT * FROM orders WHERE id = $1', [row.id]);
+  const order = await buildOrderFromRow(updatedRes.rows[0], db);
+  res.json({ order });
+});
+
+// --- Return requests ---
+router.get('/admin/returns', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const result = await pool.query(
+    `SELECT r.*, o.order_number FROM return_requests r
+     JOIN orders o ON o.id = r.order_id
+     ORDER BY r.created_at DESC`
+  );
+  res.json({ returns: result.rows.map(mapReturnRequestRow) });
+});
+
+router.put('/admin/returns/:id/status', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const { status } = req.body || {};
+  if (!status || !RETURN_STATUSES.includes(status)) {
+    return res.status(400).json({ error: 'Invalid return status.' });
+  }
+
+  const result = await pool.query('UPDATE return_requests SET status = $1, updated_at = now() WHERE id = $2 RETURNING id', [status, req.params.id]);
+  if (result.rows.length === 0) {
+    return res.status(404).json({ error: 'Return request not found.' });
+  }
+
+  await logAudit(req, 'UPDATE_RETURN_STATUS', 'RETURN', req.params.id, req.params.id, `-> ${status}`);
+
+  const updated = await pool.query(
+    `SELECT r.*, o.order_number FROM return_requests r JOIN orders o ON o.id = r.order_id WHERE r.id = $1`,
+    [req.params.id]
+  );
+  const updatedRow = updated.rows[0];
+  await notifyReturnStatusChange(updatedRow.customer_id, updatedRow.order_id, updatedRow.order_number, status);
+  res.json({ return: mapReturnRequestRow(updatedRow) });
+});
+
+// --- Admin (store-side) notifications ---
+router.get('/admin/notifications', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const result = await pool.query('SELECT * FROM admin_notifications ORDER BY created_at DESC LIMIT 50');
+  res.json({ notifications: result.rows.map(mapNotificationRow) });
+});
+
+router.post('/admin/notifications/:id/read', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  await pool.query('UPDATE admin_notifications SET is_read = true WHERE id = $1', [req.params.id]);
+  res.json({ success: true });
+});
+
+router.post('/admin/notifications/read-all', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  await pool.query('UPDATE admin_notifications SET is_read = true WHERE is_read = false');
+  res.json({ success: true });
 });
 
 // --- Pages Management ---
@@ -914,6 +1093,17 @@ router.put('/admin/shade-journey', requireAdmin, async (req: AuthenticatedReques
   broadcastEvent('CMS_UPDATE', 'shadeJourney', db.shadeJourney);
 
   res.json(db.shadeJourney);
+});
+
+// --- Find My Shade Landing Hero (badge/heading/description/photo) ---
+router.put('/admin/find-my-shade-hero', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  db.findMyShadeHero = req.body;
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_FIND_MY_SHADE_HERO', 'FIND_MY_SHADE_HERO', 'find-my-shade-hero-main', 'Find My Shade Landing Hero Updated');
+  broadcastEvent('CMS_UPDATE', 'findMyShadeHero', db.findMyShadeHero);
+
+  res.json(db.findMyShadeHero);
 });
 
 // --- Homepage Benefits Section Heading ---

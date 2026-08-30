@@ -17,6 +17,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { PageRoute } from '../../types';
 import { useCMS } from '../../context/CMSContext';
+import { NotificationBell } from './NotificationBell';
+import { useClickOutside } from '../../hooks/useClickOutside';
 
 interface NavbarProps {
   currentRoute: PageRoute;
@@ -38,6 +40,7 @@ interface NavbarProps {
   onOpenQuiz?: () => void;
   onNavigateAdmin?: () => void;
   onNavigateAbout?: () => void;
+  onOpenOrder?: (orderId: string) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -60,6 +63,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenQuiz,
   onNavigateAdmin,
   onNavigateAbout,
+  onOpenOrder,
 }) => {
   const { globalSettings } = useCMS();
   const [isScrolled, setIsScrolled] = useState(false);
@@ -81,15 +85,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   }, []);
 
   // Close account dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (accountDropdownRef.current && !accountDropdownRef.current.contains(e.target as Node)) {
-        setAccountMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  useClickOutside(accountDropdownRef, () => setAccountMenuOpen(false));
 
   const handleShopNavigation = (category?: string | null, subCategory?: string | null) => {
     setActiveMegaMenu(null);
@@ -311,6 +307,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               )}
             </button>
+
+            {/* Notification Bell — desktop/tablet only, same overflow-avoidance reasoning as Wishlist above; hidden entirely for guests */}
+            <div className="hidden md:block">
+              <NotificationBell onOpenOrder={onOpenOrder} />
+            </div>
 
             {/* Account / My Glam / Admin dropdown container — now appears last */}
             <div className="relative" ref={accountDropdownRef}>

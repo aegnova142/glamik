@@ -12,11 +12,26 @@ import {
   Download,
   Share2,
   MessageCircle,
+  Loader2,
+  LogIn,
+  SearchX,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface OrderConfirmationPageProps {
-  order: Order;
+  // Nullable/undefined because this page can be reached by direct URL,
+  // refresh, a new tab, a shared link, another device, or incognito — all
+  // of which land here before (or without ever) having the matching order
+  // in memory. See isLoading/isLoggedIn below for how those states render.
+  order: Order | null | undefined;
+  /** True while the customer's orders are still being fetched from the
+   * server — lets this page show a spinner instead of prematurely
+   * declaring "not found" before the fetch has had a chance to resolve. */
+  isLoading?: boolean;
+  /** Orders are per-account; a logged-out visitor (e.g. opening a shared
+   * link on a fresh browser/device/incognito) has no order data to fetch
+   * at all, so this renders a sign-in prompt instead of "not found". */
+  isLoggedIn?: boolean;
   /** Set only when the admin has a WhatsApp number configured — lets the
    * customer (re)send the order details if the auto-opened tab at checkout
    * was blocked or they closed it without hitting send. */
@@ -24,15 +39,76 @@ interface OrderConfirmationPageProps {
   onTrackOrder: (orderId: string) => void;
   onContinueShopping: () => void;
   onNavigateMyGlam: () => void;
+  onSignIn?: () => void;
 }
 
 export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
   order,
+  isLoading = false,
+  isLoggedIn = true,
   whatsappUrl,
   onTrackOrder,
   onContinueShopping,
   onNavigateMyGlam,
+  onSignIn,
 }) => {
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center bg-[#FAF9F6] py-16">
+        <div className="flex flex-col items-center gap-3 text-[#6B6B6B]">
+          <Loader2 className="h-8 w-8 animate-spin text-[#C9972B]" />
+          <p className="text-xs uppercase tracking-wider">Loading your order...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center bg-[#FAF9F6] px-4 py-16 text-center">
+        <div className="max-w-sm space-y-4">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#0B0B0B] text-[#C9972B]">
+            <LogIn className="h-6 w-6" />
+          </div>
+          <h1 className="font-serif text-2xl text-[#121212]">Sign In to View This Order</h1>
+          <p className="text-xs leading-relaxed text-[#6B6B6B]">
+            Order confirmations are tied to your Glamirk account. Sign in to see the details of this order.
+          </p>
+          <button
+            onClick={onSignIn}
+            className="inline-flex items-center gap-2 rounded-full bg-[#0B0B0B] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-[#171717]"
+          >
+            <LogIn className="h-3.5 w-3.5 text-[#C9972B]" />
+            <span>Sign In</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!order) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center bg-[#FAF9F6] px-4 py-16 text-center">
+        <div className="max-w-sm space-y-4">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E8D5A8] text-[#6B6B6B]">
+            <SearchX className="h-6 w-6" />
+          </div>
+          <h1 className="font-serif text-2xl text-[#121212]">Order Not Found</h1>
+          <p className="text-xs leading-relaxed text-[#6B6B6B]">
+            We couldn't find this order on your account. It may belong to a different account, or the link may be incorrect.
+          </p>
+          <button
+            onClick={onContinueShopping}
+            className="inline-flex items-center gap-2 rounded-full bg-[#0B0B0B] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-white transition-colors hover:bg-[#171717]"
+          >
+            <span>Continue Shopping</span>
+            <ArrowRight className="h-3.5 w-3.5 text-[#C9972B]" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const pointsEarned = Math.round(order.total / 10);
 
   return (

@@ -88,12 +88,17 @@ export interface CartItem {
 export interface FilterState {
   category?: string | null;
   subCategory?: string | null;
-  priceRanges: string[];
+  /** null = no floor/ceiling set by the shopper; the dual-range slider's own
+   * catalog-derived min/max bounds apply instead. */
+  priceMin: number | null;
+  priceMax: number | null;
   undertones: string[];
   finishes: string[];
   skinTypes: string[];
   coverages: string[];
   shades: string[];
+  ratings: string[];
+  discounts: string[];
   inStockOnly: boolean;
 }
 
@@ -103,7 +108,8 @@ export type SortOption =
   | 'price-asc'
   | 'price-desc'
   | 'rating'
-  | 'newest';
+  | 'newest'
+  | 'discount';
 
 export interface LookProductItem {
   productId: string;
@@ -315,6 +321,7 @@ export type PageRoute =
   | { page: 'checkout'; step?: 'details' | 'delivery' | 'payment' | 'review' }
   | { page: 'order-confirmation'; orderId: string }
   | { page: 'order-tracking'; orderId?: string }
+  | { page: 'order-detail'; orderId: string }
   | { page: 'support' }
   | { page: 'journal'; category?: string }
   | { page: 'article'; articleId: string }
@@ -452,15 +459,16 @@ export interface Address {
   isDefault?: boolean;
 }
 
-export type PaymentMethodType = 'upi' | 'card' | 'netbanking' | 'cod' | 'online';
+export type PaymentMethodType = 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod' | 'online';
 
 export interface PaymentDetails {
   method: PaymentMethodType;
-  status: 'PENDING' | 'PAID';
+  status: 'COD_PENDING' | 'PAID';
   upiId?: string;
   cardLast4?: string;
   cardNetwork?: string;
   bankName?: string;
+  walletProvider?: string;
   paidAt?: string;
 }
 
@@ -473,6 +481,22 @@ export type OrderStatus =
   | 'DELIVERED'
   | 'CANCELLED'
   | 'RETURN_REQUESTED';
+
+// Single source of truth for the order lifecycle — imported by both the
+// server (which enforces it) and admin/customer order UIs (which need it
+// synchronously to decide what buttons to render, before any request).
+// Forward-only: CANCELLED is reachable as a side transition from any status
+// in CANCELLABLE_STATUSES, never from further along the sequence.
+export const ORDER_STATUS_SEQUENCE: OrderStatus[] = [
+  'PLACED',
+  'CONFIRMED',
+  'PACKED',
+  'SHIPPED',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED',
+];
+
+export const CANCELLABLE_ORDER_STATUSES: OrderStatus[] = ['PLACED', 'CONFIRMED', 'PACKED'];
 
 export interface CustomerUser {
   id: string;
@@ -577,6 +601,10 @@ export interface Review {
   photoUrl?: string;
 }
 
+export type ReturnStatus = 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'PICKUP_SCHEDULED' | 'REFUNDED';
+
+export const RETURN_STATUSES: ReturnStatus[] = ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'PICKUP_SCHEDULED', 'REFUNDED'];
+
 export interface ReturnRequest {
   id: string;
   orderId: string;
@@ -585,10 +613,20 @@ export interface ReturnRequest {
   productName: string;
   productImage: string;
   reason: string;
-  status: 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'PICKUP_SCHEDULED' | 'REFUNDED';
+  status: ReturnStatus;
   requestedAt: string;
   comment?: string;
   photoUrl?: string;
+}
+
+export interface AppNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  isRead: boolean;
+  createdAt: string;
+  orderId?: string;
 }
 
 export interface SupportFaq {
@@ -818,6 +856,21 @@ export interface CMSGlobalSettings {
     mutedTextGrey: string;
     borderSoftGold: string;
   };
+  /** Server-enforced Cash on Delivery eligibility — the frontend never decides this on its own. */
+  codRules: CODRules;
+}
+
+export interface CODRules {
+  /** Order total (after discount) below which COD is refused. 0 = no minimum. */
+  minOrderAmount: number;
+  /** Order total (after discount) above which COD is refused. 0 = no maximum. */
+  maxOrderAmount: number;
+  /** Pin codes COD can be delivered to. Empty array = every pin code is serviceable. */
+  serviceablePinCodes: string[];
+  /** Pin codes COD is explicitly refused for, even if serviceablePinCodes is empty. */
+  blockedPinCodes: string[];
+  /** Product IDs that can only be bought via a future online-payment method, never COD. */
+  codDisabledProductIds: string[];
 }
 
 export interface CMSAuditLog {
@@ -1078,6 +1131,22 @@ export interface CMSFindMyShadeResultsCopy {
   alternativesHeading: string;
 }
 
+/** The landing hero at the very top of the Find My Shade page (Step 0,
+ * before the quiz starts) — badge/heading/description/photo and its small
+ * caption overlay. Distinct from CMSShadeJourney (the steps below it) and
+ * CMSFindMyShadeResultsCopy (shown after the quiz completes). */
+export interface CMSFindMyShadeHero {
+  badgeText: string;
+  headingLine1: string;
+  headingHighlight: string;
+  description: string;
+  image: string;
+  primaryCtaText: string;
+  secondaryCtaText: string;
+  captionLabel: string;
+  captionText: string;
+}
+
 export interface CMSDatabaseSchema {
   users: CMSUser[];
   pages: CMSPage[];
@@ -1101,5 +1170,6 @@ export interface CMSDatabaseSchema {
   shadeFinderTeaser: CMSShadeFinderTeaser;
   journalSectionCopy: CMSJournalSectionCopy;
   findMyShadeResultsCopy: CMSFindMyShadeResultsCopy;
+  findMyShadeHero: CMSFindMyShadeHero;
 }
 

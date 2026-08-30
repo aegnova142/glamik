@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Order, OrderStatus } from '../../types';
+import React, { useState, useEffect, useRef } from 'react';
+import { Order, OrderStatus, Shade } from '../../types';
+import { formatDateTime } from '../../utils/dateFormat';
 import {
   Truck,
   CheckCircle2,
@@ -12,21 +13,34 @@ import {
   RotateCcw,
   Sparkles,
   ShoppingBag,
+  Loader2,
+  LogIn,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface OrderTrackingPageProps {
   orders: Order[];
   initialOrderId?: string;
+  /** True while orders are still being fetched — this page is commonly
+   * reached by direct URL/refresh/new tab/shared link/another device, all
+   * of which can mount it before that fetch resolves. Without this it would
+   * flash "No Orders Yet" even when the order genuinely exists. */
+  isLoading?: boolean;
+  /** Orders are per-account; a logged-out visitor has nothing to fetch. */
+  isLoggedIn?: boolean;
+  onSignIn?: () => void;
   onBackToAccount: () => void;
   onExploreShop: () => void;
   onOpenSupport: () => void;
-  onReorder: (productId: string) => void;
+  onReorder: (productId: string, shade?: Shade, size?: string) => void;
 }
 
 export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
   orders,
   initialOrderId,
+  isLoading = false,
+  isLoggedIn = true,
+  onSignIn,
   onBackToAccount,
   onExploreShop,
   onOpenSupport,
@@ -39,6 +53,28 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
 
   const [selectedOrder, setSelectedOrder] = useState<Order | undefined>(defaultOrder);
   const [searchQuery, setSearchQuery] = useState(defaultOrder?.orderNumber || '');
+  // Once the visitor searches for a specific order, later re-fetches of
+  // `orders` (e.g. a background refresh) must not silently swap their
+  // selection back to the URL's default.
+  const hasManualSelectionRef = useRef(false);
+
+  // Re-derives the default order whenever orders/initialOrderId actually
+  // change — a plain useState(defaultOrder) only reads that value once on
+  // mount, so on a fresh load (direct URL/refresh/new tab/shared link) where
+  // `orders` starts empty and arrives later from the server, the page would
+  // otherwise get stuck showing "No Orders Yet" forever even after the real
+  // data arrives, because nothing ever re-syncs the initial guess.
+  useEffect(() => {
+    if (hasManualSelectionRef.current) return;
+    const next =
+      allAvailableOrders.find((o) => o.id === initialOrderId || o.orderNumber === initialOrderId) ||
+      allAvailableOrders[0];
+    if (next) {
+      setSelectedOrder(next);
+      setSearchQuery(next.orderNumber);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, initialOrderId]);
 
   const handleSearchOrder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,11 +83,45 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
       (o) => o.orderNumber.toUpperCase() === clean || o.id === clean || o.trackingNumber?.toUpperCase() === clean
     );
     if (found) {
+      hasManualSelectionRef.current = true;
       setSelectedOrder(found);
     } else {
       alert(`Order "${searchQuery}" not found. Please verify the order number.`);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center bg-[#FAF9F6] py-16">
+        <div className="flex flex-col items-center gap-3 text-[#6B6B6B]">
+          <Loader2 className="h-8 w-8 animate-spin text-[#C9972B]" />
+          <p className="text-xs uppercase tracking-wider">Loading your orders...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <div className="bg-[#FAF9F6] min-h-screen py-16 sm:py-24 flex items-center justify-center px-4">
+        <div className="max-w-md w-full text-center space-y-5">
+          <div className="w-14 h-14 rounded-full bg-[#0B0B0B] flex items-center justify-center mx-auto text-[#C9972B]">
+            <LogIn className="w-6 h-6" />
+          </div>
+          <h1 className="font-serif text-2xl text-[#121212]">Sign In to Track This Order</h1>
+          <p className="text-xs text-[#6B6B6B]">
+            Order tracking is tied to your Glamirk account. Sign in to see live dispatch status.
+          </p>
+          <button
+            onClick={onSignIn}
+            className="px-8 py-3.5 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-[0.2em] uppercase hover:bg-[#0B0B0B] transition-colors cursor-pointer"
+          >
+            SIGN IN
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!selectedOrder) {
     return (
@@ -60,9 +130,13 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
           <div className="w-14 h-14 rounded-full bg-white border border-[#E8D5A8] flex items-center justify-center mx-auto text-[#C9972B]">
             <ShoppingBag className="w-6 h-6" />
           </div>
-          <h1 className="font-serif text-2xl text-[#121212]">No Orders Yet</h1>
+          <h1 className="font-serif text-2xl text-[#121212]">
+            {initialOrderId ? 'Order Not Found' : 'No Orders Yet'}
+          </h1>
           <p className="text-xs text-[#6B6B6B]">
-            You haven't placed any orders yet. Once you do, you'll be able to track their live dispatch status here.
+            {initialOrderId
+              ? "We couldn't find this order on your account. It may belong to a different account, or the link may be incorrect."
+              : "You haven't placed any orders yet. Once you do, you'll be able to track their live dispatch status here."}
           </p>
           <button
             onClick={onExploreShop}
@@ -224,6 +298,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
               {steps.map((step, idx) => {
                 const isPassed = idx <= currentStatusIdx;
                 const isCurrent = idx === currentStatusIdx;
+                const historyEvent = selectedOrder.timeline?.find((event) => event.status === step.status);
 
                 return (
                   <div key={step.status} className="relative flex items-start gap-4">
@@ -259,8 +334,13 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
                         )}
                       </div>
                       <p className="text-xs text-[#6B6B6B] mt-0.5">
-                        {step.description}
+                        {historyEvent?.note || step.description}
                       </p>
+                      {historyEvent && (
+                        <p className="text-[10px] text-[#C9972B] mt-0.5 font-medium">
+                          {formatDateTime(historyEvent.timestamp)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 );
@@ -321,7 +401,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
                   </div>
 
                   <button
-                    onClick={() => onReorder(item.productId)}
+                    onClick={() => onReorder(item.productId, item.shade, item.size)}
                     className="px-4 py-2 border border-[#0B0B0B] bg-white text-[#121212] text-[11px] font-semibold tracking-wider uppercase hover:bg-[#0B0B0B] hover:text-white transition-colors cursor-pointer"
                   >
                     BUY AGAIN

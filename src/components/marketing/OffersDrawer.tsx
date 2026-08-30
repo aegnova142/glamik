@@ -8,7 +8,7 @@ interface OffersDrawerProps {
   onClose: () => void;
   offers: Coupon[];
   appliedCoupon: Coupon | null;
-  onApplyCoupon: (coupon: Coupon) => void;
+  onApplyCoupon: (code: string) => Promise<{ success: boolean; error?: string }>;
   onRemoveCoupon: () => void;
   cartTotal: number;
 }
@@ -119,9 +119,9 @@ export const OffersDrawer: React.FC<OffersDrawerProps> = ({
                             ) : (
                               <button
                                 disabled={!isEligible}
-                                onClick={() => {
-                                  onApplyCoupon(coupon);
-                                  onClose();
+                                onClick={async () => {
+                                  const res = await onApplyCoupon(coupon.code);
+                                  if (res.success) onClose();
                                 }}
                                 className={`px-4 py-2 text-[11px] font-semibold tracking-widest uppercase transition-colors cursor-pointer ${
                                   isEligible

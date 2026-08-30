@@ -53,13 +53,24 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
   onToggleWishlist,
   wishlist,
 }) => {
-  const { shadeJourney, findMyShadeResultsCopy } = useCMS();
+  const { shadeJourney, findMyShadeResultsCopy, findMyShadeHero } = useCMS();
   const resultsCopy = findMyShadeResultsCopy || {
     resultsBadge: 'YOUR GLAMIRK MATCH',
     resultsHeading: 'YOUR PERSONAL BEAUTY EDIT',
     resultsSubtitle: 'Calibrated for your verified undertone, signature aesthetic, and occasion.',
     alternativesEyebrow: 'CURATED VARIATIONS',
     alternativesHeading: 'MORE SHADES YOU MAY LOVE',
+  };
+  const hero = findMyShadeHero || {
+    badgeText: 'INTELLIGENT SHADE DISCOVERY',
+    headingLine1: 'FIND YOUR',
+    headingHighlight: 'PERFECT SHADE',
+    description: 'Beauty is personal. Your shade should be too. Let Glamirk curate your ideal lip & cosmetic matches based on your unique undertone, aesthetic style, and everyday rituals.',
+    image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1000&q=85',
+    primaryCtaText: 'START FINDING MY SHADE',
+    secondaryCtaText: 'I ALREADY KNOW MY SHADE',
+    captionLabel: 'Undertone Precision',
+    captionText: 'Warm, Cool & Neutral pigments crafted for lasting wear.',
   };
 
   // Step state: 0 = Landing, 1 to 5 = Questions, 6 = Optional Photo, 7 = Loading, 8 = Results
@@ -229,16 +240,16 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
               <div className="lg:col-span-7 space-y-6">
                 <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-[#FAF9F6] border border-[#E8D5A8] text-[10.5px] font-semibold tracking-[0.24em] uppercase text-[#C9972B]">
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>INTELLIGENT SHADE DISCOVERY</span>
+                  <span>{hero.badgeText}</span>
                 </div>
 
                 <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl text-[#121212] font-normal leading-[1.1]">
-                  FIND YOUR <br />
-                  <span className="italic font-light">PERFECT SHADE</span>
+                  {hero.headingLine1} <br />
+                  <span className="italic font-light">{hero.headingHighlight}</span>
                 </h1>
 
                 <p className="text-base sm:text-lg text-[#6B6B6B] font-light max-w-xl leading-relaxed">
-                  Beauty is personal. Your shade should be too. Let Glamirk curate your ideal lip & cosmetic matches based on your unique undertone, aesthetic style, and everyday rituals.
+                  {hero.description}
                 </p>
 
                 <div className="pt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
@@ -247,7 +258,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                     onClick={() => setCurrentStep(1)}
                     className="px-8 py-4 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-[0.22em] uppercase hover:bg-[#0B0B0B] transition-colors flex items-center justify-center gap-2 shadow-lg cursor-pointer"
                   >
-                    <span>START FINDING MY SHADE</span>
+                    <span>{hero.primaryCtaText}</span>
                     <ArrowRight className="w-4 h-4 text-[#C9972B]" />
                   </button>
 
@@ -255,7 +266,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                     onClick={onExploreShop}
                     className="px-8 py-4 bg-transparent border border-[#0B0B0B] text-[#121212] text-xs font-semibold tracking-[0.22em] uppercase hover:bg-[#0B0B0B] hover:text-white transition-colors cursor-pointer text-center"
                   >
-                    I ALREADY KNOW MY SHADE
+                    {hero.secondaryCtaText}
                   </button>
                 </div>
 
@@ -280,16 +291,16 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
               <div className="lg:col-span-5">
                 <div className="relative aspect-[4/5] bg-[#E8D5A8] border border-[#E8D5A8] p-3 shadow-xl">
                   <img
-                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1000&q=85"
+                    src={hero.image}
                     alt="Glamirk Shade Consultation"
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute -bottom-5 -left-5 bg-[#FAF9F6] p-4 border border-[#E8D5A8] shadow-lg max-w-[220px]">
                     <span className="text-[9.5px] uppercase tracking-widest text-[#C9972B] font-semibold block">
-                      Undertone Precision
+                      {hero.captionLabel}
                     </span>
                     <p className="text-xs text-[#121212] font-medium mt-0.5">
-                      Warm, Cool & Neutral pigments crafted for lasting wear.
+                      {hero.captionText}
                     </p>
                   </div>
                 </div>

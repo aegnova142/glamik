@@ -1,17 +1,20 @@
 import React from 'react';
 import { ProductCard } from './ProductCard';
 import { ProductDiscoveryBanner } from './ProductDiscoveryBanner';
-import { Product, Shade } from '../../types';
+import { Product, Shade, CartItem } from '../../types';
 import { Sparkles, RotateCcw } from 'lucide-react';
 
 interface ProductGridProps {
   products: Product[];
   wishlist: string[];
+  cartItems: CartItem[];
+  viewMode?: 'grid' | 'list';
   onToggleWishlist: (productId: string) => void;
-  onQuickView: (product: Product) => void;
   onSelectProduct: (product: Product) => void;
   onTryItOn: (product: Product) => void;
   onQuickAdd: (product: Product, shade?: Shade, size?: string) => void;
+  onGoToCart: () => void;
+  onBuyNow: (product: Product, shade?: Shade, size?: string) => void;
   onOpenShadeFinder: () => void;
   onResetFilters: () => void;
 }
@@ -19,31 +22,34 @@ interface ProductGridProps {
 export const ProductGrid: React.FC<ProductGridProps> = ({
   products,
   wishlist,
+  cartItems,
+  viewMode = 'grid',
   onToggleWishlist,
-  onQuickView,
   onSelectProduct,
   onTryItOn,
   onQuickAdd,
+  onGoToCart,
+  onBuyNow,
   onOpenShadeFinder,
   onResetFilters,
 }) => {
   if (products.length === 0) {
     return (
-      <div className="py-20 text-center space-y-4 bg-[#FAF9F6]/50 border border-[#E8D5A8] p-8">
-        <div className="w-14 h-14 bg-[#E8D5A8] rounded-full flex items-center justify-center mx-auto text-[#6B6B6B]">
-          <Sparkles className="w-6 h-6 stroke-[1.2]" />
+      <div className="space-y-4 rounded-xl border border-[#E8D5A8] bg-white/60 p-8 py-20 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E8D5A8] text-[#6B6B6B]">
+          <Sparkles className="h-6 w-6 stroke-[1.2]" />
         </div>
         <h3 className="font-serif text-2xl text-[#121212]">
           WE COULDN&apos;T FIND THAT
         </h3>
-        <p className="text-xs text-[#6B6B6B] max-w-md mx-auto leading-relaxed">
+        <p className="mx-auto max-w-md text-xs leading-relaxed text-[#6B6B6B]">
           No Glamirk creations currently match your selected filters. Try adjusting price, undertone, or finish preferences.
         </p>
         <button
           onClick={onResetFilters}
-          className="mt-4 inline-flex items-center gap-2 px-6 py-3 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-wider uppercase hover:bg-[#0B0B0B] transition-colors"
+          className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-full bg-[#0B0B0B] px-6 py-3 text-xs font-semibold uppercase tracking-wider text-[#FAF9F6] transition-colors hover:bg-[#171717]"
         >
-          <RotateCcw className="w-3.5 h-3.5" />
+          <RotateCcw className="h-3.5 w-3.5" />
           <span>RESET ALL FILTERS</span>
         </button>
       </div>
@@ -52,18 +58,26 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 
   return (
     <div className="space-y-10">
-      {/* Products Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[30px]">
-        {products.map((product, idx) => (
+      <div
+        className={
+          viewMode === 'list'
+            ? 'flex flex-col gap-3.5'
+            : 'grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4'
+        }
+      >
+        {products.map((product) => (
           <ProductCard
             key={product.id}
             product={product}
+            viewMode={viewMode}
             isWishlisted={wishlist.includes(product.id)}
+            cartItems={cartItems}
             onToggleWishlist={onToggleWishlist}
-            onQuickView={onQuickView}
             onSelectProduct={onSelectProduct}
             onTryItOn={onTryItOn}
             onQuickAdd={onQuickAdd}
+            onGoToCart={onGoToCart}
+            onBuyNow={onBuyNow}
           />
         ))}
       </div>

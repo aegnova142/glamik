@@ -20,6 +20,7 @@ import {
   CMSPromoBannerConfig,
   CMSJournalSectionCopy,
   CMSFindMyShadeResultsCopy,
+  CMSFindMyShadeHero,
   Product,
   JournalArticle,
   SupportFaq,
@@ -56,9 +57,17 @@ pool.on('error', (err) => {
 
 const STATE_ROW_ID = 'main';
 
+// Single source of truth for the JWT signing secret — routes.ts, commerce.ts,
+// and socket.ts all verify/sign tokens and previously each redeclared this
+// same literal independently. That's a silent-drift trap: if one copy were
+// ever updated (e.g. rotating the fallback), auth would go out of sync
+// across admin/customer/socket auth with no error, just silently mismatched
+// verification.
+export const JWT_SECRET = process.env.JWT_SECRET || 'glamirk_luxury_atelier_jwt_secret_2026';
+
 let schemaReady: Promise<void> | null = null;
 
-function ensureSchema(): Promise<void> {
+export function ensureSchema(): Promise<void> {
   if (!schemaReady) {
     schemaReady = pool.query(`
       CREATE TABLE IF NOT EXISTS cms_state (
@@ -100,6 +109,8 @@ function ensureSchema(): Promise<void> {
         UNIQUE (user_id, product_id, variant_id)
       );
 
+      ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS saved BOOLEAN NOT NULL DEFAULT false;
+
       CREATE TABLE IF NOT EXISTS orders (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL REFERENCES customers(id),
@@ -119,7 +130,8 @@ function ensureSchema(): Promise<void> {
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping NUMERIC NOT NULL DEFAULT 0;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS coupon_code TEXT;
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT NOT NULL DEFAULT 'cod';
-      ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'PENDING';
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'COD_PENDING';
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_details JSONB;
 
       CREATE TABLE IF NOT EXISTS order_items (
         id TEXT PRIMARY KEY,
@@ -129,6 +141,70 @@ function ensureSchema(): Promise<void> {
         product_name TEXT NOT NULL,
         quantity INTEGER NOT NULL,
         price NUMERIC NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS order_status_history (
+        id TEXT PRIMARY KEY,
+        order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        status TEXT NOT NULL,
+        note TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
+      ALTER TABLE orders ALTER COLUMN status SET DEFAULT 'PLACED';
+
+      CREATE TABLE IF NOT EXISTS reviews (
+        id TEXT PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        customer_name TEXT NOT NULL,
+        rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+        title TEXT,
+        comment TEXT NOT NULL,
+        photo_url TEXT,
+        is_verified_purchase BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (product_id, customer_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS return_requests (
+        id TEXT PRIMARY KEY,
+        order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        customer_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        product_id TEXT NOT NULL,
+        product_name TEXT NOT NULL,
+        product_image TEXT,
+        reason TEXT NOT NULL,
+        comment TEXT,
+        photo_url TEXT,
+        status TEXT NOT NULL DEFAULT 'SUBMITTED',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (order_id, product_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        order_id TEXT,
+        is_read BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+
+      -- Store-side (admin/company) notifications — not scoped to a single
+      -- admin user; any signed-in admin sees the same shared feed, the same
+      -- way the audit log is shared rather than per-admin.
+      CREATE TABLE IF NOT EXISTS admin_notifications (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        order_id TEXT,
+        is_read BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
 
@@ -533,6 +609,13 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
       textRichBlack: '#121212',
       mutedTextGrey: '#6B6B6B',
       borderSoftGold: '#E8D5A8',
+    },
+    codRules: {
+      minOrderAmount: 0,
+      maxOrderAmount: 0,
+      serviceablePinCodes: [],
+      blockedPinCodes: [],
+      codDisabledProductIds: [],
     },
   };
 
@@ -942,6 +1025,18 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
     alternativesHeading: 'MORE SHADES YOU MAY LOVE',
   };
 
+  const initialFindMyShadeHero: CMSFindMyShadeHero = {
+    badgeText: 'INTELLIGENT SHADE DISCOVERY',
+    headingLine1: 'FIND YOUR',
+    headingHighlight: 'PERFECT SHADE',
+    description: 'Beauty is personal. Your shade should be too. Let Glamirk curate your ideal lip & cosmetic matches based on your unique undertone, aesthetic style, and everyday rituals.',
+    image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1000&q=85',
+    primaryCtaText: 'START FINDING MY SHADE',
+    secondaryCtaText: 'I ALREADY KNOW MY SHADE',
+    captionLabel: 'Undertone Precision',
+    captionText: 'Warm, Cool & Neutral pigments crafted for lasting wear.',
+  };
+
   const initialShadeFinderTeaser: CMSShadeFinderTeaser = {
     badgeText: 'Shade Intelligence',
     heading: 'Find Your Perfect Match',
@@ -1029,6 +1124,7 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
     shadeFinderTeaser: initialShadeFinderTeaser,
     journalSectionCopy: initialJournalSectionCopy,
     findMyShadeResultsCopy: initialFindMyShadeResultsCopy,
+    findMyShadeHero: initialFindMyShadeHero,
   };
 }
 
@@ -1089,6 +1185,12 @@ export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
       }
       if (!cachedDb.findMyShadeResultsCopy) {
         cachedDb.findMyShadeResultsCopy = initial.findMyShadeResultsCopy;
+      }
+      if (!cachedDb.findMyShadeHero) {
+        cachedDb.findMyShadeHero = initial.findMyShadeHero;
+      }
+      if (!cachedDb.globalSettings.codRules) {
+        cachedDb.globalSettings.codRules = initial.globalSettings.codRules;
       }
       // Backfill stock on products persisted before the stock field existed
       cachedDb.products = cachedDb.products.map((p) => {

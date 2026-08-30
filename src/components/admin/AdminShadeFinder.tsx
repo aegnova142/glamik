@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useCMS } from '../../context/CMSContext';
-import { CMSShadeJourney, CMSJourneyStep, CMSFindMyShadeResultsCopy } from '../../types';
+import { CMSShadeJourney, CMSJourneyStep, CMSFindMyShadeResultsCopy, CMSFindMyShadeHero } from '../../types';
 import { useSyncOnce } from '../../hooks/useSyncOnce';
+import { ImageCropUploadModal } from './ImageCropUploadModal';
 import {
   Plus,
   Trash2,
@@ -51,16 +52,38 @@ const DEFAULT_RESULTS_COPY: CMSFindMyShadeResultsCopy = {
   alternativesHeading: 'MORE SHADES YOU MAY LOVE',
 };
 
+const DEFAULT_HERO: CMSFindMyShadeHero = {
+  badgeText: 'INTELLIGENT SHADE DISCOVERY',
+  headingLine1: 'FIND YOUR',
+  headingHighlight: 'PERFECT SHADE',
+  description: 'Beauty is personal. Your shade should be too. Let Glamirk curate your ideal lip & cosmetic matches based on your unique undertone, aesthetic style, and everyday rituals.',
+  image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1000&q=85',
+  primaryCtaText: 'START FINDING MY SHADE',
+  secondaryCtaText: 'I ALREADY KNOW MY SHADE',
+  captionLabel: 'Undertone Precision',
+  captionText: 'Warm, Cool & Neutral pigments crafted for lasting wear.',
+};
+
 export const AdminShadeFinder: React.FC = () => {
-  const { shadeJourney, saveShadeJourney, findMyShadeResultsCopy, saveFindMyShadeResultsCopy } = useCMS();
+  const {
+    shadeJourney,
+    saveShadeJourney,
+    findMyShadeResultsCopy,
+    saveFindMyShadeResultsCopy,
+    findMyShadeHero,
+    saveFindMyShadeHero,
+  } = useCMS();
   const [journeyState, setJourneyState] = useState<CMSShadeJourney>(shadeJourney || DEFAULT_JOURNEY);
   const [resultsCopyState, setResultsCopyState] = useState<CMSFindMyShadeResultsCopy>(findMyShadeResultsCopy || DEFAULT_RESULTS_COPY);
+  const [heroState, setHeroState] = useState<CMSFindMyShadeHero>(findMyShadeHero || DEFAULT_HERO);
+  const [isHeroImageUploadOpen, setIsHeroImageUploadOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useSyncOnce(shadeJourney, setJourneyState);
   useSyncOnce(findMyShadeResultsCopy, setResultsCopyState);
+  useSyncOnce(findMyShadeHero, setHeroState);
 
   const handleSave = async () => {
     setError(null);
@@ -68,13 +91,18 @@ export const AdminShadeFinder: React.FC = () => {
       setError('Title is required.');
       return;
     }
+    if (!heroState.headingLine1.trim() || !heroState.description.trim()) {
+      setError('Hero heading and description are required.');
+      return;
+    }
     setIsSaving(true);
-    const [journeyOk, resultsOk] = await Promise.all([
+    const [journeyOk, resultsOk, heroOk] = await Promise.all([
       saveShadeJourney(journeyState),
       saveFindMyShadeResultsCopy(resultsCopyState),
+      saveFindMyShadeHero(heroState),
     ]);
     setIsSaving(false);
-    if (journeyOk && resultsOk) {
+    if (journeyOk && resultsOk && heroOk) {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 1500);
     } else {
@@ -116,9 +144,9 @@ export const AdminShadeFinder: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-serif text-2xl text-[#FAF9F6]">Find My Shade — Beauty Journey</h2>
+          <h2 className="font-serif text-2xl text-[#FAF9F6]">Find My Shade</h2>
           <p className="text-xs text-[#6B6B6B] mt-0.5">
-            Manage the "Beauty Journey in Simple Steps" section shown on the Find My Shade landing page.
+            Manage the landing hero, "Beauty Journey in Simple Steps" section, and quiz results headings on the Find My Shade page.
           </p>
         </div>
 
@@ -137,6 +165,148 @@ export const AdminShadeFinder: React.FC = () => {
           {error}
         </div>
       )}
+
+      {/* Landing Hero — badge, heading, description, photo shown at the very top of the page */}
+      <div className="p-6 rounded-xl bg-[#171717] border border-[#E8D5A8]/30 space-y-4 max-w-2xl">
+        <div>
+          <h3 className="text-sm font-bold text-[#FAF9F6] uppercase tracking-wider">Landing Hero</h3>
+          <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+            The "Find Your Perfect Shade" section shoppers see first, before starting the quiz.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Badge Text</label>
+          <input
+            type="text"
+            value={heroState.badgeText}
+            onChange={(e) => setHeroState({ ...heroState, badgeText: e.target.value })}
+            className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+              Heading Line *
+            </label>
+            <input
+              type="text"
+              value={heroState.headingLine1}
+              onChange={(e) => setHeroState({ ...heroState, headingLine1: e.target.value })}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+              Heading Highlight (italic)
+            </label>
+            <input
+              type="text"
+              value={heroState.headingHighlight}
+              onChange={(e) => setHeroState({ ...heroState, headingHighlight: e.target.value })}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+            Description *
+          </label>
+          <textarea
+            value={heroState.description}
+            onChange={(e) => setHeroState({ ...heroState, description: e.target.value })}
+            rows={3}
+            className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Primary Button Text</label>
+            <input
+              type="text"
+              value={heroState.primaryCtaText}
+              onChange={(e) => setHeroState({ ...heroState, primaryCtaText: e.target.value })}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Secondary Button Text</label>
+            <input
+              type="text"
+              value={heroState.secondaryCtaText}
+              onChange={(e) => setHeroState({ ...heroState, secondaryCtaText: e.target.value })}
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+            />
+          </div>
+        </div>
+
+        <div className="pt-3 border-t border-[#E8D5A8]/15 space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Photo</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={heroState.image}
+                onChange={(e) => setHeroState({ ...heroState, image: e.target.value })}
+                placeholder="https://..."
+                className="flex-1 px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+              />
+              <button
+                type="button"
+                onClick={() => setIsHeroImageUploadOpen(true)}
+                className="px-3 py-2 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] transition-colors cursor-pointer whitespace-nowrap"
+              >
+                Upload
+              </button>
+            </div>
+            {heroState.image && (
+              <div className="mt-2 w-24 aspect-[4/5] rounded-lg overflow-hidden border border-[#E8D5A8]/30 bg-[#0B0B0B]">
+                <img src={heroState.image} alt="Hero preview" className="w-full h-full object-cover" />
+              </div>
+            )}
+          </div>
+
+          {isHeroImageUploadOpen && (
+            <ImageCropUploadModal
+              isOpen
+              onClose={() => setIsHeroImageUploadOpen(false)}
+              title="Upload Find My Shade Hero Photo"
+              aspectRatio={0.8}
+              minWidth={800}
+              minHeight={1000}
+              recommendedWidth={1000}
+              recommendedHeight={1250}
+              outputWidth={1000}
+              outputHeight={1250}
+              onUploaded={({ url }) => setHeroState({ ...heroState, image: url })}
+            />
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Photo Caption Label</label>
+              <input
+                type="text"
+                value={heroState.captionLabel}
+                onChange={(e) => setHeroState({ ...heroState, captionLabel: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Photo Caption Text</label>
+              <input
+                type="text"
+                value={heroState.captionText}
+                onChange={(e) => setHeroState({ ...heroState, captionText: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Section heading fields */}
       <div className="p-6 rounded-xl bg-[#171717] border border-[#E8D5A8]/30 space-y-4 max-w-2xl">

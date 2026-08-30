@@ -35,10 +35,14 @@ export const CustomerAuthProvider: React.FC<{ children: ReactNode }> = ({ childr
     customerApiFetch<{ user: CustomerUser }>('/api/customer/auth/me').then((res) => {
       if (res.data?.user) {
         setCustomerUser(res.data.user);
-      } else {
+      } else if (res.status === 401 || res.status === 403) {
+        // Token is genuinely invalid/expired — safe to log out.
         clearCustomerAuth();
         setCustomerUser(null);
       }
+      // Any other failure (transient DB hiccup, network blip, 5xx) is not
+      // proof the session is invalid — keep the locally cached user so a
+      // flaky request on a fresh page load doesn't silently sign people out.
       setCustomerLoading(false);
     });
   }, []);

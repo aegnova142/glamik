@@ -27,8 +27,10 @@ import {
   CMSShadeFinderTeaser,
   CMSJournalSectionCopy,
   CMSFindMyShadeResultsCopy,
+  CMSFindMyShadeHero,
 } from '../types';
 import { apiFetch, getAdminToken, setAdminAuth, clearAdminAuth, getStoredAdminUser } from '../utils/cmsClient';
+import { getSocket } from '../utils/socket';
 
 // Fallback seed data in case API is temporarily unavailable
 import { GLAMIRK_PRODUCTS } from '../data/products';
@@ -54,6 +56,7 @@ export interface CMSContextType {
   shadeFinderTeaser: CMSShadeFinderTeaser | null;
   journalSectionCopy: CMSJournalSectionCopy | null;
   findMyShadeResultsCopy: CMSFindMyShadeResultsCopy | null;
+  findMyShadeHero: CMSFindMyShadeHero | null;
   journalArticles: JournalArticle[];
   faqs: SupportFaq[];
   globalSettings: CMSGlobalSettings | null;
@@ -91,6 +94,7 @@ export interface CMSContextType {
   saveShadeFinderTeaser: (teaser: CMSShadeFinderTeaser) => Promise<boolean>;
   saveJournalSectionCopy: (copy: CMSJournalSectionCopy) => Promise<boolean>;
   saveFindMyShadeResultsCopy: (copy: CMSFindMyShadeResultsCopy) => Promise<boolean>;
+  saveFindMyShadeHero: (hero: CMSFindMyShadeHero) => Promise<boolean>;
   saveAboutContent: (about: CMSAboutContent) => Promise<boolean>;
   saveShadeJourney: (journey: CMSShadeJourney) => Promise<boolean>;
   saveBenefitsSection: (section: CMSBenefitsSection) => Promise<boolean>;
@@ -193,6 +197,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [shadeFinderTeaser, setShadeFinderTeaser] = useState<CMSShadeFinderTeaser | null>(null);
   const [journalSectionCopy, setJournalSectionCopy] = useState<CMSJournalSectionCopy | null>(null);
   const [findMyShadeResultsCopy, setFindMyShadeResultsCopy] = useState<CMSFindMyShadeResultsCopy | null>(null);
+  const [findMyShadeHero, setFindMyShadeHero] = useState<CMSFindMyShadeHero | null>(null);
   const [journalArticles, setJournalArticles] = useState<JournalArticle[]>(GLAMIRK_JOURNAL_ARTICLES_EXTENDED);
   const [faqs, setFaqs] = useState<SupportFaq[]>(SUPPORT_FAQS.map((f, i) => ({ ...f, order: i + 1, isVisible: true })));
   const [globalSettings, setGlobalSettings] = useState<CMSGlobalSettings | null>({
@@ -216,6 +221,13 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     defaultSeoTitle: 'Glamirk Beauty | Luxury Makeup & Skincare Atelier',
     defaultSeoDescription: 'Discover high-pigment, weightless lip colors and botanical cleansing balms meticulously calibrated for warm, olive, and South Asian skin tones.',
     approvedPalette: defaultApprovedPalette,
+    codRules: {
+      minOrderAmount: 0,
+      maxOrderAmount: 0,
+      serviceablePinCodes: [],
+      blockedPinCodes: [],
+      codDisabledProductIds: [],
+    },
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [serverTime, setServerTime] = useState<string>(new Date().toISOString());
@@ -245,6 +257,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (res.data.shadeFinderTeaser) setShadeFinderTeaser(res.data.shadeFinderTeaser);
         if (res.data.journalSectionCopy) setJournalSectionCopy(res.data.journalSectionCopy);
         if (res.data.findMyShadeResultsCopy) setFindMyShadeResultsCopy(res.data.findMyShadeResultsCopy);
+        if (res.data.findMyShadeHero) setFindMyShadeHero(res.data.findMyShadeHero);
         if (res.data.journalArticles) setJournalArticles(res.data.journalArticles);
         if (res.data.faqs) setFaqs(res.data.faqs);
         if (res.data.globalSettings) setGlobalSettings(res.data.globalSettings);
@@ -257,35 +270,18 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, []);
 
-  // Connect to Real-Time Server-Sent Events (SSE)
+  // Connect to the shared Socket.IO client for real-time CMS updates
   useEffect(() => {
     loadPublicContent();
 
-    let eventSource: EventSource | null = null;
-    try {
-      eventSource = new EventSource('/api/events');
-
-      eventSource.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data);
-          if (parsed.type === 'CMS_UPDATE') {
-            // Hot reload public content smoothly
-            loadPublicContent();
-          }
-        } catch (e) {
-          console.error('Error handling SSE payload:', e);
-        }
-      };
-
-      eventSource.onerror = () => {
-        // SSE disconnected or fallback
-        if (eventSource) {
-          eventSource.close();
-        }
-      };
-    } catch (err) {
-      console.warn('SSE not available in environment:', err);
-    }
+    const socket = getSocket();
+    const handleEvent = (event: any) => {
+      if (event?.type === 'CMS_UPDATE') {
+        // Hot reload public content smoothly
+        loadPublicContent();
+      }
+    };
+    socket.on('event', handleEvent);
 
     // Periodic check every 30s to keep offer countdowns in sync
     const interval = setInterval(() => {
@@ -293,7 +289,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, 30000);
 
     return () => {
-      if (eventSource) eventSource.close();
+      socket.off('event', handleEvent);
       clearInterval(interval);
     };
   }, [loadPublicContent]);
@@ -551,6 +547,15 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
+  const saveFindMyShadeHero = async (hero: CMSFindMyShadeHero): Promise<boolean> => {
+    const res = await apiFetch('/api/admin/find-my-shade-hero', { method: 'PUT', body: JSON.stringify(hero) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
   const saveBenefitsSection = async (section: CMSBenefitsSection): Promise<boolean> => {
     const res = await apiFetch('/api/admin/benefits-section', { method: 'PUT', body: JSON.stringify(section) });
     if (res.status < 400) {
@@ -701,6 +706,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     shadeFinderTeaser,
     journalSectionCopy,
     findMyShadeResultsCopy,
+    findMyShadeHero,
     journalArticles,
     faqs,
     globalSettings,
@@ -732,6 +738,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     saveShadeFinderTeaser,
     saveJournalSectionCopy,
     saveFindMyShadeResultsCopy,
+    saveFindMyShadeHero,
     saveAboutContent,
     saveShadeJourney,
     saveBenefitsSection,

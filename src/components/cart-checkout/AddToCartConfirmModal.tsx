@@ -1,25 +1,35 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Check, ShoppingBag, X } from 'lucide-react';
+import { Check, ShoppingBag, X, Loader2 } from 'lucide-react';
 import { Product, Shade } from '../../types';
 
 interface AddToCartConfirmModalProps {
   isOpen: boolean;
+  /** "confirm" — nothing has been added yet; shows Cancel + Add to Cart.
+   * "success" — the add already happened server-side; shows Continue
+   * Shopping + Go to Cart. Closing/Cancel in "confirm" mode must never
+   * touch the cart — see handleCancelAddToCart in App.tsx. */
+  mode: 'confirm' | 'success';
   product: Product | null;
   shade?: Shade;
   size?: string;
   quantity: number;
+  isSubmitting?: boolean;
   onClose: () => void;
+  onConfirm: () => void;
   onGoToCart: () => void;
 }
 
 export const AddToCartConfirmModal: React.FC<AddToCartConfirmModalProps> = ({
   isOpen,
+  mode,
   product,
   shade,
   size,
   quantity,
+  isSubmitting = false,
   onClose,
+  onConfirm,
   onGoToCart,
 }) => {
   if (!product) return null;
@@ -54,10 +64,14 @@ export const AddToCartConfirmModal: React.FC<AddToCartConfirmModalProps> = ({
 
             <div className="flex items-center gap-2 text-[#C9972B]">
               <div className="w-7 h-7 rounded-full bg-[#0B0B0B] flex items-center justify-center shrink-0">
-                <Check className="w-4 h-4 text-[#C9972B]" />
+                {mode === 'success' ? (
+                  <Check className="w-4 h-4 text-[#C9972B]" />
+                ) : (
+                  <ShoppingBag className="w-3.5 h-3.5 text-[#C9972B]" />
+                )}
               </div>
               <span className="text-xs font-semibold tracking-[0.18em] uppercase text-[#121212]">
-                Added to Your Bag
+                {mode === 'success' ? 'Added to Your Bag' : 'Add This to Your Bag?'}
               </span>
             </div>
 
@@ -76,21 +90,50 @@ export const AddToCartConfirmModal: React.FC<AddToCartConfirmModalProps> = ({
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              <button
-                onClick={onClose}
-                className="flex-1 py-3 border border-[#E8D5A8] text-xs font-semibold tracking-wider uppercase text-[#121212] hover:bg-[#FAF9F6] transition-colors cursor-pointer"
-              >
-                Continue Shopping
-              </button>
-              <button
-                onClick={onGoToCart}
-                className="flex-1 py-3 bg-[#0B0B0B] text-white text-xs font-semibold tracking-wider uppercase hover:bg-[#0B0B0B] transition-colors flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <ShoppingBag className="w-3.5 h-3.5 text-[#C9972B]" />
-                <span>Go to Cart</span>
-              </button>
-            </div>
+            {mode === 'confirm' ? (
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <button
+                  onClick={onClose}
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 border border-[#E8D5A8] text-xs font-semibold tracking-wider uppercase text-[#121212] hover:bg-[#FAF9F6] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Continue Shopping
+                </button>
+                <button
+                  onClick={onConfirm}
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 bg-[#0B0B0B] text-white text-xs font-semibold tracking-wider uppercase hover:bg-[#171717] transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-wait"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 text-[#C9972B] animate-spin" />
+                      <span>Adding...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingBag className="w-3.5 h-3.5 text-[#C9972B]" />
+                      <span>Add to Cart</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <button
+                  onClick={onClose}
+                  className="flex-1 py-3 border border-[#E8D5A8] text-xs font-semibold tracking-wider uppercase text-[#121212] hover:bg-[#FAF9F6] transition-colors cursor-pointer"
+                >
+                  Continue Shopping
+                </button>
+                <button
+                  onClick={onGoToCart}
+                  className="flex-1 py-3 bg-[#0B0B0B] text-white text-xs font-semibold tracking-wider uppercase hover:bg-[#171717] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <ShoppingBag className="w-3.5 h-3.5 text-[#C9972B]" />
+                  <span>Go to Cart</span>
+                </button>
+              </div>
+            )}
           </motion.div>
         </div>
       )}

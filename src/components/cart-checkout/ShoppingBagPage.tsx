@@ -16,17 +16,22 @@ import {
   Check,
   Gift,
   ArrowLeft,
+  Bookmark,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ShoppingBagPageProps {
   cartItems: CartItem[];
+  savedItems: CartItem[];
   wishlist: string[];
   appliedCoupon: Coupon | null;
   onUpdateQuantity: (index: number, quantity: number) => void;
   onRemoveItem: (index: number) => void;
   onMoveToWishlist: (index: number, product: Product) => void;
-  onApplyCoupon: (coupon: Coupon) => void;
+  onSaveForLater: (index: number) => void;
+  onMoveSavedToCart: (index: number) => void;
+  onRemoveSavedItem: (index: number) => void;
+  onApplyCoupon: (code: string) => Promise<{ success: boolean; error?: string }>;
   onRemoveCoupon: () => void;
   onProceedToCheckout: () => void;
   onContinueShopping: () => void;
@@ -37,11 +42,15 @@ interface ShoppingBagPageProps {
 
 export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
   cartItems,
+  savedItems,
   wishlist,
   appliedCoupon,
   onUpdateQuantity,
   onRemoveItem,
   onMoveToWishlist,
+  onSaveForLater,
+  onMoveSavedToCart,
+  onRemoveSavedItem,
   onApplyCoupon,
   onRemoveCoupon,
   onProceedToCheckout,
@@ -50,7 +59,8 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
   onOpenAssistant,
   onQuickAdd,
 }) => {
-  const { activeOffers } = useCMS();
+  const { activeOffers, products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
   const cmsCoupons: Coupon[] = activeOffers
     .filter((o) => o.couponCode && (o.discountType === 'percentage' || o.discountType === 'flat'))
     .map((o) => ({
@@ -66,6 +76,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
 
   const [promoInput, setPromoInput] = useState('');
   const [promoError, setPromoError] = useState<string | null>(null);
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
   const [isOffersDrawerOpen, setIsOffersDrawerOpen] = useState(false);
 
   // Gifting Option State
@@ -91,7 +102,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
   const remainingForFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
   const shippingProgress = Math.min(100, (subtotal / FREE_SHIPPING_THRESHOLD) * 100);
 
-  const handleApplyPromoCode = (e: React.FormEvent) => {
+  const handleApplyPromoCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setPromoError(null);
 
@@ -101,24 +112,20 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
       return;
     }
 
-    const matched = availableCoupons.find((c) => c.code.toUpperCase() === clean);
-    if (!matched) {
-      setPromoError('Invalid promotional code. Tap "View Available Offers" to inspect active privileges.');
+    setIsApplyingPromo(true);
+    const res = await onApplyCoupon(clean);
+    setIsApplyingPromo(false);
+
+    if (!res.success) {
+      setPromoError(res.error || 'Invalid promotional code. Tap "View Available Offers" to inspect active privileges.');
       return;
     }
-
-    if (matched.minOrderValue && subtotal < matched.minOrderValue) {
-      setPromoError(`Code requires a minimum bag value of ₹${matched.minOrderValue}.`);
-      return;
-    }
-
-    onApplyCoupon(matched);
     setPromoInput('');
   };
 
   // Smart Cart Recommendations: Find complementary products not currently in bag
   const cartProductIds = cartItems.map((item) => item.product.id);
-  const smartRecommendations = GLAMIRK_PRODUCTS.filter(
+  const smartRecommendations = catalogProducts.filter(
     (p) => !cartProductIds.includes(p.id)
   ).slice(0, 3);
 
@@ -153,7 +160,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
           </p>
         </div>
 
-        {cartItems.length === 0 ? (
+        {cartItems.length === 0 && savedItems.length === 0 ? (
           /* Empty Bag State */
           <div className="py-20 text-center space-y-6 max-w-md mx-auto border border-[#E8D5A8] bg-white p-10">
             <ShoppingBag className="w-12 h-12 text-[#C9972B] mx-auto stroke-[1.2]" />
@@ -320,6 +327,14 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                           {/* Move to Wishlist & Remove */}
                           <div className="flex items-center gap-4 text-xs font-medium tracking-wider uppercase">
                             <button
+                              onClick={() => onSaveForLater(index)}
+                              className="text-[#6B6B6B] hover:text-[#C9972B] flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <Bookmark className="w-3.5 h-3.5" />
+                              <span>SAVE FOR LATER</span>
+                            </button>
+
+                            <button
                               onClick={() => onMoveToWishlist(index, item.product)}
                               className="text-[#6B6B6B] hover:text-[#C9972B] flex items-center gap-1 transition-colors cursor-pointer"
                             >
@@ -342,6 +357,58 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                   );
                 })}
               </div>
+
+              {/* 2b. Saved for Later */}
+              {savedItems.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-[#6B6B6B]">
+                    <Bookmark className="w-3.5 h-3.5 text-[#C9972B]" />
+                    <span>SAVED FOR LATER ({savedItems.length})</span>
+                  </div>
+                  <div className="space-y-3">
+                    {savedItems.map((item, index) => (
+                      <div
+                        key={`${item.product.id}-${item.selectedShade?.id}-${item.selectedSize}-${index}`}
+                        className="p-3.5 sm:p-4 bg-[#FAF9F6] border border-[#E8D5A8] flex items-center gap-4"
+                      >
+                        <div
+                          onClick={() => onOpenProduct(item.product)}
+                          className="w-16 h-19 bg-white border border-[#E8D5A8] overflow-hidden flex-shrink-0 cursor-pointer"
+                        >
+                          <img src={item.product.images.primary} alt={item.product.name} className="w-full h-full object-cover" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4
+                            onClick={() => onOpenProduct(item.product)}
+                            className="font-serif text-sm text-[#121212] hover:text-[#C9972B] transition-colors cursor-pointer truncate"
+                          >
+                            {item.product.name}
+                          </h4>
+                          <p className="text-xs text-[#6B6B6B] mt-0.5">
+                            {item.selectedShade ? `Shade: ${item.selectedShade.name}` : item.selectedSize ? `Size: ${item.selectedSize}` : ''} • ₹{item.product.price} • Qty: {item.quantity}
+                          </p>
+                          <div className="flex items-center gap-4 mt-2 text-[11px] font-medium tracking-wider uppercase">
+                            <button
+                              onClick={() => onMoveSavedToCart(index)}
+                              className="text-[#C9972B] hover:underline flex items-center gap-1 cursor-pointer"
+                            >
+                              <ShoppingBag className="w-3.5 h-3.5" />
+                              <span>MOVE TO BAG</span>
+                            </button>
+                            <button
+                              onClick={() => onRemoveSavedItem(index)}
+                              className="text-[#6B6B6B] hover:text-[#F05A7E] flex items-center gap-1 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>REMOVE</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* 3. Luxury Gifting Foundation */}
               <div className="p-5 bg-white border border-[#E8D5A8] space-y-3">
@@ -521,9 +588,10 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                       />
                       <button
                         type="submit"
-                        className="px-4 py-2.5 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-wider uppercase hover:bg-[#0B0B0B] transition-colors cursor-pointer"
+                        disabled={isApplyingPromo}
+                        className="px-4 py-2.5 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-wider uppercase hover:bg-[#0B0B0B] transition-colors cursor-pointer disabled:opacity-50"
                       >
-                        APPLY
+                        {isApplyingPromo ? '...' : 'APPLY'}
                       </button>
                     </form>
                   )}
@@ -585,8 +653,9 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                 {/* Checkout Primary CTA */}
                 <button
                   id="shopping-bag-proceed-checkout-btn"
+                  disabled={cartItems.length === 0}
                   onClick={onProceedToCheckout}
-                  className="w-full py-4 bg-[#0B0B0B] text-[#FAF9F6] text-xs sm:text-[13px] font-semibold tracking-[0.22em] uppercase hover:bg-[#0B0B0B] active:scale-[0.99] transition-all duration-300 flex items-center justify-center gap-2 shadow-md cursor-pointer"
+                  className="w-full py-4 bg-[#0B0B0B] text-[#FAF9F6] text-xs sm:text-[13px] font-semibold tracking-[0.22em] uppercase hover:bg-[#0B0B0B] active:scale-[0.99] transition-all duration-300 flex items-center justify-center gap-2 shadow-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <span>PROCEED TO CHECKOUT</span>
                   <ArrowRight className="w-4 h-4 text-[#C9972B]" />

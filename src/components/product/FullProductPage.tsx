@@ -4,8 +4,10 @@ import { ShadeSelector } from './ShadeSelector';
 import { CompleteTheLook } from './CompleteTheLook';
 import { RelatedProducts } from './RelatedProducts';
 import { RecentlyViewed } from './RecentlyViewed';
+import { ProductReviews } from './ProductReviews';
+import { DeliveryCheck } from './DeliveryCheck';
 import { WatchTheGlamModal } from '../social/WatchTheGlamModal';
-import { Product, Shade } from '../../types';
+import { Product, Shade, CartItem } from '../../types';
 import { GLAMIRK_JOURNAL_ARTICLES_EXTENDED, GLAMIRK_BEAUTY_GUIDES } from '../../data/editorial';
 import {
   Heart,
@@ -27,30 +29,32 @@ import {
 interface FullProductPageProps {
   product: Product;
   wishlist: string[];
+  cartItems: CartItem[];
   recentlyViewedIds: string[];
   onToggleWishlist: (productId: string) => void;
   onAddToBag: (product: Product, shade?: Shade, size?: string, quantity?: number) => void;
   onBuyNow: (product: Product, shade?: Shade, size?: string) => void;
+  onGoToCart: () => void;
   onOpenShadeFinder: () => void;
   onSelectProduct: (product: Product) => void;
   onBackToShop: () => void;
   onAddLookToBag: (items: { product: Product; shade?: Shade; size?: string }[]) => void;
-  onQuickView: (product: Product) => void;
   onOpenArticle?: (articleId: string) => void;
 }
 
 export const FullProductPage: React.FC<FullProductPageProps> = ({
   product,
   wishlist,
+  cartItems,
   recentlyViewedIds,
   onToggleWishlist,
   onAddToBag,
   onBuyNow,
+  onGoToCart,
   onOpenShadeFinder,
   onSelectProduct,
   onBackToShop,
   onAddLookToBag,
-  onQuickView,
   onOpenArticle,
 }) => {
   const [selectedShade, setSelectedShade] = useState<Shade | undefined>(
@@ -224,6 +228,9 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                 onOpenShadeFinder={onOpenShadeFinder}
               />
             )}
+
+            {/* Delivery Availability */}
+            <DeliveryCheck />
 
             {/* Purchase Controls */}
             <div className="space-y-3 pt-2">
@@ -420,6 +427,13 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
           </div>
         </div>
 
+        {/* Ratings & Reviews */}
+        <ProductReviews
+          productId={product.id}
+          fallbackRating={product.rating}
+          fallbackReviewCount={product.reviewCount}
+        />
+
         {/* Complete The Look Cross-Selling */}
         <CompleteTheLook
           currentProduct={product}
@@ -477,11 +491,13 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
         <RelatedProducts
           currentProduct={product}
           wishlist={wishlist}
+          cartItems={cartItems}
           onToggleWishlist={onToggleWishlist}
-          onQuickView={onQuickView}
           onSelectProduct={onSelectProduct}
           onTryItOn={onOpenShadeFinder}
           onQuickAdd={(p, s, sz) => onAddToBag(p, s, sz, 1)}
+          onGoToCart={onGoToCart}
+          onBuyNow={(p, s, sz) => onBuyNow(p, s, sz)}
         />
       </div>
 

@@ -1,26 +1,30 @@
 import React from 'react';
-import { Product, Shade } from '../../types';
+import { Product, Shade, CartItem } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { ProductCard } from './ProductCard';
 
 interface RelatedProductsProps {
   currentProduct: Product;
   wishlist: string[];
+  cartItems: CartItem[];
   onToggleWishlist: (productId: string) => void;
-  onQuickView: (product: Product) => void;
   onSelectProduct: (product: Product) => void;
   onTryItOn: (product: Product) => void;
   onQuickAdd: (product: Product, shade?: Shade, size?: string) => void;
+  onGoToCart: () => void;
+  onBuyNow: (product: Product, shade?: Shade, size?: string) => void;
 }
 
 export const RelatedProducts: React.FC<RelatedProductsProps> = ({
   currentProduct,
   wishlist,
+  cartItems,
   onToggleWishlist,
-  onQuickView,
   onSelectProduct,
   onTryItOn,
   onQuickAdd,
+  onGoToCart,
+  onBuyNow,
 }) => {
   const relatedProducts = currentProduct.relatedProductIds
     .map((id) => GLAMIRK_PRODUCTS.find((p) => p.id === id))
@@ -45,11 +49,13 @@ export const RelatedProducts: React.FC<RelatedProductsProps> = ({
             key={product.id}
             product={product}
             isWishlisted={wishlist.includes(product.id)}
+            cartItems={cartItems}
             onToggleWishlist={onToggleWishlist}
-            onQuickView={onQuickView}
             onSelectProduct={onSelectProduct}
             onTryItOn={onTryItOn}
             onQuickAdd={onQuickAdd}
+            onGoToCart={onGoToCart}
+            onBuyNow={onBuyNow}
           />
         ))}
       </div>

@@ -11,7 +11,7 @@ import { resolveHeroLayout, heroRowOrderClass, heroTextAlignClasses } from './he
 const EMPTY_BACKGROUNDS: CMSHeroBackground[] = [];
 
 const TRUST_BAR_VISIBLE_LIMIT = 3;
-const AUTOPLAY_MS = 3000;
+const AUTOPLAY_MS = 1800;
 const AUTOPLAY_FADE_MS = 200; // automatic slide change — quick move
 const MANUAL_FADE_MS = 100; // button/dot/swipe — instant-feeling
 const DRAG_THRESHOLD_PX = 60;
@@ -432,7 +432,14 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
 
         {/* Prev arrow + Dots + Next arrow — all in a single line */}
         {slideCount > 1 && (
-          <div className="relative z-20 mt-5 flex items-center justify-center gap-3">
+          <div
+            className="relative z-20 mt-5 flex items-center justify-center gap-3"
+            onMouseEnter={() => setIsHovering(true)}
+            onMouseLeave={() => {
+              setIsHovering(false);
+              pauseAutoplayBriefly();
+            }}
+          >
             <button
               type="button"
               onClick={goPrev}

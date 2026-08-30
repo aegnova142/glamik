@@ -3,11 +3,21 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
-import { pool, loadDatabase, saveDatabase, withStockLock, broadcastEvent, evaluateOffers } from './db';
-import { Product, Shade, ServerCartItem, Order, OrderItem } from '../src/types';
+import { pool, loadDatabase, saveDatabase, withStockLock, broadcastEvent, evaluateOffers, InternalCMSDatabaseSchema, JWT_SECRET } from './db';
+import { Product, Shade, ServerCartItem, Order, OrderItem, PaymentDetails, CODRules } from '../src/types';
+import {
+  CANCELLABLE_STATUSES,
+  buildOrderFromRow,
+  buildOrdersFromRows,
+  insertOrderStatusHistory,
+  mapReturnRequestRow,
+  restockOrderItems,
+} from './orders';
+import { isVerifiedPurchase, mapReviewRow, recomputeProductRating } from './reviews';
+import { mapNotificationRow, notifyOrderStatusChange, notifyAdminNewOrder } from './notifications';
+import { sendOrderStatusEmail, sendAdminNewOrderEmail } from './email';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'glamirk_luxury_atelier_jwt_secret_2026';
 
 // Lazily built — undefined when SMTP isn't configured, in which case callers
 // fall back to their own dev-mode behavior instead of trying to send mail.
@@ -285,6 +295,12 @@ router.get('/addresses', requireCustomer, async (req: AuthenticatedCustomerReque
   res.json({ addresses: result.rows.map(mapAddressRow) });
 });
 
+// Only one address can be marked default at a time — clears every other
+// address's flag for this customer before the caller sets the new one.
+async function clearOtherDefaultAddresses(userId: string, keepId?: string): Promise<void> {
+  await pool.query('UPDATE customer_addresses SET is_default = false WHERE user_id = $1 AND id IS DISTINCT FROM $2', [userId, keepId || null]);
+}
+
 router.post('/addresses', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
   const { name, type, phone, email, addressLine1, addressLine2, city, state, pinCode, isDefault } = req.body || {};
   if (!name?.trim() || !phone?.trim() || !addressLine1?.trim() || !city?.trim() || !state?.trim() || !pinCode?.trim()) {
@@ -292,11 +308,36 @@ router.post('/addresses', requireCustomer, async (req: AuthenticatedCustomerRequ
   }
 
   const id = 'addr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  if (isDefault) await clearOtherDefaultAddresses(req.customer!.id);
   await pool.query(
     `INSERT INTO customer_addresses
       (id, user_id, name, type, phone, email, address_line1, address_line2, city, state, pin_code, is_default)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
     [id, req.customer!.id, name, type || 'Home', phone, email || null, addressLine1, addressLine2 || null, city, state, pinCode, !!isDefault]
+  );
+
+  const result = await pool.query('SELECT * FROM customer_addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at ASC', [req.customer!.id]);
+  res.json({ addresses: result.rows.map(mapAddressRow), newAddressId: id });
+});
+
+router.put('/addresses/:id', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const { name, type, phone, email, addressLine1, addressLine2, city, state, pinCode, isDefault } = req.body || {};
+  if (!name?.trim() || !phone?.trim() || !addressLine1?.trim() || !city?.trim() || !state?.trim() || !pinCode?.trim()) {
+    return res.status(400).json({ error: 'Please fill in all required address fields.' });
+  }
+
+  const ownerCheck = await pool.query('SELECT id FROM customer_addresses WHERE id = $1 AND user_id = $2', [req.params.id, req.customer!.id]);
+  if (ownerCheck.rows.length === 0) {
+    return res.status(404).json({ error: 'Address not found.' });
+  }
+
+  if (isDefault) await clearOtherDefaultAddresses(req.customer!.id, req.params.id);
+  await pool.query(
+    `UPDATE customer_addresses SET
+      name = $1, type = $2, phone = $3, email = $4, address_line1 = $5, address_line2 = $6,
+      city = $7, state = $8, pin_code = $9, is_default = $10
+     WHERE id = $11`,
+    [name, type || 'Home', phone, email || null, addressLine1, addressLine2 || null, city, state, pinCode, !!isDefault, req.params.id]
   );
 
   const result = await pool.query('SELECT * FROM customer_addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at ASC', [req.customer!.id]);
@@ -371,36 +412,51 @@ router.post('/wishlist/toggle/:productId', requireCustomer, async (req: Authenti
 // Price is NEVER trusted from the client — always looked up live from the product catalog.
 // ==========================================
 
+function mapCartRow(row: any, db: Awaited<ReturnType<typeof loadDatabase>>): ServerCartItem {
+  const product = findProduct(db.products, row.product_id);
+  const shade = product ? findShade(product, row.variant_id) : undefined;
+  const unavailable = !product || product.inStock === false;
+  const unitPrice = product ? product.price : 0;
+  return {
+    id: row.id,
+    productId: row.product_id,
+    variantId: row.variant_id,
+    quantity: row.quantity,
+    product: product as Product,
+    selectedShade: shade,
+    lineTotal: unavailable ? 0 : unitPrice * row.quantity,
+    unavailable,
+    maxAvailable: product ? product.stock : 0,
+  };
+}
+
 async function hydrateCart(userId: string): Promise<ServerCartItem[]> {
   const db = await loadDatabase();
   const result = await pool.query(
-    'SELECT id, product_id, variant_id, quantity FROM cart_items WHERE user_id = $1 ORDER BY created_at ASC',
+    'SELECT id, product_id, variant_id, quantity FROM cart_items WHERE user_id = $1 AND saved = false ORDER BY created_at ASC',
     [userId]
   );
+  return result.rows.map((row) => mapCartRow(row, db));
+}
 
-  return result.rows.map((row): ServerCartItem => {
-    const product = findProduct(db.products, row.product_id);
-    const shade = product ? findShade(product, row.variant_id) : undefined;
-    const unavailable = !product || product.inStock === false;
-    const unitPrice = product ? product.price : 0;
-    return {
-      id: row.id,
-      productId: row.product_id,
-      variantId: row.variant_id,
-      quantity: row.quantity,
-      product: product as Product,
-      selectedShade: shade,
-      lineTotal: unavailable ? 0 : unitPrice * row.quantity,
-      unavailable,
-      maxAvailable: product ? product.stock : 0,
-    };
-  });
+async function hydrateSavedItems(userId: string): Promise<ServerCartItem[]> {
+  const db = await loadDatabase();
+  const result = await pool.query(
+    'SELECT id, product_id, variant_id, quantity FROM cart_items WHERE user_id = $1 AND saved = true ORDER BY created_at DESC',
+    [userId]
+  );
+  return result.rows.map((row) => mapCartRow(row, db));
 }
 
 router.get('/cart', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
   const items = await hydrateCart(req.customer!.id);
   const subtotal = items.reduce((sum, i) => sum + i.lineTotal, 0);
   res.json({ items, subtotal, itemCount: items.reduce((n, i) => n + i.quantity, 0) });
+});
+
+router.get('/cart/saved', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const items = await hydrateSavedItems(req.customer!.id);
+  res.json({ items });
 });
 
 router.post('/cart/items', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
@@ -434,7 +490,9 @@ router.post('/cart/items', requireCustomer, async (req: AuthenticatedCustomerReq
         maxAvailable: product.stock,
       });
     }
-    await pool.query('UPDATE cart_items SET quantity = $1, updated_at = now() WHERE id = $2', [newQty, row.id]);
+    // Reactivates a previously "saved for later" row too — Add to Cart always
+    // means the item is active in the bag, regardless of its prior state.
+    await pool.query('UPDATE cart_items SET quantity = $1, saved = false, updated_at = now() WHERE id = $2', [newQty, row.id]);
   } else {
     if (requestedQty > product.stock) {
       return res.status(400).json({
@@ -490,6 +548,32 @@ router.delete('/cart/items/:id', requireCustomer, async (req: AuthenticatedCusto
   }
   const items = await hydrateCart(req.customer!.id);
   res.json({ items, subtotal: items.reduce((sum, i) => sum + i.lineTotal, 0) });
+});
+
+// Moves an active cart line into "saved for later" — it stays owned by the
+// customer but drops out of the cart subtotal/checkout until moved back.
+router.post('/cart/items/:id/save', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const result = await pool.query(
+    'UPDATE cart_items SET saved = true, updated_at = now() WHERE id = $1 AND user_id = $2 RETURNING id',
+    [req.params.id, req.customer!.id]
+  );
+  if (result.rows.length === 0) {
+    return res.status(404).json({ error: 'Cart item not found.' });
+  }
+  const [items, savedItems] = await Promise.all([hydrateCart(req.customer!.id), hydrateSavedItems(req.customer!.id)]);
+  res.json({ items, subtotal: items.reduce((sum, i) => sum + i.lineTotal, 0), savedItems });
+});
+
+router.post('/cart/items/:id/unsave', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const result = await pool.query(
+    'UPDATE cart_items SET saved = false, updated_at = now() WHERE id = $1 AND user_id = $2 RETURNING id',
+    [req.params.id, req.customer!.id]
+  );
+  if (result.rows.length === 0) {
+    return res.status(404).json({ error: 'Cart item not found.' });
+  }
+  const [items, savedItems] = await Promise.all([hydrateCart(req.customer!.id), hydrateSavedItems(req.customer!.id)]);
+  res.json({ items, subtotal: items.reduce((sum, i) => sum + i.lineTotal, 0), savedItems });
 });
 
 // ==========================================
@@ -563,30 +647,248 @@ function buildWhatsAppOrderLink(params: {
   return `https://wa.me/${digitsOnly}?text=${encodeURIComponent(lines.join('\n'))}`;
 }
 
-router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
-  const { shippingAddress, idempotencyKey, customerName, customerPhone, customerEmail, paymentMethod, couponCode } = req.body || {};
-  const userId = req.customer!.id;
+// Discount is always computed server-side against the live, currently-active
+// offer list — never trusted from the client. Shared by checkout and the
+// standalone /coupons/validate endpoint so the two can never disagree.
+function computeCouponDiscount(
+  db: InternalCMSDatabaseSchema,
+  couponCode: string | undefined | null,
+  subtotal: number
+): { discount: number; appliedCouponCode: string | null; offer?: ReturnType<typeof evaluateOffers>[number]; error?: string } {
+  if (!couponCode) return { discount: 0, appliedCouponCode: null };
 
-  // Online payment isn't wired to a real gateway yet — the checkout UI only
-  // ever offers COD, but reject it here too rather than silently accepting
-  // a client that somehow sent something else.
-  if (paymentMethod && paymentMethod !== 'cod') {
-    return res.status(400).json({ error: 'Online payment is coming soon. Please select Cash on Delivery for now.' });
+  const liveOffers = evaluateOffers(db.offers || []);
+  const offer = liveOffers.find(
+    (o) => o.status === 'active' && o.couponCode && o.couponCode.toUpperCase() === String(couponCode).toUpperCase()
+  );
+  if (!offer) {
+    return { discount: 0, appliedCouponCode: null, error: 'This coupon code is invalid or has expired.' };
+  }
+  if (subtotal < (offer.minOrderValue || 0)) {
+    return { discount: 0, appliedCouponCode: null, error: `This code requires a minimum order value of ₹${offer.minOrderValue}.` };
+  }
+
+  let discount = 0;
+  if (offer.discountType === 'percentage') {
+    discount = Math.round((subtotal * offer.discountValue) / 100);
+  } else if (offer.discountType === 'flat') {
+    discount = offer.discountValue;
+  }
+  discount = Math.min(discount, subtotal);
+  return { discount, appliedCouponCode: offer.couponCode!, offer };
+}
+
+const PAYMENT_METHODS = ['cod', 'upi', 'card', 'netbanking', 'wallet'] as const;
+type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+// Glamirk has no payment gateway wired up yet — every order is Cash on
+// Delivery. The 'upi'/'card'/'netbanking'/'wallet' branches of
+// buildPaymentDetails() below stay in place (unreachable while this is
+// false) purely so the order model doesn't need reshaping the day a real
+// gateway is integrated. Flip this only alongside actually wiring one in.
+const ONLINE_PAYMENTS_ENABLED = false;
+
+// The frontend already only ever offers COD, but a request can be sent by
+// anything — never trust a client-supplied payment method or an
+// unvalidated "COD is fine" assumption. This is the single place that
+// decides whether COD may complete a given order.
+function checkCodEligibility(
+  codRules: CODRules | undefined,
+  total: number,
+  shippingAddress: { pinCode?: string } | undefined,
+  productIds: string[]
+): { eligible: true } | { eligible: false; reason: string } {
+  const rules = codRules || {
+    minOrderAmount: 0,
+    maxOrderAmount: 0,
+    serviceablePinCodes: [],
+    blockedPinCodes: [],
+    codDisabledProductIds: [],
+  };
+
+  if (rules.minOrderAmount > 0 && total < rules.minOrderAmount) {
+    return { eligible: false, reason: `COD requires a minimum order value of ₹${rules.minOrderAmount}.` };
+  }
+  if (rules.maxOrderAmount > 0 && total > rules.maxOrderAmount) {
+    return { eligible: false, reason: `COD is not available for orders above ₹${rules.maxOrderAmount}.` };
+  }
+
+  const pinCode = String(shippingAddress?.pinCode || '').trim();
+  if (rules.blockedPinCodes?.includes(pinCode)) {
+    return { eligible: false, reason: `COD is not available for pin code ${pinCode}.` };
+  }
+  if (rules.serviceablePinCodes?.length > 0 && !rules.serviceablePinCodes.includes(pinCode)) {
+    return { eligible: false, reason: `COD is not serviceable at pin code ${pinCode}.` };
+  }
+
+  if (rules.codDisabledProductIds?.length > 0 && productIds.some((id) => rules.codDisabledProductIds.includes(id))) {
+    return { eligible: false, reason: 'One or more items in your bag require online payment and are not eligible for Cash on Delivery.' };
+  }
+
+  return { eligible: true };
+}
+
+// Public (no auth — a shopper checking a product page may not be signed in
+// yet) pincode-serviceability check, used by the "Check Delivery
+// Availability" widget on the product page. Only checks the
+// pincode-related COD rules, not min/max order amount (which depends on the
+// eventual cart total, unknown here) — this is the same
+// serviceablePinCodes/blockedPinCodes data checkCodEligibility() enforces
+// for real at checkout, so this widget can no longer promise COD is
+// available somewhere the admin has actually blocked it.
+router.get('/cod-eligibility', async (req: Request, res: Response) => {
+  const pincode = String(req.query.pincode || '').trim();
+  if (!/^\d{6}$/.test(pincode)) {
+    return res.status(400).json({ error: 'Please provide a valid 6-digit PIN code.' });
+  }
+
+  const db = await loadDatabase();
+  const rules = db.globalSettings?.codRules;
+  const blocked = rules?.blockedPinCodes?.includes(pincode) || false;
+  const restrictedToList = (rules?.serviceablePinCodes?.length || 0) > 0;
+  const notInServiceableList = restrictedToList && !rules!.serviceablePinCodes.includes(pincode);
+  const serviceable = !blocked && !notInServiceableList;
+
+  res.json({ pincode, serviceable });
+});
+
+// Validates + simulates the payment gateway for one checkout attempt. Runs
+// BEFORE the stock lock is acquired — it doesn't touch stock or the cart, so
+// there's no reason to serialize every other concurrent checkout in the
+// store behind its ~1s artificial delay (or behind a real SMTP round-trip,
+// for the notification emails sent after checkout completes). This is a
+// demo simulation only: no real gateway is called, and only a card's last 4
+// digits are ever kept.
+async function buildPaymentDetails(
+  paymentMethod: PaymentMethod,
+  fields: { upiId?: string; cardNumber?: string; bankName?: string; walletProvider?: string }
+): Promise<{ error: string; status: number } | PaymentDetails> {
+  const paymentDetails: PaymentDetails = { method: paymentMethod, status: 'COD_PENDING' };
+  if (paymentMethod === 'cod') return paymentDetails;
+
+  if (paymentMethod === 'upi') {
+    if (!/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(String(fields.upiId || ''))) {
+      return { error: 'Please enter a valid UPI ID (e.g. name@bank).', status: 400 };
+    }
+    paymentDetails.upiId = fields.upiId;
+  } else if (paymentMethod === 'card') {
+    const digits = String(fields.cardNumber || '').replace(/\D/g, '');
+    if (digits.length < 13 || digits.length > 19) {
+      return { error: 'Please enter a valid card number.', status: 400 };
+    }
+    paymentDetails.cardLast4 = digits.slice(-4);
+    paymentDetails.cardNetwork = digits.startsWith('4') ? 'Visa' : digits.startsWith('5') ? 'Mastercard' : digits.startsWith('6') ? 'RuPay' : 'Card';
+  } else if (paymentMethod === 'netbanking') {
+    if (!String(fields.bankName || '').trim()) {
+      return { error: 'Please select your bank.', status: 400 };
+    }
+    paymentDetails.bankName = fields.bankName;
+  } else if (paymentMethod === 'wallet') {
+    if (!String(fields.walletProvider || '').trim()) {
+      return { error: 'Please select a wallet provider.', status: 400 };
+    }
+    paymentDetails.walletProvider = fields.walletProvider;
+  }
+
+  // Simulated processing delay + occasional simulated decline, purely for
+  // demo realism — this never touches a real payment network.
+  await new Promise((resolve) => setTimeout(resolve, 900 + Math.random() * 500));
+  if (Math.random() < 0.1) {
+    return { error: 'Payment declined by your bank/provider. Please try again or choose a different method.', status: 402 };
+  }
+  paymentDetails.status = 'PAID';
+  paymentDetails.paidAt = new Date().toISOString();
+  return paymentDetails;
+}
+
+router.post('/coupons/validate', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const { couponCode, subtotal } = req.body || {};
+  if (!String(couponCode || '').trim()) {
+    return res.status(400).json({ error: 'Please enter a coupon code.' });
+  }
+
+  const db = await loadDatabase();
+  const result = computeCouponDiscount(db, couponCode, Number(subtotal) || 0);
+  if (!result.appliedCouponCode || !result.offer) {
+    return res.status(400).json({ error: result.error || 'Invalid coupon code.' });
+  }
+
+  const offer = result.offer;
+  res.json({
+    coupon: {
+      code: offer.couponCode,
+      title: offer.publicTitle || offer.name,
+      description: offer.description,
+      discountType: offer.discountType,
+      discountValue: offer.discountValue,
+      minOrderValue: offer.minOrderValue || undefined,
+      tag: offer.tag,
+    },
+    discount: result.discount,
+  });
+});
+
+router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const {
+    shippingAddress, idempotencyKey, customerName, customerPhone, customerEmail, couponCode,
+    upiId, cardNumber, bankName, walletProvider,
+  } = req.body || {};
+  const paymentMethod: (typeof PAYMENT_METHODS)[number] = req.body?.paymentMethod || 'cod';
+  const userId = req.customer!.id;
+  const placedNote = 'Order placed successfully';
+  const resolvedName = customerName || shippingAddress?.name || '';
+  const resolvedPhone = customerPhone || shippingAddress?.phone || '';
+  const resolvedEmail = customerEmail || shippingAddress?.email || '';
+
+  if (!PAYMENT_METHODS.includes(paymentMethod)) {
+    return res.status(400).json({ error: 'Please select a valid payment method.' });
+  }
+  // The frontend only ever sends 'cod' — but never trust that from the
+  // server side. Reject anything else outright while no gateway is wired up,
+  // rather than letting a direct API call through to the payment simulator.
+  if (paymentMethod !== 'cod' && !ONLINE_PAYMENTS_ENABLED) {
+    return res.status(400).json({ error: 'Only Cash on Delivery is available at this time.' });
   }
 
   try {
+    // A pure replay of an already-processed attempt needs neither the stock
+    // lock nor a re-simulated payment — just hand back what was built last time.
+    if (idempotencyKey) {
+      const existingOrder = await pool.query('SELECT * FROM orders WHERE idempotency_key = $1', [idempotencyKey]);
+      if (existingOrder.rows.length > 0) {
+        const existingDb = await loadDatabase();
+        const order = await buildOrderFromRow(existingOrder.rows[0], existingDb);
+        return res.json({ order, alreadyProcessed: true });
+      }
+    }
+
+    // Payment validation + the simulated gateway delay run BEFORE the stock
+    // lock is acquired — neither touches stock or the cart, so there's no
+    // reason to serialize every other concurrent checkout in the store
+    // behind this ~1s artificial wait.
+    const paymentResult = await buildPaymentDetails(paymentMethod, { upiId, cardNumber, bankName, walletProvider });
+    if ('error' in paymentResult) {
+      return res.status(paymentResult.status).json({ error: paymentResult.error });
+    }
+    const paymentDetails = paymentResult;
+
     const result = await withStockLock(async () => {
-      // Idempotency: if this exact checkout attempt already produced an order, return it instead of double-charging stock.
+      // Re-check idempotency now that we hold the lock — guards the rare
+      // case where two requests carrying the same key raced past the
+      // unlocked pre-check above (the DB's UNIQUE constraint on
+      // idempotency_key would also catch this on insert, but this avoids
+      // surfacing that as a generic 500).
       if (idempotencyKey) {
         const existingOrder = await pool.query('SELECT * FROM orders WHERE idempotency_key = $1', [idempotencyKey]);
         if (existingOrder.rows.length > 0) {
-          const itemsRes = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [existingOrder.rows[0].id]);
-          return { alreadyProcessed: true, order: existingOrder.rows[0], items: itemsRes.rows };
+          const existingDb = await loadDatabase();
+          const order = await buildOrderFromRow(existingOrder.rows[0], existingDb);
+          return { alreadyProcessed: true, order };
         }
       }
 
       const cartRes = await pool.query(
-        'SELECT id, product_id, variant_id, quantity FROM cart_items WHERE user_id = $1 ORDER BY created_at ASC',
+        'SELECT id, product_id, variant_id, quantity FROM cart_items WHERE user_id = $1 AND saved = false ORDER BY created_at ASC',
         [userId]
       );
       if (cartRes.rows.length === 0) {
@@ -610,6 +912,8 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
       }
 
       // All valid — compute totals from live DB prices and build order items.
+      // Stock is not touched yet: COD eligibility depends on the final total,
+      // computed below, and must be checked before anything is deducted.
       const orderItems: OrderItem[] = [];
       let subtotal = 0;
       for (const row of cartRes.rows) {
@@ -625,9 +929,29 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
           price: product.price,
           quantity: row.quantity,
         });
+      }
 
-        // Deduct stock in the in-memory/JSONB product catalog
-        const idx = db.products.findIndex((p) => p.id === product.id);
+      const { discount, appliedCouponCode } = computeCouponDiscount(db, couponCode, subtotal);
+
+      const shipping = subtotal - discount >= 999 ? 0 : 99;
+      const total = Math.max(0, subtotal - discount + shipping);
+
+      if (paymentMethod === 'cod') {
+        const codCheck = checkCodEligibility(
+          db.globalSettings?.codRules,
+          total,
+          shippingAddress,
+          orderItems.map((item) => item.productId)
+        );
+        if (codCheck.eligible === false) {
+          console.warn('COD checkout refused:', codCheck.reason);
+          return { error: 'Cash on Delivery is not available for this order.', status: 400 };
+        }
+      }
+
+      // Eligibility confirmed — now safe to deduct stock.
+      for (const row of cartRes.rows) {
+        const idx = db.products.findIndex((p) => p.id === row.product_id);
         db.products[idx] = {
           ...db.products[idx],
           stock: db.products[idx].stock - row.quantity,
@@ -635,42 +959,26 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
         };
       }
 
-      // Discount is computed here, never trusted from the client — look up
-      // the coupon against the live, currently-active offer list.
-      let discount = 0;
-      let appliedCouponCode: string | null = null;
-      if (couponCode) {
-        const liveOffers = evaluateOffers(db.offers || []);
-        const offer = liveOffers.find(
-          (o) => o.status === 'active' && o.couponCode && o.couponCode.toUpperCase() === String(couponCode).toUpperCase()
-        );
-        if (offer && subtotal >= (offer.minOrderValue || 0)) {
-          if (offer.discountType === 'percentage') {
-            discount = Math.round((subtotal * offer.discountValue) / 100);
-          } else if (offer.discountType === 'flat') {
-            discount = offer.discountValue;
-          }
-          discount = Math.min(discount, subtotal);
-          appliedCouponCode = offer.couponCode!;
-        }
-      }
+      // Persist the stock deduction. loadDatabase() hands back the shared
+      // in-process cache by reference, so the mutations above are already
+      // visible to every other request in this process — but without this
+      // write they never reach Postgres, and a restart would silently undo
+      // every checkout's stock deduction while restocks (which do save)
+      // stay applied, drifting stock upward over time.
+      await saveDatabase(db);
 
-      const shipping = subtotal - discount >= 999 ? 0 : 99;
-      const total = Math.max(0, subtotal - discount + shipping);
       const orderId = 'ord-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
       const orderNumber = 'GLM' + Date.now().toString().slice(-8);
-      const resolvedName = customerName || shippingAddress?.name || '';
-      const resolvedPhone = customerPhone || shippingAddress?.phone || '';
-      const resolvedEmail = customerEmail || shippingAddress?.email || '';
 
       await pool.query(
         `INSERT INTO orders
-          (id, user_id, order_number, status, subtotal, discount, shipping, total, shipping_address, idempotency_key, customer_name, customer_phone, customer_email, coupon_code, payment_method, payment_status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+          (id, user_id, order_number, status, subtotal, discount, shipping, total, shipping_address, idempotency_key, customer_name, customer_phone, customer_email, coupon_code, payment_method, payment_status, payment_details)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
         [
-          orderId, userId, orderNumber, 'CONFIRMED', subtotal, discount, shipping, total,
+          orderId, userId, orderNumber, 'PLACED', subtotal, discount, shipping, total,
           shippingAddress ? JSON.stringify(shippingAddress) : null, idempotencyKey || null,
-          resolvedName, resolvedPhone, resolvedEmail, appliedCouponCode, 'cod', 'PENDING',
+          resolvedName, resolvedPhone, resolvedEmail, appliedCouponCode, paymentMethod, paymentDetails.status,
+          JSON.stringify(paymentDetails),
         ]
       );
 
@@ -682,14 +990,14 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
         );
       }
 
-      await pool.query('DELETE FROM cart_items WHERE user_id = $1', [userId]);
+      await pool.query('DELETE FROM cart_items WHERE user_id = $1 AND saved = false', [userId]);
 
       const createdAt = new Date().toISOString();
       const order: Order = {
         id: orderId,
         orderNumber,
         createdAt,
-        status: 'CONFIRMED',
+        status: 'PLACED',
         items: orderItems,
         subtotal,
         discount,
@@ -697,10 +1005,10 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
         tax: 0,
         total,
         deliveryAddress: shippingAddress,
-        payment: { method: 'cod', status: 'PENDING' },
+        payment: paymentDetails,
         estimatedDelivery: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
         timeline: [
-          { status: 'CONFIRMED', timestamp: createdAt, note: 'Order confirmed', completed: true },
+          { status: 'PLACED', timestamp: createdAt, note: placedNote, completed: true },
         ],
       };
 
@@ -716,8 +1024,8 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
         discount,
         shipping,
         total,
-        paymentMethod: 'COD',
-        paymentStatus: 'PENDING',
+        paymentMethod: paymentMethod.toUpperCase(),
+        paymentStatus: paymentDetails.status,
         createdAt: new Date(createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
       });
 
@@ -730,6 +1038,35 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
     if ('alreadyProcessed' in result) {
       return res.json({ order: result.order, alreadyProcessed: true });
     }
+
+    // Post-order side effects — none of these are read by the response and
+    // none depend on each other, so they run concurrently after the lock has
+    // already been released rather than serializing every other checkout
+    // behind a status-history write, two notification inserts, and two SMTP
+    // round-trips. Wrapped in its own try/catch: the order is already
+    // committed at this point, so a notification/email hiccup must never
+    // turn into a false "Checkout failed" response for an order that
+    // actually succeeded.
+    try {
+      const db = await loadDatabase();
+      await Promise.all([
+        insertOrderStatusHistory(result.order.id, 'PLACED', placedNote),
+        notifyOrderStatusChange(userId, result.order.id, result.order.orderNumber, 'PLACED'),
+        notifyAdminNewOrder(result.order.id, result.order.orderNumber, resolvedName, result.order.total),
+        sendOrderStatusEmail({
+          toEmail: resolvedEmail,
+          customerName: resolvedName,
+          orderId: result.order.id,
+          orderNumber: result.order.orderNumber,
+          status: 'PLACED',
+          total: result.order.total,
+        }),
+        sendAdminNewOrderEmail({ toEmail: db.globalSettings?.contactEmail, orderNumber: result.order.orderNumber, customerName: resolvedName, total: result.order.total }),
+      ]);
+    } catch (sideEffectErr) {
+      console.error('Order placed successfully, but a post-order notification/email step failed:', sideEffectErr);
+    }
+
     res.json({ order: result.order, whatsappUrl: result.whatsappUrl });
   } catch (err) {
     console.error('Checkout failed:', err);
@@ -745,45 +1082,182 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
 router.get('/orders', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
   const db = await loadDatabase();
   const ordersRes = await pool.query('SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC', [req.customer!.id]);
+  const orders: Order[] = await buildOrdersFromRows(ordersRes.rows, db);
+  res.json({ orders });
+});
 
-  const orders: Order[] = await Promise.all(
-    ordersRes.rows.map(async (row) => {
-      const itemsRes = await pool.query('SELECT * FROM order_items WHERE order_id = $1 ORDER BY created_at ASC', [row.id]);
-      const items: OrderItem[] = itemsRes.rows.map((it) => {
-        const product = findProduct(db.products, it.product_id);
-        return {
-          productId: it.product_id,
-          productName: it.product_name,
-          productImage: product?.images?.primary || '',
-          shade: product ? findShade(product, it.variant_id) : undefined,
-          price: Number(it.price),
-          quantity: it.quantity,
-        };
-      });
+router.get('/orders/:id', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1 AND user_id = $2', [req.params.id, req.customer!.id]);
+  const row = orderRes.rows[0];
+  if (!row) return res.status(404).json({ error: 'Order not found.' });
 
-      const createdAt = new Date(row.created_at).toISOString();
-      return {
-        id: row.id,
-        orderNumber: row.order_number,
-        createdAt,
-        status: row.status,
-        items,
-        subtotal: Number(row.subtotal),
-        discount: Number(row.discount),
-        shipping: Number(row.shipping),
-        tax: 0,
-        total: Number(row.total),
-        deliveryAddress: row.shipping_address,
-        payment: { method: row.payment_method, status: row.payment_status },
-        estimatedDelivery: new Date(new Date(row.created_at).getTime() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-        timeline: [
-          { status: row.status, timestamp: createdAt, note: 'Order status last updated', completed: true },
-        ],
-      } as Order;
-    })
+  const db = await loadDatabase();
+  const order = await buildOrderFromRow(row, db);
+  res.json({ order });
+});
+
+router.post('/orders/:id/cancel', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const { reason } = req.body || {};
+  const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1 AND user_id = $2', [req.params.id, req.customer!.id]);
+  const row = orderRes.rows[0];
+  if (!row) return res.status(404).json({ error: 'Order not found.' });
+  if (!CANCELLABLE_STATUSES.includes(row.status)) {
+    return res.status(400).json({ error: `This order can no longer be cancelled (current status: ${row.status}).` });
+  }
+
+  // The status check above reads a snapshot taken before the lock is
+  // acquired, so it can't be trusted alone — two concurrent cancel attempts
+  // (a double-click, or a customer and admin cancelling at once) would both
+  // pass it and both restock. The conditional UPDATE re-verifies the status
+  // hasn't changed while serialized inside the lock; only the request that
+  // actually flips it restocks, so stock is credited exactly once.
+  const wasCancelled = await withStockLock(async () => {
+    const updateRes = await pool.query(
+      'UPDATE orders SET status = $1 WHERE id = $2 AND status = $3 RETURNING id',
+      ['CANCELLED', row.id, row.status]
+    );
+    if (updateRes.rows.length === 0) return false;
+    await restockOrderItems(row.id);
+    return true;
+  });
+  if (!wasCancelled) {
+    return res.status(409).json({ error: 'This order was already updated. Please refresh and try again.' });
+  }
+
+  // Independent writes/sends — none read each other's result, so they run
+  // concurrently instead of serializing behind an SMTP round-trip.
+  await Promise.all([
+    insertOrderStatusHistory(row.id, 'CANCELLED', reason ? `Cancelled by customer: ${reason}` : 'Cancelled by customer'),
+    notifyOrderStatusChange(req.customer!.id, row.id, row.order_number, 'CANCELLED'),
+    sendOrderStatusEmail({
+      toEmail: row.customer_email,
+      customerName: row.customer_name,
+      orderId: row.id,
+      orderNumber: row.order_number,
+      status: 'CANCELLED',
+      total: Number(row.total),
+    }),
+  ]);
+
+  const db = await loadDatabase();
+  const updatedRes = await pool.query('SELECT * FROM orders WHERE id = $1', [row.id]);
+  const order = await buildOrderFromRow(updatedRes.rows[0], db);
+  res.json({ order });
+});
+
+// ==========================================
+// REVIEWS — one review per (product, customer); resubmitting edits it in
+// place rather than creating a duplicate.
+// ==========================================
+
+router.get('/reviews', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const db = await loadDatabase();
+  const result = await pool.query('SELECT * FROM reviews WHERE customer_id = $1 ORDER BY created_at DESC', [req.customer!.id]);
+  const reviews = result.rows.map((row) => mapReviewRow(row, findProduct(db.products, row.product_id)?.name));
+  res.json({ reviews });
+});
+
+router.post('/reviews', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const { productId, rating, title, comment } = req.body || {};
+  if (!productId || !rating || !String(comment || '').trim()) {
+    return res.status(400).json({ error: 'A rating and a review comment are required.' });
+  }
+
+  const db = await loadDatabase();
+  const product = findProduct(db.products, productId);
+  if (!product) return res.status(404).json({ error: 'Product not found.' });
+
+  const numericRating = Math.max(1, Math.min(5, Math.round(Number(rating))));
+  const custRes = await pool.query('SELECT name FROM customers WHERE id = $1', [req.customer!.id]);
+  const customerName = custRes.rows[0]?.name || 'Glamirk Customer';
+  const verified = await isVerifiedPurchase(req.customer!.id, productId);
+
+  const id = 'rev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  await pool.query(
+    `INSERT INTO reviews (id, product_id, customer_id, customer_name, rating, title, comment, is_verified_purchase)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (product_id, customer_id) DO UPDATE SET
+       rating = EXCLUDED.rating, title = EXCLUDED.title, comment = EXCLUDED.comment,
+       is_verified_purchase = EXCLUDED.is_verified_purchase, created_at = now()`,
+    [id, productId, req.customer!.id, customerName, numericRating, title || null, String(comment).trim(), verified]
   );
 
-  res.json({ orders });
+  await recomputeProductRating(productId);
+
+  const saved = await pool.query('SELECT * FROM reviews WHERE product_id = $1 AND customer_id = $2', [productId, req.customer!.id]);
+  res.json({ review: mapReviewRow(saved.rows[0], product.name) });
+});
+
+// ==========================================
+// RETURNS — only from DELIVERED orders; one active request per (order, product).
+// ==========================================
+
+router.get('/returns', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const result = await pool.query(
+    `SELECT r.*, o.order_number FROM return_requests r
+     JOIN orders o ON o.id = r.order_id
+     WHERE r.customer_id = $1 ORDER BY r.created_at DESC`,
+    [req.customer!.id]
+  );
+  res.json({ returns: result.rows.map(mapReturnRequestRow) });
+});
+
+router.post('/orders/:orderId/returns', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const { productId, reason, comment } = req.body || {};
+  if (!productId || !String(reason || '').trim()) {
+    return res.status(400).json({ error: 'Please select a product and a return reason.' });
+  }
+
+  const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1 AND user_id = $2', [req.params.orderId, req.customer!.id]);
+  const order = orderRes.rows[0];
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
+  if (order.status !== 'DELIVERED') {
+    return res.status(400).json({ error: 'Returns can only be requested for delivered orders.' });
+  }
+
+  const itemRes = await pool.query('SELECT * FROM order_items WHERE order_id = $1 AND product_id = $2', [order.id, productId]);
+  const item = itemRes.rows[0];
+  if (!item) return res.status(404).json({ error: 'This product was not part of this order.' });
+
+  const existing = await pool.query('SELECT id FROM return_requests WHERE order_id = $1 AND product_id = $2', [order.id, productId]);
+  if (existing.rows.length > 0) {
+    return res.status(409).json({ error: 'A return request for this item has already been submitted.' });
+  }
+
+  const db = await loadDatabase();
+  const product = findProduct(db.products, productId);
+
+  const id = 'ret-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  await pool.query(
+    `INSERT INTO return_requests (id, order_id, customer_id, product_id, product_name, product_image, reason, comment, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'SUBMITTED')`,
+    [id, order.id, req.customer!.id, productId, item.product_name, product?.images?.primary || '', reason, comment || null]
+  );
+
+  const created = await pool.query(
+    `SELECT r.*, o.order_number FROM return_requests r JOIN orders o ON o.id = r.order_id WHERE r.id = $1`,
+    [id]
+  );
+  res.json({ return: mapReturnRequestRow(created.rows[0]) });
+});
+
+// ==========================================
+// NOTIFICATIONS
+// ==========================================
+
+router.get('/notifications', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const result = await pool.query('SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50', [req.customer!.id]);
+  res.json({ notifications: result.rows.map(mapNotificationRow) });
+});
+
+router.post('/notifications/:id/read', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  await pool.query('UPDATE notifications SET is_read = true WHERE id = $1 AND user_id = $2', [req.params.id, req.customer!.id]);
+  res.json({ success: true });
+});
+
+router.post('/notifications/read-all', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  await pool.query('UPDATE notifications SET is_read = true WHERE user_id = $1', [req.customer!.id]);
+  res.json({ success: true });
 });
 
 export default router;

@@ -1,24 +1,27 @@
 import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { CategoryHeader } from './CategoryHeader';
 import { FilterPanel } from './FilterPanel';
-import { SortSelector } from './SortSelector';
+import { SortSelector, SORT_OPTIONS } from './SortSelector';
 import { ProductGrid } from './ProductGrid';
 import { RecentlyViewed } from './RecentlyViewed';
-import { Product, Shade, FilterState, SortOption } from '../../types';
+import { Product, Shade, FilterState, SortOption, CartItem } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
-import { Filter as FilterIcon, SlidersHorizontal, Sparkles, X } from 'lucide-react';
+import { SlidersHorizontal, Sparkles, X, LayoutGrid, List, ArrowUpDown, Check } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 
 interface ShopPageProps {
   initialCategory?: string | null;
   initialSubCategory?: string | null;
   wishlist: string[];
+  cartItems: CartItem[];
   recentlyViewedIds: string[];
   onToggleWishlist: (productId: string) => void;
-  onQuickView: (product: Product) => void;
   onSelectProduct: (product: Product) => void;
   onTryItOn: (product: Product) => void;
   onQuickAdd: (product: Product, shade?: Shade, size?: string) => void;
+  onGoToCart: () => void;
+  onBuyNow: (product: Product, shade?: Shade, size?: string) => void;
   onOpenShadeFinder: () => void;
   onCategoryNavigate: (category: string | null, subCategory: string | null) => void;
 }
@@ -26,51 +29,63 @@ interface ShopPageProps {
 const EMPTY_FILTERS: FilterState = {
   category: null,
   subCategory: null,
-  priceRanges: [],
+  priceMin: null,
+  priceMax: null,
   undertones: [],
   finishes: [],
   skinTypes: [],
   coverages: [],
   shades: [],
+  ratings: [],
+  discounts: [],
   inStockOnly: false,
 };
 
-const PRICE_LABELS: Record<string, string> = {
-  'under-500': 'Under ₹600',
-  '500-750': '₹600 – ₹750',
-  '750-plus': '₹750 & Above',
+const RATING_LABELS: Record<string, string> = {
+  '4-plus': '4★ & Above',
+  '3-plus': '3★ & Above',
 };
+
+const DISCOUNT_LABELS: Record<string, string> = {
+  '10-plus': '10% Off or More',
+  '20-plus': '20% Off or More',
+  '30-plus': '30% Off or More',
+};
+
+function productDiscountPercent(product: Product): number {
+  if (!product.originalPrice || product.originalPrice <= product.price) return 0;
+  return Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100);
+}
 
 export const ShopPage: React.FC<ShopPageProps> = ({
   initialCategory = null,
   initialSubCategory = null,
   wishlist,
+  cartItems,
   recentlyViewedIds,
   onToggleWishlist,
-  onQuickView,
   onSelectProduct,
   onTryItOn,
   onQuickAdd,
+  onGoToCart,
+  onBuyNow,
   onOpenShadeFinder,
   onCategoryNavigate,
 }) => {
   const { products: cmsProducts } = useCMS();
   const allProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
 
-  // Filter state
   const [filters, setFilters] = useState<FilterState>({
     ...EMPTY_FILTERS,
     category: initialCategory,
     subCategory: initialSubCategory,
   });
 
-  // Sort state
   const [sortOption, setSortOption] = useState<SortOption>('featured');
-
-  // Mobile filter drawer state
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [isMobileSortOpen, setIsMobileSortOpen] = useState(false);
 
-  // Quick category pills
   const categoryPills = [
     { label: 'All Products', category: null, subCategory: null },
     { label: 'Matte Lipsticks', category: 'Makeup', subCategory: 'Lips' },
@@ -79,72 +94,68 @@ export const ShopPage: React.FC<ShopPageProps> = ({
     { label: 'New Launches', category: 'Makeup', subCategory: null, isNew: true },
   ];
 
-  // Filtering logic
   const filteredProducts = useMemo(() => {
     return allProducts.filter((product) => {
-      // Category filter
-      if (filters.category && product.category !== filters.category) {
-        return false;
-      }
-      // Subcategory filter
-      if (filters.subCategory && product.subCategory !== filters.subCategory) {
-        return false;
-      }
+      if (filters.category && product.category !== filters.category) return false;
+      if (filters.subCategory && product.subCategory !== filters.subCategory) return false;
 
-      // Price filter
-      if (filters.priceRanges.length > 0) {
-        const matchesPrice = filters.priceRanges.some((range) => {
-          if (range === 'under-500') return product.price < 600;
-          if (range === '500-750') return product.price >= 600 && product.price <= 750;
-          if (range === '750-plus') return product.price > 750;
-          return true;
-        });
-        if (!matchesPrice) return false;
-      }
+      if (filters.priceMin !== null && product.price < filters.priceMin) return false;
+      if (filters.priceMax !== null && product.price > filters.priceMax) return false;
 
-      // Undertone filter
       if (filters.undertones.length > 0) {
         if (!product.shades) return false;
         const matchesUndertone = product.shades.some((s) => filters.undertones.includes(s.undertone));
         if (!matchesUndertone) return false;
       }
 
-      // Finish filter
       if (filters.finishes.length > 0) {
         if (!product.finish) return false;
         if (!filters.finishes.includes(product.finish)) return false;
       }
 
-      // Skin Type filter
       if (filters.skinTypes.length > 0) {
         if (!product.skinType) return false;
         const matchesSkinType = product.skinType.some((s) => filters.skinTypes.includes(s));
         if (!matchesSkinType) return false;
       }
 
-      // Coverage filter
       if (filters.coverages.length > 0) {
         if (!product.coverage) return false;
         if (!filters.coverages.includes(product.coverage)) return false;
       }
 
-      // Shade filter (by shade id)
       if (filters.shades.length > 0) {
         if (!product.shades) return false;
         const matchesShade = product.shades.some((s) => filters.shades.includes(s.id));
         if (!matchesShade) return false;
       }
 
-      // In-stock only
-      if (filters.inStockOnly && !product.inStock) {
-        return false;
+      if (filters.ratings.length > 0) {
+        const matchesRating = filters.ratings.some((r) => {
+          if (r === '4-plus') return (product.rating || 0) >= 4;
+          if (r === '3-plus') return (product.rating || 0) >= 3;
+          return true;
+        });
+        if (!matchesRating) return false;
       }
+
+      if (filters.discounts.length > 0) {
+        const discountPercent = productDiscountPercent(product);
+        const matchesDiscount = filters.discounts.some((d) => {
+          if (d === '10-plus') return discountPercent >= 10;
+          if (d === '20-plus') return discountPercent >= 20;
+          if (d === '30-plus') return discountPercent >= 30;
+          return true;
+        });
+        if (!matchesDiscount) return false;
+      }
+
+      if (filters.inStockOnly && !product.inStock) return false;
 
       return true;
     });
   }, [filters, allProducts]);
 
-  // Sorting logic
   const sortedProducts = useMemo(() => {
     const list = [...filteredProducts];
     switch (sortOption) {
@@ -154,6 +165,12 @@ export const ShopPage: React.FC<ShopPageProps> = ({
         return list.sort((a, b) => a.price - b.price);
       case 'price-desc':
         return list.sort((a, b) => b.price - a.price);
+      case 'rating':
+        return list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      case 'bestsellers':
+        return list.filter((p) => p.isBestSeller).concat(list.filter((p) => !p.isBestSeller));
+      case 'discount':
+        return list.sort((a, b) => productDiscountPercent(b) - productDiscountPercent(a));
       case 'featured':
       default:
         return list;
@@ -165,15 +182,10 @@ export const ShopPage: React.FC<ShopPageProps> = ({
   };
 
   const handleSelectPill = (category: string | null, subCategory: string | null) => {
-    setFilters((prev) => ({
-      ...prev,
-      category,
-      subCategory,
-    }));
+    setFilters((prev) => ({ ...prev, category, subCategory }));
     onCategoryNavigate(category, subCategory);
   };
 
-  // Active filter chips — every checked filter appears here as a removable pill, right below the top bar.
   type ActiveChip = { key: string; label: string; onRemove: () => void };
   const activeChips: ActiveChip[] = useMemo(() => {
     const chips: ActiveChip[] = [];
@@ -184,13 +196,15 @@ export const ShopPage: React.FC<ShopPageProps> = ({
         onRemove: () => setFilters((prev) => ({ ...prev, category: null, subCategory: null })),
       });
     }
-    filters.priceRanges.forEach((id) => {
+    if (filters.priceMin !== null || filters.priceMax !== null) {
+      const lo = filters.priceMin !== null ? `₹${filters.priceMin}` : 'Any';
+      const hi = filters.priceMax !== null ? `₹${filters.priceMax}` : 'Any';
       chips.push({
-        key: `price-${id}`,
-        label: PRICE_LABELS[id] || id,
-        onRemove: () => setFilters((prev) => ({ ...prev, priceRanges: prev.priceRanges.filter((p) => p !== id) })),
+        key: 'price',
+        label: `${lo} – ${hi}`,
+        onRemove: () => setFilters((prev) => ({ ...prev, priceMin: null, priceMax: null })),
       });
-    });
+    }
     filters.undertones.forEach((u) => {
       chips.push({
         key: `undertone-${u}`,
@@ -227,6 +241,20 @@ export const ShopPage: React.FC<ShopPageProps> = ({
         onRemove: () => setFilters((prev) => ({ ...prev, shades: prev.shades.filter((x) => x !== shadeId) })),
       });
     });
+    filters.ratings.forEach((r) => {
+      chips.push({
+        key: `rating-${r}`,
+        label: RATING_LABELS[r] || r,
+        onRemove: () => setFilters((prev) => ({ ...prev, ratings: prev.ratings.filter((x) => x !== r) })),
+      });
+    });
+    filters.discounts.forEach((d) => {
+      chips.push({
+        key: `discount-${d}`,
+        label: DISCOUNT_LABELS[d] || d,
+        onRemove: () => setFilters((prev) => ({ ...prev, discounts: prev.discounts.filter((x) => x !== d) })),
+      });
+    });
     if (filters.inStockOnly) {
       chips.push({
         key: 'instock',
@@ -239,17 +267,16 @@ export const ShopPage: React.FC<ShopPageProps> = ({
 
   return (
     <div className="bg-[#FAF9F6] min-h-screen">
-      {/* Category Hero / Editorial Header */}
       <CategoryHeader
         category={filters.category}
         subCategory={filters.subCategory}
         totalCount={sortedProducts.length}
       />
 
-      {/* Visual Category Sub-Navigation Pills */}
-      <div className="bg-[#FAF9F6] border-b border-[#E8D5A8] sticky top-16 z-20 backdrop-blur-md bg-[#FAF9F6]/95">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
-          <div className="flex items-center gap-2 flex-shrink-0">
+      {/* Category Chips — horizontally scrollable, never wraps, no truncation */}
+      <div className="sticky top-16 z-20 border-b border-[#E8D5A8] bg-[#FAF9F6]/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 overflow-x-auto no-scrollbar px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex flex-shrink-0 items-center gap-2">
             {categoryPills.map((pill, idx) => {
               const isActive =
                 (!pill.category && !filters.category && !filters.subCategory) ||
@@ -259,10 +286,10 @@ export const ShopPage: React.FC<ShopPageProps> = ({
                 <button
                   key={idx}
                   onClick={() => handleSelectPill(pill.category, pill.subCategory)}
-                  className={`px-3.5 py-1.5 text-xs tracking-wider uppercase font-medium transition-all ${
+                  className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-[#0B0B0B] text-[#FAF9F6] shadow-xs'
-                      : 'bg-[#FAF9F6] text-[#6B6B6B] hover:text-[#121212] hover:bg-[#FAF9F6] border border-[#E8D5A8]'
+                      ? 'bg-[#0B0B0B] text-[#FAF9F6] shadow-sm'
+                      : 'border border-[#E8D5A8] bg-white text-[#6B6B6B] hover:border-[#C9972B] hover:text-[#121212]'
                   }`}
                 >
                   {pill.label}
@@ -271,66 +298,90 @@ export const ShopPage: React.FC<ShopPageProps> = ({
             })}
           </div>
 
-          <div className="hidden md:flex items-center gap-2 flex-shrink-0 text-xs text-[#6B6B6B]">
-            <Sparkles className="w-3.5 h-3.5 text-[#C9972B]" />
-            <span className="uppercase tracking-widest text-[10.5px]">Authentic Formulations</span>
+          <div className="hidden flex-shrink-0 items-center gap-2 text-xs text-[#6B6B6B] md:flex">
+            <Sparkles className="h-3.5 w-3.5 text-[#C9972B]" />
+            <span className="text-[10.5px] uppercase tracking-widest">Authentic Formulations</span>
           </div>
         </div>
       </div>
 
       {/* Main Listing Layout */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        {/* Top Filter & Sort Bar */}
-        <div className="flex items-center justify-between pb-4 border-b border-[#E8D5A8] gap-4 flex-wrap">
-          {/* Mobile Filter Trigger */}
-          <button
-            onClick={() => setIsMobileFilterOpen(true)}
-            className="lg:hidden flex items-center gap-2 px-4 py-2 bg-[#FAF9F6] border border-[#E8D5A8] text-xs font-semibold tracking-wider uppercase text-[#121212]"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>FILTER + SORT</span>
-          </button>
-
-          {/* Product Count Display */}
-          <div className="text-xs text-[#6B6B6B] font-light">
-            Showing <strong className="text-[#121212] font-semibold">{sortedProducts.length}</strong> of{' '}
-            {allProducts.length} curated creations
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
+          <div>
+            <p className="text-xs text-[#6B6B6B]">
+              Showing <strong className="font-semibold text-[#121212]">{sortedProducts.length}</strong> of {allProducts.length} products
+            </p>
           </div>
 
-          {/* Desktop Sort Selector */}
-          <div className="ml-auto">
-            <SortSelector
-              currentSort={sortOption}
-              onSortChange={(sort) => setSortOption(sort)}
-            />
+          <div className="flex items-center gap-2.5">
+            {/* Mobile filter trigger — supplements the sticky bottom bar for quick access from the top */}
+            <button
+              onClick={() => setIsMobileFilterOpen(true)}
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8D5A8] bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[#121212] lg:hidden"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              <span>Filter</span>
+              {activeChips.length > 0 && (
+                <span className="rounded-full bg-[#F05A7E] px-1.5 py-0.5 text-[9.5px] font-bold text-white">
+                  {activeChips.length}
+                </span>
+              )}
+            </button>
+
+            {/* Grid / List view toggle */}
+            <div className="flex items-center rounded-lg border border-[#E8D5A8] bg-white p-0.5">
+              <button
+                onClick={() => setViewMode('grid')}
+                aria-label="Grid view"
+                className={`cursor-pointer rounded-md p-1.5 transition-colors ${
+                  viewMode === 'grid' ? 'bg-[#FCE8ED] text-[#F05A7E]' : 'text-[#6B6B6B] hover:text-[#121212]'
+                }`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                aria-label="List view"
+                className={`cursor-pointer rounded-md p-1.5 transition-colors ${
+                  viewMode === 'list' ? 'bg-[#FCE8ED] text-[#F05A7E]' : 'text-[#6B6B6B] hover:text-[#121212]'
+                }`}
+              >
+                <List className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="hidden sm:block">
+              <SortSelector currentSort={sortOption} onSortChange={setSortOption} />
+            </div>
           </div>
         </div>
 
-        {/* Active Filter Chips — shows right below the top bar whenever any filter is checked */}
+        {/* Active Filter Chips */}
         {activeChips.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap py-4 mb-4 border-b border-[#E8D5A8]">
+          <div className="mb-4 flex flex-wrap items-center gap-2 border-t border-[#E8D5A8] py-3.5">
             {activeChips.map((chip) => (
               <button
                 key={chip.key}
                 onClick={chip.onRemove}
-                className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 bg-[#FCE8ED] border border-[#E8D5A8] text-[#F05A7E] text-xs font-semibold rounded-full hover:bg-[#F05A7E] hover:text-white hover:border-[#F05A7E] transition-colors cursor-pointer"
+                className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#E8D5A8] bg-[#FCE8ED] py-1.5 pl-3 pr-2 text-xs font-semibold text-[#F05A7E] transition-colors hover:border-[#F05A7E] hover:bg-[#F05A7E] hover:text-white"
               >
                 <span>{chip.label}</span>
-                <X className="w-3 h-3" />
+                <X className="h-3 w-3" />
               </button>
             ))}
             <button
               onClick={handleResetFilters}
-              className="text-xs font-bold text-[#F05A7E] hover:underline cursor-pointer px-2"
+              className="cursor-pointer px-2 text-xs font-bold text-[#F05A7E] hover:underline"
             >
               Clear All
             </button>
           </div>
         )}
 
-        {/* 2-Column Desktop Grid: Left Sidebar Filters + Right Product Grid */}
-        <div className="flex flex-col lg:flex-row gap-8 items-start">
-          {/* Filter Panel (Desktop sidebar + Mobile drawer) */}
+        {/* Sidebar + Product Grid */}
+        <div className="flex flex-col items-start gap-8 lg:flex-row">
           <FilterPanel
             filters={filters}
             onFilterChange={setFilters}
@@ -338,19 +389,22 @@ export const ShopPage: React.FC<ShopPageProps> = ({
             isMobileOpen={isMobileFilterOpen}
             onCloseMobile={() => setIsMobileFilterOpen(false)}
             totalFilteredCount={sortedProducts.length}
+            totalCount={allProducts.length}
             products={allProducts}
           />
 
-          {/* Right Product Grid Area */}
-          <div className="flex-1 w-full">
+          <div className="w-full flex-1 pb-36 md:pb-24 lg:pb-0">
             <ProductGrid
               products={sortedProducts}
               wishlist={wishlist}
+              cartItems={cartItems}
+              viewMode={viewMode}
               onToggleWishlist={onToggleWishlist}
-              onQuickView={onQuickView}
               onSelectProduct={onSelectProduct}
               onTryItOn={onTryItOn}
               onQuickAdd={onQuickAdd}
+              onGoToCart={onGoToCart}
+              onBuyNow={onBuyNow}
               onOpenShadeFinder={onOpenShadeFinder}
               onResetFilters={handleResetFilters}
             />
@@ -358,11 +412,86 @@ export const ShopPage: React.FC<ShopPageProps> = ({
         </div>
       </div>
 
-      {/* Recently Viewed Products */}
       <RecentlyViewed
         recentlyViewedIds={recentlyViewedIds}
         onSelectProduct={onSelectProduct}
       />
+
+      {/* Mobile Sticky Bottom Bar — Filter + Sort, always reachable while browsing.
+          Sits above the app's own MobileBottomNav (h-16, "md:hidden") below the
+          md breakpoint so the two don't stack on top of each other; from md up
+          to lg that nav hides itself, so this bar can sit flush at the bottom. */}
+      <div className="fixed inset-x-0 bottom-16 z-40 grid grid-cols-2 gap-2 border-t border-[#E8D5A8] bg-white p-3 shadow-[0_-4px_16px_rgba(11,11,11,0.06)] md:bottom-0 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden">
+        <button
+          onClick={() => setIsMobileFilterOpen(true)}
+          className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-[#0B0B0B] py-2.5 text-xs font-semibold uppercase tracking-wider text-white"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          <span>Filter</span>
+          {activeChips.length > 0 && (
+            <span className="rounded-full bg-[#F05A7E] px-1.5 py-0.5 text-[9.5px] font-bold">{activeChips.length}</span>
+          )}
+        </button>
+        <button
+          onClick={() => setIsMobileSortOpen(true)}
+          className="flex cursor-pointer items-center justify-center gap-2 rounded-full border border-[#E8D5A8] bg-white py-2.5 text-xs font-semibold uppercase tracking-wider text-[#121212]"
+        >
+          <ArrowUpDown className="h-3.5 w-3.5 text-[#C9972B]" />
+          <span>Sort</span>
+        </button>
+      </div>
+
+      {/* Mobile Sort Sheet */}
+      <AnimatePresence>
+        {isMobileSortOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileSortOpen(false)}
+              className="fixed inset-0 z-50 bg-[#0B0B0B]/60 backdrop-blur-xs lg:hidden"
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'tween', duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-[#E8D5A8] bg-white pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl lg:hidden"
+            >
+              <div className="flex items-center justify-between border-b border-[#E8D5A8] px-4 py-3.5">
+                <h3 className="text-[13px] font-bold uppercase tracking-wider text-[#121212]">Sort By</h3>
+                <button
+                  onClick={() => setIsMobileSortOpen(false)}
+                  className="cursor-pointer rounded-full p-1 text-[#121212] hover:bg-[#FCE8ED] hover:text-[#F05A7E]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="px-2 py-2">
+                {SORT_OPTIONS.map((opt) => {
+                  const isActive = opt.value === sortOption;
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => {
+                        setSortOption(opt.value);
+                        setIsMobileSortOpen(false);
+                      }}
+                      className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-3.5 py-3 text-left text-sm transition-colors ${
+                        isActive ? 'bg-[#FCE8ED] font-semibold text-[#F05A7E]' : 'text-[#121212] hover:bg-[#FAF9F6]'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      {isActive && <Check className="h-4 w-4" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

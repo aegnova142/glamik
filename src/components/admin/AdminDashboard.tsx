@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useCMS } from '../../context/CMSContext';
+import { apiFetch } from '../../utils/cmsClient';
 import {
   Package,
   FileText,
@@ -20,6 +21,10 @@ import {
   AlertCircle,
   Calendar,
   Layers,
+  IndianRupee,
+  ShoppingBag,
+  Truck,
+  Users,
 } from 'lucide-react';
 import { LiveOfferCountdown } from '../marketing/LiveOfferCountdown';
 
@@ -27,19 +32,40 @@ interface AdminDashboardProps {
   onNavigateTab: (tab: string) => void;
 }
 
+interface AnalyticsSummary {
+  totalRevenue: number;
+  totalOrders: number;
+  pendingOrders: number;
+  totalCustomers: number;
+  recentOrders: { orderNumber: string; customerName: string; status: string; total: number; createdAt: string }[];
+}
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab }) => {
   const { products, pages, offers, categories, journalArticles, refreshPublicContent } = useCMS();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [stats, setStats] = useState<any>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
 
   const publishedProducts = (products || []).filter((p) => p.inStock);
   const publishedPages = (pages || []).filter((p) => p.status === 'published');
   const activeOffers = (offers || []).filter((o) => o.status === 'active');
   const scheduledOffers = (offers || []).filter((o) => o.status === 'scheduled');
 
+  const fetchAnalytics = async () => {
+    setIsLoadingAnalytics(true);
+    const res = await apiFetch<AnalyticsSummary>('/api/admin/analytics/summary');
+    if (res.data) setAnalytics(res.data);
+    setIsLoadingAnalytics(false);
+  };
+
+  useEffect(() => {
+    fetchAnalytics();
+  }, []);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await refreshPublicContent();
+    await Promise.all([refreshPublicContent(), fetchAnalytics()]);
     setTimeout(() => setIsRefreshing(false), 600);
   };
 
@@ -72,6 +98,102 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
           </button>
         </div>
       </div>
+
+      {/* Store Performance — real order/revenue analytics, not CMS content counts */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-serif text-lg text-[#FAF9F6] tracking-wide">Store Performance</h2>
+          {isLoadingAnalytics && <span className="text-[11px] text-[#6B6B6B]">Loading…</span>}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="p-5 rounded-xl bg-[#171717] border border-[#E8D5A8]/20 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[#6B6B6B]">Total Revenue</span>
+              <div className="w-9 h-9 rounded-lg bg-[#C9972B]/10 flex items-center justify-center text-[#C9972B]">
+                <IndianRupee className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline gap-2">
+              <span className="text-3xl font-bold font-mono text-[#FAF9F6]">₹{(analytics?.totalRevenue ?? 0).toLocaleString('en-IN')}</span>
+            </div>
+            <p className="mt-3 pt-3 border-t border-[#E8D5A8]/10 text-xs text-[#6B6B6B]">Excludes cancelled orders</p>
+          </div>
+
+          <div
+            onClick={() => onNavigateTab('orders')}
+            className="p-5 rounded-xl bg-[#171717] border border-[#E8D5A8]/20 hover:border-[#C9972B]/50 transition-all cursor-pointer group shadow-sm"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[#6B6B6B]">Total Orders</span>
+              <div className="w-9 h-9 rounded-lg bg-[#C9972B]/10 flex items-center justify-center text-[#C9972B] group-hover:scale-105 transition-transform">
+                <ShoppingBag className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline gap-2">
+              <span className="text-3xl font-bold font-mono text-[#FAF9F6]">{analytics?.totalOrders ?? 0}</span>
+            </div>
+            <p className="mt-3 pt-3 border-t border-[#E8D5A8]/10 text-xs text-[#C9972B]">View all orders →</p>
+          </div>
+
+          <div
+            onClick={() => onNavigateTab('orders')}
+            className="p-5 rounded-xl bg-[#171717] border border-[#E8D5A8]/20 hover:border-[#F05A7E]/50 transition-all cursor-pointer group shadow-sm"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[#6B6B6B]">Pending Fulfillment</span>
+              <div className="w-9 h-9 rounded-lg bg-[#F05A7E]/10 flex items-center justify-center text-[#F05A7E] group-hover:scale-105 transition-transform">
+                <Truck className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline gap-2">
+              <span className="text-3xl font-bold font-mono text-[#F05A7E]">{analytics?.pendingOrders ?? 0}</span>
+            </div>
+            <p className="mt-3 pt-3 border-t border-[#E8D5A8]/10 text-xs text-[#6B6B6B]">Not yet delivered</p>
+          </div>
+
+          <div className="p-5 rounded-xl bg-[#171717] border border-[#E8D5A8]/20 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[#6B6B6B]">Total Customers</span>
+              <div className="w-9 h-9 rounded-lg bg-[#C9972B]/10 flex items-center justify-center text-[#C9972B]">
+                <Users className="w-5 h-5" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline gap-2">
+              <span className="text-3xl font-bold font-mono text-[#FAF9F6]">{analytics?.totalCustomers ?? 0}</span>
+            </div>
+            <p className="mt-3 pt-3 border-t border-[#E8D5A8]/10 text-xs text-[#6B6B6B]">Registered accounts</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Orders */}
+      {analytics && analytics.recentOrders.length > 0 && (
+        <div className="p-6 rounded-xl bg-[#171717] border border-[#E8D5A8]/30">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-serif text-lg text-[#FAF9F6] tracking-wide">Recent Orders</h2>
+            <button
+              onClick={() => onNavigateTab('orders')}
+              className="text-xs text-[#C9972B] hover:underline font-semibold cursor-pointer"
+            >
+              Manage Orders →
+            </button>
+          </div>
+          <div className="divide-y divide-[#0B0B0B]">
+            {analytics.recentOrders.map((order) => (
+              <div key={order.orderNumber} className="py-3 flex items-center justify-between gap-3 text-xs">
+                <div>
+                  <span className="font-semibold text-[#FAF9F6]">#{order.orderNumber}</span>
+                  <span className="text-[#6B6B6B] ml-2">{order.customerName}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-[10px] uppercase tracking-wider text-[#C9972B]">{order.status.replace(/_/g, ' ')}</span>
+                  <span className="font-mono text-[#FAF9F6]">₹{order.total}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Metric Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -210,6 +332,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab })
       <div className="p-6 rounded-xl bg-[#171717] border border-[#E8D5A8]/30">
         <h2 className="font-serif text-lg text-[#FAF9F6] tracking-wide mb-4">Quick Store Management Actions</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          <button
+            onClick={() => onNavigateTab('orders')}
+            className="p-4 rounded-lg bg-[#0B0B0B] hover:bg-[#171717] border border-[#E8D5A8]/20 hover:border-[#F05A7E]/50 transition-all flex flex-col items-center justify-center text-center gap-2 cursor-pointer group"
+          >
+            <div className="w-10 h-10 rounded-full bg-[#F05A7E]/10 flex items-center justify-center text-[#F05A7E] group-hover:scale-110 transition-transform">
+              <Truck className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-semibold text-[#FAF9F6]">Manage Orders</span>
+          </button>
+
           <button
             onClick={() => onNavigateTab('products')}
             className="p-4 rounded-lg bg-[#0B0B0B] hover:bg-[#171717] border border-[#E8D5A8]/20 hover:border-[#C9972B]/50 transition-all flex flex-col items-center justify-center text-center gap-2 cursor-pointer group"

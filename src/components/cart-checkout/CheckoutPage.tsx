@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CartItem, Address, Order, Coupon } from '../../types';
+import { CartItem, Address, Order, Coupon, PaymentMethodType } from '../../types';
 import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE } from '../../data/commerce';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
@@ -11,28 +11,44 @@ import {
   ArrowLeft,
   CreditCard,
   Banknote,
+  Smartphone,
+  Landmark,
+  Wallet,
   AlertCircle,
   Clock,
   Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+// No payment gateway is integrated yet, so UPI/Card/Net Banking/Wallet stay
+// disabled and hidden — Cash on Delivery is the only method a shopper can
+// pick. Flip this on (and the gateway's real charge call still needs wiring
+// server-side) once one is integrated; the UI/state for the other methods
+// below is kept intact rather than deleted so that's a one-line change.
+const ONLINE_PAYMENTS_ENABLED = false;
+
+type SelectablePaymentMethod = Exclude<PaymentMethodType, 'online'>;
+
 interface CheckoutDetails {
   customerName: string;
   customerPhone: string;
   customerEmail: string;
-  paymentMethod: 'cod';
+  paymentMethod: SelectablePaymentMethod;
   couponCode?: string;
+  upiId?: string;
+  cardNumber?: string;
+  bankName?: string;
+  walletProvider?: string;
 }
+
+const NETBANKING_OPTIONS = ['HDFC Bank', 'ICICI Bank', 'State Bank of India', 'Axis Bank', 'Kotak Mahindra Bank', 'Other Bank'];
+const WALLET_OPTIONS = ['Paytm', 'PhonePe', 'Amazon Pay', 'Mobikwik'];
 
 interface CheckoutPageProps {
   cartItems: CartItem[];
   appliedCoupon: Coupon | null;
   savedAddresses: Address[];
-  /** Whether the admin has configured a WhatsApp number in Global Store
-   * Settings — when false, there's no point pre-opening a tab for it. */
-  hasWhatsappOrderNumber?: boolean;
-  onAddNewAddress: (address: Address) => void;
+  onAddNewAddress: (address: Address) => Promise<{ success: boolean; addressId?: string; error?: string }>;
   onPlaceOrderSuccess: (order: Order, whatsappUrl?: string) => void;
   onBackToCart: () => void;
   onOpenProduct: (productId: string) => void;
@@ -48,7 +64,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   cartItems,
   appliedCoupon,
   savedAddresses,
-  hasWhatsappOrderNumber,
   onAddNewAddress,
   onPlaceOrderSuccess,
   onBackToCart,
@@ -79,10 +94,44 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     isDefault: false,
   });
 
+  // Payment Method State — UPI/Card/Net Banking/Wallet stay wired up but
+  // unreachable while ONLINE_PAYMENTS_ENABLED is false (see top of file);
+  // no real gateway is called and no full card number leaves this form
+  // (only last 4 digits are sent to the server for display purposes).
+  const [paymentMethod, setPaymentMethod] = useState<SelectablePaymentMethod>('cod');
+  const [upiId, setUpiId] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardName, setCardName] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [walletProvider, setWalletProvider] = useState('');
+
   // Processing & Error State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
+
+  const validatePayment = () => {
+    const errs: { [key: string]: string } = {};
+    if (paymentMethod === 'upi') {
+      if (!/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(upiId.trim())) {
+        errs.upiId = 'Please enter a valid UPI ID (e.g. name@bank).';
+      }
+    } else if (paymentMethod === 'card') {
+      const digits = cardNumber.replace(/\D/g, '');
+      if (digits.length < 13 || digits.length > 19) errs.cardNumber = 'Please enter a valid card number.';
+      if (!cardName.trim()) errs.cardName = 'Please enter the name on the card.';
+      if (!/^\d{2}\/\d{2}$/.test(cardExpiry.trim())) errs.cardExpiry = 'Use MM/YY format.';
+      if (!/^\d{3,4}$/.test(cardCvv.trim())) errs.cardCvv = 'Enter a valid CVV.';
+    } else if (paymentMethod === 'netbanking') {
+      if (!bankName) errs.bankName = 'Please select your bank.';
+    } else if (paymentMethod === 'wallet') {
+      if (!walletProvider) errs.walletProvider = 'Please select a wallet provider.';
+    }
+    setValidationErrors((prev) => ({ ...prev, ...errs }));
+    return Object.keys(errs).length === 0;
+  };
 
   // Financial Calculations
   const subtotal = cartItems.reduce((acc, item) => {
@@ -104,6 +153,21 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // user actually has and selects a real saved address.
   const activeAddress = savedAddresses.find((a) => a.id === selectedAddressId);
 
+  const paymentMethodLabel: Record<SelectablePaymentMethod, string> = {
+    cod: 'Cash on Delivery',
+    upi: 'UPI',
+    card: 'Card',
+    netbanking: 'Net Banking',
+    wallet: 'Wallet',
+  };
+  const paymentMethodDetail: Record<SelectablePaymentMethod, string> = {
+    cod: 'Pay when your order is delivered',
+    upi: upiId ? `UPI ID: ${upiId}` : 'UPI',
+    card: cardNumber ? `Card ending ${cardNumber.replace(/\D/g, '').slice(-4)}` : 'Card',
+    netbanking: bankName || 'Net Banking',
+    wallet: walletProvider || 'Wallet',
+  };
+
   // Validation logic
   const validateDetails = () => {
     const errs: { [key: string]: string } = {};
@@ -123,6 +187,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   const validateNewAddress = () => {
     const errs: { [key: string]: string } = {};
+    // Name/phone live in the FULL NAME / MOBILE NUMBER fields above (this
+    // mini-form only collects the address itself), so a missing one is
+    // reported against those fields, not this form's own inputs.
+    if (!customerName.trim()) errs.name = 'Please enter your full name.';
+    if (!customerPhone.trim() || customerPhone.replace(/\D/g, '').length < 10) {
+      errs.phone = 'Please enter a valid 10-digit mobile number.';
+    }
     if (!newAddressForm.addressLine1.trim()) errs.addressLine1 = 'Please enter flat/street address.';
     if (!newAddressForm.city.trim()) errs.city = 'Please enter city.';
     if (!newAddressForm.state.trim()) errs.state = 'Please enter state.';
@@ -133,19 +204,29 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     return Object.keys(errs).length === 0;
   };
 
-  const handleSaveNewAddress = (e: React.FormEvent) => {
+  const handleSaveNewAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateNewAddress()) return;
 
-    const newId = `addr-${Date.now()}`;
     const completeAddress: Address = {
       ...newAddressForm,
-      id: newId,
+      // This form only collects the address itself — name/phone/email come
+      // from the FULL NAME / MOBILE NUMBER / EMAIL fields above, which may
+      // have been typed or edited after newAddressForm's initial values were
+      // captured from the account profile at mount.
+      name: customerName,
+      phone: customerPhone,
+      email: customerEmail,
+      id: `addr-${Date.now()}`, // placeholder — the server assigns the real id used below
     };
-    onAddNewAddress(completeAddress);
-    setSelectedAddressId(newId);
-    setIsAddingNewAddress(false);
-    setValidationErrors({});
+    const result = await onAddNewAddress(completeAddress);
+    if (result.success && result.addressId) {
+      setSelectedAddressId(result.addressId);
+      setIsAddingNewAddress(false);
+      setValidationErrors({});
+    } else {
+      setValidationErrors({ addressLine1: result.error || 'Could not save this address. Please try again.' });
+    }
   };
 
   const handleConfirmOrder = async () => {
@@ -158,14 +239,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    // Must open synchronously, right inside this click handler — opening it
-    // only after the `await onCheckout(...)` below resolves loses the
-    // browser's "user activation" window, so most browsers silently block
-    // it as an unsolicited popup and the WhatsApp tab never appears.
-    // Opening a blank tab now and pointing it at the real URL once the
-    // order is confirmed keeps it inside that window.
-    const whatsappTab = hasWhatsappOrderNumber ? window.open('', '_blank', 'noopener,noreferrer') : null;
-
     const addressForOrder: Address = {
       ...activeAddress,
       name: customerName || activeAddress.name,
@@ -177,13 +250,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       customerName,
       customerPhone,
       customerEmail,
-      paymentMethod: 'cod',
+      paymentMethod,
       couponCode: appliedCoupon?.code,
+      upiId: paymentMethod === 'upi' ? upiId.trim() : undefined,
+      cardNumber: paymentMethod === 'card' ? cardNumber.replace(/\D/g, '') : undefined,
+      bankName: paymentMethod === 'netbanking' ? bankName : undefined,
+      walletProvider: paymentMethod === 'wallet' ? walletProvider : undefined,
     });
     setIsSubmitting(false);
 
     if (!result.success || !result.order) {
-      whatsappTab?.close();
       setErrorMessage(result.error || 'We couldn’t place your order. Your bag contents remain safe and unchanged.');
       return;
     }
@@ -197,15 +273,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       courierPartner: 'Blue Dart Apex Premier Air',
     };
 
-    // Best-effort: opens the customer's own WhatsApp with the order pre-filled
-    // to the admin's number. Requires one tap to actually send — there's no
-    // WhatsApp Business API wired up, so this can't happen silently server-side.
-    if (result.whatsappUrl && whatsappTab) {
-      whatsappTab.location.href = result.whatsappUrl;
-    } else {
-      whatsappTab?.close();
-    }
-
+    // The admin is already notified automatically (email + in-app
+    // notification, fired server-side in the checkout handler) — no tab is
+    // auto-opened here. result.whatsappUrl still flows through to the
+    // confirmation page's own "Send via WhatsApp" button for whoever wants
+    // to forward it manually, since WhatsApp itself requires a human tap to
+    // actually send (no Business API is wired up for silent sending).
     onPlaceOrderSuccess(enrichedOrder, result.whatsappUrl);
   };
 
@@ -620,40 +693,201 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </p>
                 </div>
 
-                {/* Method Tiles — Online is not wired to a real gateway yet */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div
-                    className="p-4 text-left border border-[#E8D5A8] bg-[#FAF9F6] opacity-60 cursor-not-allowed relative overflow-hidden"
-                    title="Online payment is coming soon"
-                  >
-                    <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-[#E8D5A8] text-[#121212] text-[9px] font-bold uppercase tracking-wider">
-                      Coming Soon
-                    </span>
-                    <CreditCard className="w-5 h-5 text-[#6B6B6B] mb-2" />
-                    <span className="font-serif text-sm font-medium text-[#6B6B6B] block">
-                      Online Payment
-                    </span>
-                    <p className="text-xs text-[#6B6B6B] mt-1">
-                      UPI, Cards & Net Banking — arriving soon.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="p-4 text-left border border-[#0B0B0B] bg-white ring-1 ring-[#0B0B0B] cursor-default"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <Banknote className="w-5 h-5 text-[#C9972B]" />
-                      <Check className="w-4 h-4 text-[#C9972B]" />
-                    </div>
-                    <span className="font-serif text-sm font-medium text-[#121212] block">
-                      Cash on Delivery
-                    </span>
-                    <p className="text-xs text-[#6B6B6B] mt-1">
-                      Pay in cash or UPI when your order arrives.
-                    </p>
-                  </button>
+                {/* Method Tiles — only Cash on Delivery is shown until a real
+                    payment gateway is integrated (ONLINE_PAYMENTS_ENABLED at
+                    the top of this file); the other tiles stay defined here
+                    so re-enabling them later is a one-line flag flip. */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  {(
+                    [
+                      { id: 'upi', label: 'UPI', icon: Smartphone },
+                      { id: 'card', label: 'Card', icon: CreditCard },
+                      { id: 'netbanking', label: 'Net Banking', icon: Landmark },
+                      { id: 'wallet', label: 'Wallet', icon: Wallet },
+                      { id: 'cod', label: 'Cash on Delivery', icon: Banknote },
+                    ] as { id: SelectablePaymentMethod; label: string; icon: typeof Banknote }[]
+                  )
+                    .filter(({ id }) => ONLINE_PAYMENTS_ENABLED || id === 'cod')
+                    .map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setPaymentMethod(id)}
+                      className={`p-3.5 text-left border transition-all cursor-pointer ${
+                        paymentMethod === id
+                          ? 'border-[#0B0B0B] bg-[#FAF9F6] ring-1 ring-[#0B0B0B]'
+                          : 'border-[#E8D5A8] bg-white hover:border-[#C9972B]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <Icon className="w-4.5 h-4.5 text-[#C9972B]" />
+                        {paymentMethod === id && <Check className="w-4 h-4 text-[#C9972B]" />}
+                      </div>
+                      <span className="font-serif text-xs font-medium text-[#121212] block leading-tight">
+                        {label}
+                      </span>
+                    </button>
+                  ))}
                 </div>
+
+                {!ONLINE_PAYMENTS_ENABLED && (
+                  <div className="p-3 bg-[#FAF9F6] border border-[#E8D5A8] text-[10.5px] text-[#6B6B6B] flex items-center gap-2">
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#C9972B] flex-shrink-0" />
+                    <span>Online payments (UPI, Card, Net Banking, Wallet) are coming soon. For now, all orders are Cash on Delivery.</span>
+                  </div>
+                )}
+
+                {/* Method-specific input forms — unreachable while
+                    ONLINE_PAYMENTS_ENABLED is false, since the tiles above
+                    only offer 'cod' in that state. Kept intact for when a
+                    real gateway is integrated. */}
+                {ONLINE_PAYMENTS_ENABLED && paymentMethod !== 'cod' && (
+                  <div className="p-3 bg-[#FCE8ED] border border-[#E8D5A8] text-[10.5px] text-[#6B6B6B] flex items-center gap-2">
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#C9972B] flex-shrink-0" />
+                    <span>DEMO PAYMENT — this is a simulated transaction. No real gateway is called and your full card number is never stored.</span>
+                  </div>
+                )}
+
+                {ONLINE_PAYMENTS_ENABLED && paymentMethod === 'upi' && (
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                      UPI ID *
+                    </label>
+                    <input
+                      type="text"
+                      value={upiId}
+                      onChange={(e) => setUpiId(e.target.value)}
+                      placeholder="yourname@upi"
+                      className={`w-full p-3 text-xs bg-[#FAF9F6] border ${
+                        validationErrors.upiId ? 'border-[#F05A7E]' : 'border-[#E8D5A8]'
+                      } focus:border-[#0B0B0B] focus:outline-hidden font-mono`}
+                    />
+                    {validationErrors.upiId && <p className="text-[11px] text-[#F05A7E] mt-1">{validationErrors.upiId}</p>}
+                  </div>
+                )}
+
+                {ONLINE_PAYMENTS_ENABLED && paymentMethod === 'card' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                        CARD NUMBER *
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={19}
+                        value={cardNumber}
+                        onChange={(e) => setCardNumber(e.target.value.replace(/[^\d\s]/g, ''))}
+                        placeholder="1234 5678 9012 3456"
+                        className={`w-full p-3 text-xs bg-[#FAF9F6] border ${
+                          validationErrors.cardNumber ? 'border-[#F05A7E]' : 'border-[#E8D5A8]'
+                        } focus:border-[#0B0B0B] focus:outline-hidden font-mono`}
+                      />
+                      {validationErrors.cardNumber && <p className="text-[11px] text-[#F05A7E] mt-1">{validationErrors.cardNumber}</p>}
+                    </div>
+                    <div>
+                      <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                        NAME ON CARD *
+                      </label>
+                      <input
+                        type="text"
+                        value={cardName}
+                        onChange={(e) => setCardName(e.target.value)}
+                        placeholder="As it appears on the card"
+                        className={`w-full p-3 text-xs bg-[#FAF9F6] border ${
+                          validationErrors.cardName ? 'border-[#F05A7E]' : 'border-[#E8D5A8]'
+                        } focus:border-[#0B0B0B] focus:outline-hidden`}
+                      />
+                      {validationErrors.cardName && <p className="text-[11px] text-[#F05A7E] mt-1">{validationErrors.cardName}</p>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                          EXPIRY (MM/YY) *
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={5}
+                          value={cardExpiry}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+                            setCardExpiry(digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits);
+                          }}
+                          placeholder="MM/YY"
+                          className={`w-full p-3 text-xs bg-[#FAF9F6] border ${
+                            validationErrors.cardExpiry ? 'border-[#F05A7E]' : 'border-[#E8D5A8]'
+                          } focus:border-[#0B0B0B] focus:outline-hidden font-mono`}
+                        />
+                        {validationErrors.cardExpiry && <p className="text-[11px] text-[#F05A7E] mt-1">{validationErrors.cardExpiry}</p>}
+                      </div>
+                      <div>
+                        <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                          CVV *
+                        </label>
+                        <input
+                          type="password"
+                          maxLength={4}
+                          inputMode="numeric"
+                          value={cardCvv}
+                          onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))}
+                          placeholder="•••"
+                          className={`w-full p-3 text-xs bg-[#FAF9F6] border ${
+                            validationErrors.cardCvv ? 'border-[#F05A7E]' : 'border-[#E8D5A8]'
+                          } focus:border-[#0B0B0B] focus:outline-hidden font-mono`}
+                        />
+                        {validationErrors.cardCvv && <p className="text-[11px] text-[#F05A7E] mt-1">{validationErrors.cardCvv}</p>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {ONLINE_PAYMENTS_ENABLED && paymentMethod === 'netbanking' && (
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                      SELECT YOUR BANK *
+                    </label>
+                    <select
+                      value={bankName}
+                      onChange={(e) => setBankName(e.target.value)}
+                      className={`w-full p-3 text-xs bg-[#FAF9F6] border ${
+                        validationErrors.bankName ? 'border-[#F05A7E]' : 'border-[#E8D5A8]'
+                      } focus:border-[#0B0B0B] focus:outline-hidden`}
+                    >
+                      <option value="">Choose a bank</option>
+                      {NETBANKING_OPTIONS.map((bank) => (
+                        <option key={bank} value={bank}>{bank}</option>
+                      ))}
+                    </select>
+                    {validationErrors.bankName && <p className="text-[11px] text-[#F05A7E] mt-1">{validationErrors.bankName}</p>}
+                  </div>
+                )}
+
+                {ONLINE_PAYMENTS_ENABLED && paymentMethod === 'wallet' && (
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                      SELECT WALLET PROVIDER *
+                    </label>
+                    <select
+                      value={walletProvider}
+                      onChange={(e) => setWalletProvider(e.target.value)}
+                      className={`w-full p-3 text-xs bg-[#FAF9F6] border ${
+                        validationErrors.walletProvider ? 'border-[#F05A7E]' : 'border-[#E8D5A8]'
+                      } focus:border-[#0B0B0B] focus:outline-hidden`}
+                    >
+                      <option value="">Choose a wallet</option>
+                      {WALLET_OPTIONS.map((wallet) => (
+                        <option key={wallet} value={wallet}>{wallet}</option>
+                      ))}
+                    </select>
+                    {validationErrors.walletProvider && <p className="text-[11px] text-[#F05A7E] mt-1">{validationErrors.walletProvider}</p>}
+                  </div>
+                )}
+
+                {paymentMethod === 'cod' && (
+                  <p className="text-xs text-[#6B6B6B]">
+                    Pay when your order is delivered.
+                  </p>
+                )}
 
                 <div className="pt-4 border-t border-[#E8D5A8] flex justify-between">
                   <button
@@ -663,7 +897,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     BACK
                   </button>
                   <button
-                    onClick={() => setCurrentStep('review')}
+                    onClick={() => {
+                      if (validatePayment()) setCurrentStep('review');
+                    }}
                     className="px-8 py-3.5 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-[0.2em] uppercase hover:bg-[#0B0B0B] transition-colors flex items-center gap-2 cursor-pointer"
                   >
                     <span>REVIEW ORDER</span>
@@ -743,10 +979,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       </button>
                     </div>
                     <h4 className="font-serif text-sm font-medium text-[#121212] uppercase">
-                      CASH ON DELIVERY
+                      {paymentMethodLabel[paymentMethod]}
                     </h4>
                     <p className="text-xs text-[#6B6B6B]">
-                      Standard Air Courier (3-4 Days)
+                      {paymentMethodDetail[paymentMethod]}
                     </p>
                   </div>
 
@@ -830,7 +1066,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </button>
 
                   <p className="text-[10.5px] text-center text-[#6B6B6B]">
-                    By confirming, you authorize Glamirk Beauty to process this Cash on Delivery order.
+                    {paymentMethod === 'cod'
+                      ? 'By confirming, you authorize Glamirk Beauty to process this Cash on Delivery order.'
+                      : `By confirming, you authorize a simulated ${paymentMethodLabel[paymentMethod]} payment for this demo order.`}
                   </p>
                 </div>
               </motion.div>

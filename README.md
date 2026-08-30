@@ -23,6 +23,7 @@ A full-stack luxury beauty e-commerce platform — shade-matching quiz, virtual 
 - `nodemailer` for transactional email (password-reset links) — optional, falls back to a dev-mode flow when unconfigured
 - Google Identity Services (OAuth) for "Continue with Google" — optional, falls back to a "coming soon" state when unconfigured
 
+
 **Language:** TypeScript end-to-end (frontend, backend, and shared types in `src/types.ts`).
 
 ## Project Structure

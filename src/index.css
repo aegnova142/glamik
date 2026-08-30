@@ -161,4 +161,66 @@
   background: linear-gradient(180deg, rgba(11, 11, 11, 0.02) 0%, rgba(11, 11, 11, 0.5) 100%);
 }
 
+/* Hides the scrollbar on horizontally-scrollable strips (category chips,
+   mobile filter rows) while keeping the element scrollable by touch/drag. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Dual-range price slider — two overlapping <input type="range"> elements
+   share this class (see FilterPanel). The native track is hidden so only
+   our custom track div (drawn behind) shows; only the thumb stays visible
+   and interactive, letting both handles be dragged independently. */
+.range-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  /* The input itself must not capture clicks across its full (track-width)
+     box — with two of these stacked for a dual-range slider, whichever sits
+     on top by z-index would otherwise swallow every click/drag anywhere on
+     the track, making the other handle completely ungrabbable whenever the
+     two values aren't near each other. Only the thumb re-enables pointer
+     events below, so a click only ever lands on whichever handle it's
+     actually nearest to. */
+  pointer-events: none;
+}
+
+.range-thumb::-webkit-slider-runnable-track {
+  -webkit-appearance: none;
+  background: transparent;
+}
+
+.range-thumb::-moz-range-track {
+  background: transparent;
+}
+
+.range-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background: #FFFFFF;
+  border: 2px solid #F05A7E;
+  box-shadow: 0 1px 3px rgba(11, 11, 11, 0.2);
+  cursor: pointer;
+  margin-top: 0;
+}
+
+.range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background: #FFFFFF;
+  border: 2px solid #F05A7E;
+  box-shadow: 0 1px 3px rgba(11, 11, 11, 0.2);
+  cursor: pointer;
+}
+
 

@@ -22,6 +22,7 @@ import {
   ExternalLink,
   Sparkles,
   ChevronRight,
+  Truck,
 } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminHero } from './AdminHero';
@@ -32,6 +33,8 @@ import { AdminShadeIntelligence } from './AdminShadeIntelligence';
 import { AdminLooks } from './AdminLooks';
 import { AdminPages } from './AdminPages';
 import { AdminProducts } from './AdminProducts';
+import { AdminOrders } from './AdminOrders';
+import { AdminNotificationBell } from './AdminNotificationBell';
 import { AdminCategories } from './AdminCategories';
 import { AdminOffers } from './AdminOffers';
 import { AdminPromoBanners } from './AdminPromoBanners';
@@ -57,6 +60,7 @@ type AdminTab =
   | 'looks'
   | 'pages'
   | 'products'
+  | 'orders'
   | 'categories'
   | 'offers'
   | 'promoBanners'
@@ -79,6 +83,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
     {
       label: 'Overview',
       items: [{ id: 'dashboard', label: 'Overview Dashboard', icon: LayoutDashboard }],
+    },
+    {
+      label: 'Orders',
+      items: [{ id: 'orders', label: 'Order Management', icon: Truck }],
     },
     {
       label: 'Homepage & Content',
@@ -154,6 +162,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         </div>
 
         <div className="flex items-center gap-2">
+          <AdminNotificationBell />
           <button
             onClick={onExitAdmin}
             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-[#0B0B0B] hover:bg-[#171717] border border-[#E8D5A8]/30 rounded-lg text-[#FAF9F6] font-medium transition-colors"
@@ -211,11 +220,14 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
           <div>
             {/* Brand Logo & Version */}
             <div className="p-6 border-b border-[#E8D5A8]/15">
-              <div className="flex items-center gap-2">
-                <span className="font-serif text-xl tracking-wider text-[#FAF9F6]">GLAMIRK</span>
-                <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-[#C9972B]/20 text-[#C9972B] border border-[#C9972B]/30 font-bold">
-                  CMS ATELIER
-                </span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-serif text-xl tracking-wider text-[#FAF9F6]">GLAMIRK</span>
+                  <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-[#C9972B]/20 text-[#C9972B] border border-[#C9972B]/30 font-bold">
+                    CMS ATELIER
+                  </span>
+                </div>
+                <AdminNotificationBell />
               </div>
               <p className="text-[11px] text-[#6B6B6B] mt-1">Full-Stack Real-Time Content Hub</p>
             </div>
@@ -305,6 +317,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
             {activeTab === 'looks' && <AdminLooks />}
             {activeTab === 'pages' && <AdminPages />}
             {activeTab === 'products' && <AdminProducts />}
+            {activeTab === 'orders' && <AdminOrders />}
             {activeTab === 'categories' && <AdminCategories />}
             {activeTab === 'offers' && <AdminOffers />}
             {activeTab === 'promoBanners' && <AdminPromoBanners />}

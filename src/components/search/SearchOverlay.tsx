@@ -31,8 +31,14 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
   onQuickAdd,
   onNavigateToCategory,
 }) => {
-  const { looks: cmsLooks } = useCMS();
+  const { looks: cmsLooks, products: cmsProducts, journalArticles: cmsArticles } = useCMS();
   const displayLooks = cmsLooks && cmsLooks.length > 0 ? cmsLooks : GLAMIRK_LOOKS;
+  // Search must reflect whatever the admin actually has live — falling back
+  // to the static seed data only matters before the CMS has loaded/if it's
+  // ever empty, same fallback pattern used by ShopPage and everywhere else
+  // that lists products.
+  const displayProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+  const displayArticles = cmsArticles && cmsArticles.length > 0 ? cmsArticles : GLAMIRK_JOURNAL_ARTICLES_EXTENDED;
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'ALL' | 'PRODUCTS' | 'GUIDES' | 'STORIES' | 'LOOKS'>('ALL');
 
@@ -57,7 +63,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
     const q = query.toLowerCase().trim();
     if (!q) return { products: [], looks: [], articles: [], guides: [], campaigns: [] };
 
-    const products = GLAMIRK_PRODUCTS.filter(
+    const products = displayProducts.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
         p.category.toLowerCase().includes(q) ||
@@ -75,7 +81,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
         l.description.toLowerCase().includes(q)
     );
 
-    const articles = GLAMIRK_JOURNAL_ARTICLES_EXTENDED.filter(
+    const articles = displayArticles.filter(
       (a) =>
         a.title.toLowerCase().includes(q) ||
         a.category.toLowerCase().includes(q) ||
@@ -97,7 +103,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
     );
 
     return { products, looks, articles, guides, campaigns };
-  }, [query, displayLooks]);
+  }, [query, displayLooks, displayProducts, displayArticles]);
 
   const hasResults =
     searchResults.products.length > 0 ||

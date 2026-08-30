@@ -40,6 +40,7 @@ import { ShoppingBagPage } from './components/cart-checkout/ShoppingBagPage';
 import { CheckoutPage } from './components/cart-checkout/CheckoutPage';
 import { OrderConfirmationPage } from './components/cart-checkout/OrderConfirmationPage';
 import { OrderTrackingPage } from './components/cart-checkout/OrderTrackingPage';
+import { OrderDetailPage } from './components/cart-checkout/OrderDetailPage';
 import { SupportCenterPage } from './components/content/SupportCenterPage';
 
 // Phase 5 Content, Discovery & Growth Pages
@@ -89,6 +90,8 @@ import {
   Coupon,
   Order,
   Address,
+  Review,
+  ReturnRequest,
 } from './types';
 import { GLAMIRK_PRODUCTS } from './data/products';
 import { customerApiFetch } from './utils/cmsClient';
@@ -100,6 +103,7 @@ import {
 } from './data/editorial';
 import { updatePageSeo } from './utils/seo';
 import { trackEvent } from './utils/analytics';
+import { routeToPath, pathToRoute } from './utils/routing';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles } from 'lucide-react';
 
@@ -107,21 +111,50 @@ function AppContent() {
   const { products: cmsProducts, pages: cmsPages, activeOffers, globalSettings, isAdminAuthenticated } = useCMS();
   const { customerUser, isCustomerLoggedIn } = useCustomerAuth();
   const commerce = useCommerce();
-  const { cartItems, cartSubtotal, wishlist } = commerce;
+  const { cartItems, cartSubtotal, wishlist, savedItems } = commerce;
   // Mutations queued for replay after a sign-in gate must call through this ref, not a
   // destructured const — a queued closure captures whatever `commerce` was at click time
   // (still logged-out), and a plain const would freeze that stale, always-rejecting version.
   const commerceRef = React.useRef(commerce);
   commerceRef.current = commerce;
 
-  // Navigation Routing State — /admin is a deliberately unadvertised direct
-  // URL entry point (like /wp-admin) rather than a link surfaced anywhere in
-  // the public UI, so only someone who already knows the address can reach it.
-  const [currentRoute, setCurrentRoute] = useState<PageRoute>(() =>
-    typeof window !== 'undefined' && window.location.pathname.replace(/\/+$/, '') === '/admin'
-      ? { page: 'admin' }
+  // Navigation Routing State. The initial route is parsed straight from the
+  // real URL (pathToRoute), so a direct link or a page refresh on e.g.
+  // /shop, /cart, /product/:id, or /admin (a deliberately unadvertised
+  // direct entry point, like /wp-admin, never linked from the public UI)
+  // lands on the right screen instead of always falling back to home.
+  const [currentRoute, setCurrentRouteState] = useState<PageRoute>(() =>
+    typeof window !== 'undefined'
+      ? pathToRoute(window.location.pathname, window.location.search)
       : { page: 'home' }
   );
+
+  // Every in-app navigation goes through this — it updates the route state
+  // AND pushes a matching browser history entry, so the address bar always
+  // reflects where the app actually is (shareable links, refresh-safe, and
+  // the back/forward buttons work). All ~25 existing setCurrentRoute(...)
+  // call sites below are unaffected by this — they still just call
+  // setCurrentRoute(route) and get URL syncing for free.
+  const setCurrentRoute = React.useCallback((route: PageRoute) => {
+    setCurrentRouteState(route);
+    if (typeof window === 'undefined') return;
+    const path = routeToPath(route);
+    const current = window.location.pathname + window.location.search;
+    if (current !== path) {
+      window.history.pushState({ route }, '', path);
+    }
+  }, []);
+
+  // Browser back/forward — the URL has already changed by the time this
+  // fires, so just re-derive route state from it (must NOT push a new
+  // history entry here, or back/forward would get stuck).
+  React.useEffect(() => {
+    const handlePopState = () => {
+      setCurrentRouteState(pathToRoute(window.location.pathname, window.location.search));
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Combined product catalog (CMS products prioritized over base defaults)
   const allProducts = React.useMemo(() => {
@@ -168,31 +201,56 @@ function AppContent() {
   // real data is fetched from the backend once signed in, never seeded locally.
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [myReviews, setMyReviews] = useState<Review[]>([]);
+  const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
   const [confirmedOrderWhatsappUrl, setConfirmedOrderWhatsappUrl] = useState<string | undefined>(undefined);
   const [trackingOrderId, setTrackingOrderId] = useState<string | undefined>(undefined);
 
-  // Add-to-Cart confirmation modal state
+  // Add-to-Cart confirmation modal state — two-step: "confirm" shows the
+  // product/shade/qty with Cancel + Add to Cart, and nothing is added to the
+  // cart (no server call, no cart count change) until the user explicitly
+  // clicks the modal's own "Add to Cart" button. Only then does it flip to
+  // "success". Closing/Cancel at any point while in "confirm" just discards
+  // this state — the cart is left completely untouched.
   const [addToCartConfirm, setAddToCartConfirm] = useState<{
+    mode: 'confirm' | 'success';
     product: Product;
     shade?: Shade;
     size?: string;
     quantity: number;
   } | null>(null);
+  const [isConfirmingAddToCart, setIsConfirmingAddToCart] = useState(false);
+
+  // Tracks whether the orders fetch below is in flight — needed so pages
+  // reached by direct URL/refresh/new tab/shared link (order-confirmation,
+  // order-tracking, order-detail) can tell "still loading, hang on" apart
+  // from "genuinely no such order", instead of flashing a wrong empty state
+  // in the window before this effect's fetch resolves.
+  const [isOrdersLoading, setIsOrdersLoading] = useState(false);
 
   useEffect(() => {
     if (!isCustomerLoggedIn) {
       setSavedAddresses([]);
       setOrders([]);
+      setMyReviews([]);
+      setReturnRequests([]);
+      setIsOrdersLoading(false);
       return;
     }
+    setIsOrdersLoading(true);
     (async () => {
-      const [addrRes, ordersRes] = await Promise.all([
+      const [addrRes, ordersRes, reviewsRes, returnsRes] = await Promise.all([
         customerApiFetch<{ addresses: Address[] }>('/api/customer/addresses'),
         customerApiFetch<{ orders: Order[] }>('/api/customer/orders'),
+        customerApiFetch<{ reviews: Review[] }>('/api/customer/reviews'),
+        customerApiFetch<{ returns: ReturnRequest[] }>('/api/customer/returns'),
       ]);
       if (addrRes.data) setSavedAddresses(addrRes.data.addresses || []);
       if (ordersRes.data) setOrders(ordersRes.data.orders || []);
+      if (reviewsRes.data) setMyReviews(reviewsRes.data.reviews || []);
+      if (returnsRes.data) setReturnRequests(returnsRes.data.returns || []);
+      setIsOrdersLoading(false);
     })();
   }, [isCustomerLoggedIn]);
 
@@ -285,12 +343,14 @@ function AppContent() {
       checkout: 'Luxury Checkout | Glamirk Beauty',
       'order-confirmation': 'Order Confirmation | Glamirk Beauty',
       'order-tracking': 'Track Your Order | Glamirk Concierge',
+      'order-detail': 'Order Details | Glamirk Beauty',
       support: 'Client Support & FAQ | Glamirk Care',
       journal: 'The Glamirk Journal | Editorial Stories & Insights',
       article: 'Journal Story | Glamirk Beauty',
       'beauty-guides': 'Beauty Guides & Masterclasses | Glamirk Beauty',
       'social-commerce': 'Glamirk On You | Community & Creator Showcase',
       campaign: 'The Sovereign Velvet Festive Edit | Glamirk',
+      'new-launch': 'New Launches | Glamirk Beauty',
       legal: 'Legal & Client Governance Policies | Glamirk Beauty',
       '404': 'Page Not Found (404) | Glamirk Beauty',
     };
@@ -304,22 +364,28 @@ function AppContent() {
     } else if (currentRoute.page === 'article' && currentArticle) {
       title = `${currentArticle.title} | The Glamirk Journal`;
       description = currentArticle.excerpt || description;
+    } else if (currentRoute.page === 'dynamic-page') {
+      const activePage = cmsPages.find((p) => p.slug === currentRoute.slug && p.status === 'published');
+      if (activePage) {
+        title = activePage.seoTitle || `${activePage.title} | Glamirk Beauty`;
+        description = activePage.seoDescription || description;
+      }
     }
 
     updatePageSeo({
       title,
       description,
-      canonicalUrl: `https://glamirk.com/#${currentRoute.page}`,
+      canonicalUrl: `https://glamirk.com${routeToPath(currentRoute)}`,
     });
 
     trackEvent('page_view', { route: currentRoute.page, ...currentRoute });
-  }, [currentRoute, activeProduct, currentArticle]);
+  }, [currentRoute, activeProduct, currentArticle, cmsPages]);
 
-  const showToast = (message: string) => {
+  const showToast = (message: string, durationMs: number = 3000) => {
     setToastMessage(message);
     setTimeout(() => {
       setToastMessage(null);
-    }, 3000);
+    }, durationMs);
   };
 
   const trackRecentlyViewed = (productId: string) => {
@@ -406,6 +472,11 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const navigateToOrderDetail = (orderId: string) => {
+    setCurrentRoute({ page: 'order-detail', orderId });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const navigateToSupport = () => {
     setCurrentRoute({ page: 'support' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -462,21 +533,60 @@ function AppContent() {
   // Cart actions — server-persisted per signed-in customer when logged in, but guests can
   // add to bag freely too (no sign-in gate on add-to-cart). Sign-in is only required at
   // checkout time (see navigateToCheckout above).
+  //
+  // Adds straight to the cart, no confirm dialog — every "Add to Cart"
+  // trigger across the app funnels through here. A brief toast ("Added to
+  // your bag") is the only feedback, auto-dismissing so shopping is never
+  // interrupted. The earlier confirm/cancel dialog flow (AddToCartConfirmModal,
+  // handleConfirmAddToCart/handleCancelAddToCart below, addToCartConfirm
+  // state) is kept working but unreachable — nothing opens it anymore —
+  // in case that step needs to come back.
   const handleAddToCart = async (product: Product, shade?: Shade, size?: string, quantity: number = 1) => {
     trackRecentlyViewed(product.id);
     const res = await commerceRef.current.addToCart(product, shade, quantity);
     if (res.success) {
-      setAddToCartConfirm({ product, shade, size, quantity });
+      showToast('✓ Added to your bag', 2500);
     } else {
       showToast(res.error || 'Could not add this item to your bag.');
     }
+  };
+
+  const handleConfirmAddToCart = async () => {
+    if (!addToCartConfirm) return;
+    const { product, shade, size, quantity } = addToCartConfirm;
+    setIsConfirmingAddToCart(true);
+    trackRecentlyViewed(product.id);
+    const res = await commerceRef.current.addToCart(product, shade, quantity);
+    setIsConfirmingAddToCart(false);
+    if (res.success) {
+      setAddToCartConfirm({ mode: 'success', product, shade, size, quantity });
+    } else {
+      setAddToCartConfirm(null);
+      showToast(res.error || 'Could not add this item to your bag.');
+    }
+  };
+
+  const handleCancelAddToCart = () => {
+    setAddToCartConfirm(null);
   };
 
   const handleBuyNow = async (product: Product, shade?: Shade, size?: string) => {
     trackRecentlyViewed(product.id);
     const res = await commerceRef.current.addToCart(product, shade, 1);
     if (res.success) {
-      navigateToCheckout();
+      // Deliberately does NOT call navigateToCheckout() here — its
+      // `cartItems.length === 0` guard reads `cartItems` from this render's
+      // closure, which can still reflect the pre-add state at this point
+      // (the state update from addToCart above hasn't necessarily flushed
+      // a re-render yet), so it can wrongly show "bag is empty" right after
+      // a successful add. That guard exists for the generic "user clicks
+      // Checkout" entry point; here we already know the bag is non-empty
+      // since res.success confirms the add just landed, so only the
+      // sign-in gate still applies.
+      requireLogin(() => {
+        setCurrentRoute({ page: 'checkout' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
     } else {
       showToast(res.error || 'Could not add this item to your bag.');
     }
@@ -505,10 +615,54 @@ function AppContent() {
     showToast(`Moved ${product.name} to your Wishlist`);
   };
 
-  // Coupon handling
-  const handleApplyCoupon = (coupon: Coupon) => {
-    setAppliedCoupon(coupon);
-    showToast(`Privilege code ${coupon.code} applied!`);
+  const handleSaveForLater = async (index: number) => {
+    const res = await commerceRef.current.saveForLater(index);
+    if (res.success) {
+      showToast('Saved for later');
+    } else if (res.loginRequired) {
+      requireLogin(() => {});
+    } else {
+      showToast(res.error || 'Could not save this item for later.');
+    }
+  };
+
+  const handleMoveSavedToCart = async (index: number) => {
+    const res = await commerceRef.current.moveToCart(index);
+    showToast(res.success ? 'Moved to your bag' : res.error || 'Could not move this item to your bag.');
+  };
+
+  const handleRemoveSavedItem = async (index: number) => {
+    const res = await commerceRef.current.removeSavedItem(index);
+    showToast(res.success ? 'Item removed' : res.error || 'Could not remove this item.');
+  };
+
+  // Coupon handling — always re-validated server-side against the live offer
+  // list (never applied from a client-side guess) so the discount shown here
+  // is guaranteed to match what checkout will actually charge.
+  const handleApplyCoupon = async (code: string) => {
+    // Reads commerceRef.current rather than the destructured `cartSubtotal`
+    // above: this function gets queued via requireLogin and re-invoked after
+    // login completes, by which point the guest cart has merged into the
+    // server cart and the subtotal may have changed — a plain closure over
+    // `cartSubtotal` would validate the coupon against the pre-merge total.
+    const res = await commerceRef.current.validateCoupon(code, commerceRef.current.cartSubtotal);
+    if (res.success && res.coupon) {
+      setAppliedCoupon(res.coupon);
+      showToast(`Privilege code ${res.coupon.code} applied!`);
+      return { success: true };
+    }
+    if (res.loginRequired) {
+      // Coupon codes are validated server-side against the signed-in
+      // customer, so a guest gets no `error` string back here — without
+      // this branch that fell through to a generic "Invalid coupon code"
+      // message that was actively misleading (the code could be perfectly
+      // valid). Opens sign-in and auto-retries the same code on success.
+      requireLogin(() => {
+        handleApplyCoupon(code);
+      });
+      return { success: false, error: 'Please sign in to apply a coupon code.' };
+    }
+    return { success: false, error: res.error };
   };
 
   const handleRemoveCoupon = () => {
@@ -517,17 +671,20 @@ function AppContent() {
   };
 
   // Address adding — persisted server-side, scoped to the authenticated customer.
-  const handleAddNewAddress = async (newAddr: Address) => {
-    const res = await customerApiFetch<{ addresses: Address[] }>('/api/customer/addresses', {
+  // Returns the server-assigned id (never the caller's client-side placeholder)
+  // so callers like CheckoutPage can select the address they just created.
+  const handleAddNewAddress = async (newAddr: Address): Promise<{ success: boolean; addressId?: string; error?: string }> => {
+    const res = await customerApiFetch<{ addresses: Address[]; newAddressId: string }>('/api/customer/addresses', {
       method: 'POST',
       body: JSON.stringify(newAddr),
     });
     if (res.data) {
       setSavedAddresses(res.data.addresses || []);
       showToast('New destination address saved');
-    } else {
-      showToast(res.error || 'Could not save this address.');
+      return { success: true, addressId: res.data.newAddressId };
     }
+    showToast(res.error || 'Could not save this address.');
+    return { success: false, error: res.error };
   };
 
   const handleDeleteAddress = async (addressId: string) => {
@@ -542,6 +699,30 @@ function AppContent() {
     }
   };
 
+  const handleEditAddress = async (addressId: string, address: Omit<Address, 'id'>) => {
+    const res = await commerceRef.current.updateAddress(addressId, address);
+    if (res.success && res.addresses) {
+      setSavedAddresses(res.addresses);
+      showToast('Address updated');
+      return { success: true };
+    }
+    showToast(res.error || 'Could not update this address.');
+    return { success: false, error: res.error };
+  };
+
+  const handleSetDefaultAddress = async (addressId: string) => {
+    const addr = savedAddresses.find((a) => a.id === addressId);
+    if (!addr) return;
+    const { id, ...rest } = addr;
+    const res = await commerceRef.current.updateAddress(addressId, { ...rest, isDefault: true });
+    if (res.success && res.addresses) {
+      setSavedAddresses(res.addresses);
+      showToast('Default address updated');
+    } else {
+      showToast(res.error || 'Could not update your default address.');
+    }
+  };
+
   // Order Placement Success Handler — server already cleared the cart during checkout.
   const handlePlaceOrderSuccess = (newOrder: Order, whatsappUrl?: string) => {
     setOrders((prev) => [newOrder, ...prev]);
@@ -551,6 +732,36 @@ function AppContent() {
     setCurrentRoute({ page: 'order-confirmation', orderId: newOrder.id });
     window.scrollTo({ top: 0, behavior: 'smooth' });
     showToast(`Order #${newOrder.orderNumber} successfully registered!`);
+  };
+
+  const handleCancelOrder = async (orderId: string, reason: string) => {
+    const res = await commerceRef.current.cancelOrder(orderId, reason);
+    if (res.success && res.order) {
+      setOrders((prev) => prev.map((o) => (o.id === res.order!.id ? res.order! : o)));
+      showToast(`Order #${res.order.orderNumber} has been cancelled.`);
+      return { success: true };
+    }
+    return { success: false, error: res.error };
+  };
+
+  const handleSubmitReview = async (productId: string, rating: number, title: string, comment: string) => {
+    const res = await commerceRef.current.submitReview(productId, rating, title, comment);
+    if (res.success && res.review) {
+      setMyReviews((prev) => [res.review!, ...prev.filter((r) => r.productId !== productId)]);
+      showToast('Thank you — your review has been posted.');
+      return { success: true };
+    }
+    return { success: false, error: res.error };
+  };
+
+  const handleSubmitReturn = async (orderId: string, productId: string, reason: string, comment?: string) => {
+    const res = await commerceRef.current.submitReturnRequest(orderId, productId, reason, comment);
+    if (res.success && res.return) {
+      setReturnRequests((prev) => [res.return!, ...prev]);
+      showToast('Your return request has been submitted.');
+      return { success: true };
+    }
+    return { success: false, error: res.error };
   };
 
   // Wishlist actions
@@ -648,6 +859,7 @@ function AppContent() {
         onOpenQuiz={() => setIsQuizOpen(true)}
         onNavigateAdmin={() => setCurrentRoute({ page: 'admin' })}
         onNavigateAbout={navigateToAbout}
+        onOpenOrder={navigateToOrderDetail}
       />
 
       {/* Main Dynamic View Routing */}
@@ -665,11 +877,13 @@ function AppContent() {
             {/* 2nd: Best Seller (Most Loved Creations) */}
             <GlamirkEdit
               wishlist={wishlist}
+              cartItems={cartItems}
               onToggleWishlist={handleToggleWishlist}
-              onQuickView={(product) => setQuickViewProduct(product)}
               onSelectProduct={(product) => navigateToProduct(product)}
               onTryItOn={(product) => openVirtualTryOn(product)}
               onQuickAdd={(product, shade, size) => handleAddToCart(product, shade, size, 1)}
+              onGoToCart={navigateToCart}
+              onBuyNow={handleBuyNow}
               onExploreShop={() => navigateToShop()}
             />
 
@@ -747,12 +961,14 @@ function AppContent() {
             initialCategory={currentRoute.category}
             initialSubCategory={currentRoute.subCategory}
             wishlist={wishlist}
+            cartItems={cartItems}
             recentlyViewedIds={recentlyViewedIds}
             onToggleWishlist={handleToggleWishlist}
-            onQuickView={(product) => setQuickViewProduct(product)}
             onSelectProduct={(product) => navigateToProduct(product)}
             onTryItOn={(product) => openVirtualTryOn(product)}
             onQuickAdd={(product, shade, size) => handleAddToCart(product, shade, size, 1)}
+            onGoToCart={navigateToCart}
+            onBuyNow={handleBuyNow}
             onOpenShadeFinder={navigateToFindMyShade}
             onCategoryNavigate={(cat, subCat) => {
               setCurrentRoute({ page: 'shop', category: cat, subCategory: subCat });
@@ -765,15 +981,16 @@ function AppContent() {
           <FullProductPage
             product={activeProduct}
             wishlist={wishlist}
+            cartItems={cartItems}
             recentlyViewedIds={recentlyViewedIds}
             onToggleWishlist={handleToggleWishlist}
             onAddToBag={handleAddToCart}
             onBuyNow={handleBuyNow}
+            onGoToCart={navigateToCart}
             onOpenShadeFinder={navigateToFindMyShade}
             onSelectProduct={(product) => navigateToProduct(product)}
             onBackToShop={() => navigateToShop()}
             onAddLookToBag={handleAddLookToBag}
-            onQuickView={(product) => setQuickViewProduct(product)}
             onOpenArticle={navigateToArticle}
           />
         )}
@@ -819,8 +1036,12 @@ function AppContent() {
             recentlyViewedIds={recentlyViewedIds}
             orders={orders}
             savedAddresses={savedAddresses}
+            reviews={myReviews}
+            returnRequests={returnRequests}
             onAddNewAddress={handleAddNewAddress}
             onDeleteAddress={handleDeleteAddress}
+            onEditAddress={handleEditAddress}
+            onSetDefaultAddress={handleSetDefaultAddress}
             onOpenShadeFinder={navigateToFindMyShade}
             onOpenTryOn={(product, shade) => openVirtualTryOn(product, shade)}
             onAddToBag={handleAddToCart}
@@ -828,8 +1049,11 @@ function AppContent() {
             onSelectProduct={navigateToProduct}
             onExploreShop={() => navigateToShop()}
             onTrackOrder={navigateToOrderTracking}
+            onViewOrderDetail={navigateToOrderDetail}
             onOpenSupport={navigateToSupport}
             onNavigateAdmin={() => setCurrentRoute({ page: 'admin' })}
+            onSubmitReview={handleSubmitReview}
+            onSubmitReturn={handleSubmitReturn}
           />
         )}
 
@@ -837,11 +1061,15 @@ function AppContent() {
         {currentRoute.page === 'cart' && (
           <ShoppingBagPage
             cartItems={cartItems}
+            savedItems={savedItems}
             wishlist={wishlist}
             appliedCoupon={appliedCoupon}
             onUpdateQuantity={handleUpdateQuantity}
             onRemoveItem={handleRemoveFromCart}
             onMoveToWishlist={handleMoveToWishlist}
+            onSaveForLater={handleSaveForLater}
+            onMoveSavedToCart={handleMoveSavedToCart}
+            onRemoveSavedItem={handleRemoveSavedItem}
             onApplyCoupon={handleApplyCoupon}
             onRemoveCoupon={handleRemoveCoupon}
             onProceedToCheckout={navigateToCheckout}
@@ -858,7 +1086,6 @@ function AppContent() {
             cartItems={cartItems}
             appliedCoupon={appliedCoupon}
             savedAddresses={savedAddresses}
-            hasWhatsappOrderNumber={!!globalSettings?.whatsappOrderNumber}
             onAddNewAddress={handleAddNewAddress}
             onPlaceOrderSuccess={handlePlaceOrderSuccess}
             onBackToCart={navigateToCart}
@@ -870,14 +1097,23 @@ function AppContent() {
           />
         )}
 
-        {/* VIEW 10: PHASE 4 ORDER CONFIRMATION */}
+        {/* VIEW 10: PHASE 4 ORDER CONFIRMATION — reached right after checkout,
+            but also directly by URL/refresh/new tab/shared link/another
+            device, so it must resolve strictly by the URL's orderId rather
+            than assuming confirmedOrder or orders[0] is the right one. */}
         {currentRoute.page === 'order-confirmation' && (
           <OrderConfirmationPage
-            order={confirmedOrder || orders[0]}
+            order={
+              (confirmedOrder && confirmedOrder.id === currentRoute.orderId ? confirmedOrder : undefined) ??
+              orders.find((o) => o.id === currentRoute.orderId)
+            }
+            isLoading={isCustomerLoggedIn && isOrdersLoading}
+            isLoggedIn={isCustomerLoggedIn}
             whatsappUrl={confirmedOrderWhatsappUrl}
             onTrackOrder={(orderId) => navigateToOrderTracking(orderId)}
             onContinueShopping={() => navigateToShop()}
             onNavigateMyGlam={navigateToMyGlam}
+            onSignIn={() => setIsAuthGateOpen(true)}
           />
         )}
 
@@ -886,13 +1122,44 @@ function AppContent() {
           <OrderTrackingPage
             orders={orders}
             initialOrderId={currentRoute.orderId || trackingOrderId}
+            isLoading={isCustomerLoggedIn && isOrdersLoading}
+            isLoggedIn={isCustomerLoggedIn}
+            onSignIn={() => setIsAuthGateOpen(true)}
             onBackToAccount={navigateToMyGlam}
             onExploreShop={() => navigateToShop()}
             onOpenSupport={navigateToSupport}
-            onReorder={(productId) => {
-              const prod = GLAMIRK_PRODUCTS.find((p) => p.id === productId) || GLAMIRK_PRODUCTS[0];
-              handleAddToCart(prod, prod.shades?.[0]);
+            onReorder={(productId, shade, size) => {
+              const prod = allProducts.find((p) => p.id === productId);
+              if (!prod) {
+                showToast('This product is no longer available.');
+                return;
+              }
+              handleAddToCart(prod, shade || prod.shades?.[0], size);
             }}
+          />
+        )}
+
+        {/* VIEW 11b: ORDER DETAIL */}
+        {currentRoute.page === 'order-detail' && (
+          <OrderDetailPage
+            orders={orders}
+            orderId={currentRoute.orderId}
+            isLoading={isCustomerLoggedIn && isOrdersLoading}
+            isLoggedIn={isCustomerLoggedIn}
+            onSignIn={() => setIsAuthGateOpen(true)}
+            onBack={navigateToMyGlam}
+            onTrackOrder={(orderId) => navigateToOrderTracking(orderId)}
+            onExploreShop={() => navigateToShop()}
+            onReorder={(productId, shade, size) => {
+              const prod = allProducts.find((p) => p.id === productId);
+              if (!prod) {
+                showToast('This product is no longer available.');
+                return;
+              }
+              handleAddToCart(prod, shade || prod.shades?.[0], size);
+            }}
+            onCancelOrder={handleCancelOrder}
+            onSubmitReturn={handleSubmitReturn}
           />
         )}
 
@@ -1162,11 +1429,14 @@ function AppContent() {
 
       <AddToCartConfirmModal
         isOpen={!!addToCartConfirm}
+        mode={addToCartConfirm?.mode || 'confirm'}
         product={addToCartConfirm?.product || null}
         shade={addToCartConfirm?.shade}
         size={addToCartConfirm?.size}
         quantity={addToCartConfirm?.quantity || 1}
-        onClose={() => setAddToCartConfirm(null)}
+        isSubmitting={isConfirmingAddToCart}
+        onClose={handleCancelAddToCart}
+        onConfirm={handleConfirmAddToCart}
         onGoToCart={() => {
           setAddToCartConfirm(null);
           navigateToCart();

@@ -40,9 +40,9 @@ import {
   ReturnRequest,
 } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
+import { getPaymentMethodLabel, getPaymentStatusLabel } from '../../utils/paymentDisplay';
 import {
   DEFAULT_LOYALTY,
-  SAMPLE_REVIEWS,
   SUPPORT_FAQS,
 } from '../../data/commerce';
 import { AuthModal } from './AuthModal';
@@ -54,8 +54,12 @@ interface MyGlamDashboardProps {
   recentlyViewedIds: string[];
   orders?: Order[];
   savedAddresses?: Address[];
+  reviews?: Review[];
+  returnRequests?: ReturnRequest[];
   onAddNewAddress?: (address: Address) => void;
   onDeleteAddress?: (addressId: string) => void;
+  onEditAddress?: (addressId: string, address: Omit<Address, 'id'>) => Promise<{ success: boolean; error?: string }>;
+  onSetDefaultAddress?: (addressId: string) => void;
   onOpenShadeFinder: () => void;
   onOpenTryOn: (product: Product, shade?: Shade) => void;
   onAddToBag: (product: Product, shade?: Shade, size?: string, quantity?: number) => void;
@@ -63,8 +67,11 @@ interface MyGlamDashboardProps {
   onSelectProduct: (product: Product) => void;
   onExploreShop: () => void;
   onTrackOrder?: (orderId: string) => void;
+  onViewOrderDetail?: (orderId: string) => void;
   onOpenSupport?: () => void;
   onNavigateAdmin?: () => void;
+  onSubmitReview: (productId: string, rating: number, title: string, comment: string) => Promise<{ success: boolean; error?: string }>;
+  onSubmitReturn: (orderId: string, productId: string, reason: string, comment?: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 type TabType =
@@ -85,8 +92,12 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
   recentlyViewedIds,
   orders = [],
   savedAddresses = [],
+  reviews = [],
+  returnRequests = [],
   onAddNewAddress,
   onDeleteAddress,
+  onEditAddress,
+  onSetDefaultAddress,
   onOpenShadeFinder,
   onOpenTryOn,
   onAddToBag,
@@ -94,12 +105,15 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
   onSelectProduct,
   onExploreShop,
   onTrackOrder,
+  onViewOrderDetail,
   onOpenSupport,
   onNavigateAdmin,
+  onSubmitReview,
+  onSubmitReturn,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('PROFILE');
+  const [orderStatusFilter, setOrderStatusFilter] = useState<'ALL' | 'ACTIVE' | 'DELIVERED' | 'CANCELLED' | 'RETURNED'>('ALL');
   const [loyalty, setLoyalty] = useState<LoyaltyAccount>(DEFAULT_LOYALTY);
-  const [reviewsList, setReviewsList] = useState<Review[]>(SAMPLE_REVIEWS);
 
   // Authentication Modal State — real identity comes from CustomerAuthContext (Postgres-backed)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -113,6 +127,29 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
   // for local UI mutations (e.g. optimistic return requests).
   const userAddresses = savedAddresses;
   const userOrders = orders;
+
+  const ORDER_STATUS_TABS: { id: typeof orderStatusFilter; label: string }[] = [
+    { id: 'ALL', label: 'All' },
+    { id: 'ACTIVE', label: 'Active' },
+    { id: 'DELIVERED', label: 'Delivered' },
+    { id: 'CANCELLED', label: 'Cancelled' },
+    { id: 'RETURNED', label: 'Returned' },
+  ];
+  const filteredOrders = userOrders.filter((order) => {
+    switch (orderStatusFilter) {
+      case 'ALL':
+        return true;
+      case 'DELIVERED':
+        return order.status === 'DELIVERED';
+      case 'CANCELLED':
+        return order.status === 'CANCELLED';
+      case 'RETURNED':
+        return order.status === 'RETURN_REQUESTED';
+      case 'ACTIVE':
+      default:
+        return !['DELIVERED', 'CANCELLED', 'RETURN_REQUESTED'].includes(order.status);
+    }
+  });
 
   // Referral Copy feedback
   const [copiedReferral, setCopiedReferral] = useState(false);
@@ -132,6 +169,8 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
     isDefault: false,
   };
   const [newAddress, setNewAddress] = useState<Omit<Address, 'id'>>(emptyAddressForm);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [addressFormError, setAddressFormError] = useState<string | null>(null);
 
   // Review Modal State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -140,13 +179,16 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
   const [reviewTitle, setReviewTitle] = useState('');
   const [reviewComment, setReviewComment] = useState('');
   const [reviewShadeFeedback, setReviewShadeFeedback] = useState('');
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   // Return Modal State
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [selectedOrderForReturn, setSelectedOrderForReturn] = useState<Order | undefined>(userOrders[0]);
   const [returnReason, setReturnReason] = useState('Damaged in transit');
   const [returnComments, setReturnComments] = useState('');
-  const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
+  const [returnError, setReturnError] = useState<string | null>(null);
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
 
   const wishlistedProducts = GLAMIRK_PRODUCTS.filter((p) => wishlist.includes(p.id));
   const recentProducts = GLAMIRK_PRODUCTS.filter((p) => recentlyViewedIds.includes(p.id));
@@ -158,14 +200,26 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
     setTimeout(() => setCopiedReferral(false), 2500);
   };
 
-  const handleCreateAddress = (e: React.FormEvent) => {
+  const handleCreateAddress = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAddressFormError(null);
     if (!newAddress.name.trim() || !newAddress.phone.trim() || !newAddress.addressLine1.trim() || !newAddress.city.trim() || !newAddress.state.trim() || !newAddress.pinCode.trim()) {
+      setAddressFormError('Please fill in all required fields.');
       return;
     }
 
-    onAddNewAddress?.({ ...newAddress, id: `addr-${Date.now()}` });
+    if (editingAddressId) {
+      const res = await onEditAddress?.(editingAddressId, newAddress);
+      if (res && !res.success) {
+        setAddressFormError(res.error || 'Could not update this address.');
+        return;
+      }
+    } else {
+      onAddNewAddress?.({ ...newAddress, id: `addr-${Date.now()}` });
+    }
+
     setIsAddAddressOpen(false);
+    setEditingAddressId(null);
     setNewAddress(emptyAddressForm);
   };
 
@@ -173,31 +227,34 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
     onDeleteAddress?.(id);
   };
 
-  const handleSubmitReview = (e: React.FormEvent) => {
+  const handleOpenEditAddress = (addr: Address) => {
+    const { id, ...rest } = addr;
+    setNewAddress(rest);
+    setEditingAddressId(id);
+    setAddressFormError(null);
+    setIsAddAddressOpen(true);
+  };
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reviewComment.trim()) return;
 
-    const newRev: Review = {
-      id: `rev-${Date.now()}`,
-      productId: selectedProductForReview.id,
-      productName: selectedProductForReview.name,
-      shadeName: selectedProductForReview.shades?.[0]?.name || 'Signature',
-      rating: reviewRating,
-      customerName: currentUser?.name || 'Glamirk Customer',
-      date: 'Just now',
-      title: reviewTitle || 'Verified Customer Review',
-      comment: reviewComment,
-      isVerifiedPurchase: true,
-      skinTone: profile?.skinTone || 'Medium',
-      undertone: profile?.undertone || 'Warm',
-    };
+    setIsSubmittingReview(true);
+    setReviewError(null);
+    const res = await onSubmitReview(selectedProductForReview.id, reviewRating, reviewTitle, reviewComment);
+    setIsSubmittingReview(false);
 
-    setReviewsList([newRev, ...reviewsList]);
+    if (!res.success) {
+      setReviewError(res.error || 'Could not submit your review. Please try again.');
+      return;
+    }
+
     setIsReviewModalOpen(false);
     setReviewComment('');
     setReviewTitle('');
 
-    // Reward points for review
+    // Reward points for review (loyalty program remains a local demo — not
+    // part of the server-persisted review itself)
     setLoyalty((prev) => ({
       ...prev,
       points: prev.points + 50,
@@ -214,23 +271,21 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
     }));
   };
 
-  const handleSubmitReturn = (e: React.FormEvent) => {
+  const handleSubmitReturn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrderForReturn) return;
     const itemToReturn = selectedOrderForReturn.items[0];
-    const newReq: ReturnRequest = {
-      id: `ret-${Date.now()}`,
-      orderId: selectedOrderForReturn.id,
-      orderNumber: selectedOrderForReturn.orderNumber,
-      productId: itemToReturn.productId,
-      productName: itemToReturn.productName,
-      productImage: itemToReturn.productImage,
-      reason: returnReason,
-      status: 'SUBMITTED',
-      requestedAt: 'Today',
-      comment: returnComments,
-    };
-    setReturnRequests([newReq, ...returnRequests]);
+
+    setIsSubmittingReturn(true);
+    setReturnError(null);
+    const res = await onSubmitReturn(selectedOrderForReturn.id, itemToReturn.productId, returnReason, returnComments);
+    setIsSubmittingReturn(false);
+
+    if (!res.success) {
+      setReturnError(res.error || 'Could not submit your return request. Please try again.');
+      return;
+    }
+
     setIsReturnModalOpen(false);
     setReturnComments('');
   };
@@ -534,8 +589,30 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
               </span>
             </div>
 
+            <div className="flex flex-wrap gap-2 border-b border-[#E8D5A8] pb-3">
+              {ORDER_STATUS_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setOrderStatusFilter(tab.id)}
+                  className={`px-3.5 py-1.5 text-[11px] font-semibold tracking-wider uppercase cursor-pointer transition-colors ${
+                    orderStatusFilter === tab.id
+                      ? 'bg-[#0B0B0B] text-white'
+                      : 'bg-[#FAF9F6] text-[#6B6B6B] border border-[#E8D5A8] hover:text-[#121212]'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {filteredOrders.length === 0 && (
+              <div className="p-10 text-center text-xs text-[#6B6B6B] bg-white border border-[#E8D5A8]">
+                No orders in this category yet.
+              </div>
+            )}
+
             <div className="space-y-6">
-              {userOrders.map((order) => (
+              {filteredOrders.map((order) => (
                 <div
                   key={order.id}
                   className="p-6 bg-white border border-[#E8D5A8] space-y-6 shadow-xs"
@@ -557,6 +634,13 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
 
                     <div className="flex items-center gap-3">
                       <button
+                        onClick={() => onViewOrderDetail?.(order.id)}
+                        className="px-3.5 py-2 border border-[#0B0B0B] text-[#121212] text-xs font-semibold tracking-wider uppercase hover:bg-[#0B0B0B] hover:text-white transition-colors cursor-pointer"
+                      >
+                        VIEW DETAILS
+                      </button>
+
+                      <button
                         onClick={() => onTrackOrder?.(order.id)}
                         className="px-4 py-2 bg-[#0B0B0B] text-white text-xs font-semibold tracking-wider uppercase hover:bg-[#0B0B0B] flex items-center gap-1.5 cursor-pointer"
                       >
@@ -564,15 +648,18 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                         <span>TRACK SHIPMENT</span>
                       </button>
 
-                      <button
-                        onClick={() => {
-                          setSelectedOrderForReturn(order);
-                          setIsReturnModalOpen(true);
-                        }}
-                        className="px-3.5 py-2 border border-[#E8D5A8] text-xs font-semibold tracking-wider uppercase hover:bg-[#FAF9F6] text-[#6B6B6B] cursor-pointer"
-                      >
-                        RETURN / HELP
-                      </button>
+                      {order.status === 'DELIVERED' && (
+                        <button
+                          onClick={() => {
+                            setSelectedOrderForReturn(order);
+                            setReturnError(null);
+                            setIsReturnModalOpen(true);
+                          }}
+                          className="px-3.5 py-2 border border-[#E8D5A8] text-xs font-semibold tracking-wider uppercase hover:bg-[#FAF9F6] text-[#6B6B6B] cursor-pointer"
+                        >
+                          RETURN / HELP
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -624,10 +711,13 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   </div>
 
                   {/* Summary Total */}
-                  <div className="pt-2 border-t border-[#FAF9F6] flex justify-between text-xs text-[#6B6B6B]">
-                    <span>Payment: {order.payment.method.toUpperCase()}</span>
+                  <div className="pt-2 border-t border-[#FAF9F6] flex justify-between items-end text-xs text-[#6B6B6B]">
+                    <div className="space-y-0.5">
+                      <p>Payment Method: {getPaymentMethodLabel(order.payment.method)}</p>
+                      <p>Payment Status: {getPaymentStatusLabel(order.payment.status)}</p>
+                    </div>
                     <span className="font-serif text-sm font-semibold text-[#121212]">
-                      Total Paid: ₹{order.total}
+                      Order Total: ₹{order.total}
                     </span>
                   </div>
                 </div>
@@ -797,7 +887,12 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 SAVED ATELIER DESTINATIONS
               </h2>
               <button
-                onClick={() => setIsAddAddressOpen(true)}
+                onClick={() => {
+                  setEditingAddressId(null);
+                  setNewAddress(emptyAddressForm);
+                  setAddressFormError(null);
+                  setIsAddAddressOpen(true);
+                }}
                 className="px-4 py-2 bg-[#0B0B0B] text-white text-xs font-semibold tracking-wider uppercase hover:bg-[#0B0B0B] flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -837,14 +932,30 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                     </p>
                   </div>
 
-                  <div className="pt-3 border-t border-[#FAF9F6] flex justify-end">
-                    <button
-                      onClick={() => handleDeleteAddress(addr.id)}
-                      className="text-xs text-[#6B6B6B] hover:text-[#F05A7E] flex items-center gap-1 uppercase tracking-wider font-semibold"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>DELETE</span>
-                    </button>
+                  <div className="pt-3 border-t border-[#FAF9F6] flex items-center justify-between flex-wrap gap-2">
+                    {!addr.isDefault && (
+                      <button
+                        onClick={() => onSetDefaultAddress?.(addr.id)}
+                        className="text-xs text-[#C9972B] hover:underline uppercase tracking-wider font-semibold"
+                      >
+                        SET DEFAULT
+                      </button>
+                    )}
+                    <div className="flex items-center gap-3 ml-auto">
+                      <button
+                        onClick={() => handleOpenEditAddress(addr)}
+                        className="text-xs text-[#6B6B6B] hover:text-[#121212] uppercase tracking-wider font-semibold"
+                      >
+                        EDIT
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAddress(addr.id)}
+                        className="text-xs text-[#6B6B6B] hover:text-[#F05A7E] flex items-center gap-1 uppercase tracking-wider font-semibold"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>DELETE</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1020,7 +1131,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
             </div>
 
             <div className="space-y-4">
-              {reviewsList.map((rev) => (
+              {reviews.map((rev) => (
                 <div
                   key={rev.id}
                   className="p-6 bg-white border border-[#E8D5A8] space-y-3"
@@ -1231,11 +1342,14 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   />
                 </div>
 
+                {reviewError && <p className="text-xs text-red-600">{reviewError}</p>}
+
                 <button
                   type="submit"
-                  className="w-full py-3.5 bg-[#0B0B0B] text-white text-xs font-semibold tracking-widest uppercase hover:bg-[#0B0B0B] cursor-pointer"
+                  disabled={isSubmittingReview}
+                  className="w-full py-3.5 bg-[#0B0B0B] text-white text-xs font-semibold tracking-widest uppercase hover:bg-[#0B0B0B] cursor-pointer disabled:opacity-50"
                 >
-                  SUBMIT VERIFIED REVIEW (+50 PTS)
+                  {isSubmittingReview ? 'SUBMITTING…' : 'SUBMIT REVIEW (+50 PTS)'}
                 </button>
               </form>
             </motion.div>
@@ -1302,11 +1416,14 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   />
                 </div>
 
+                {returnError && <p className="text-xs text-red-600">{returnError}</p>}
+
                 <button
                   type="submit"
-                  className="w-full py-3.5 bg-[#0B0B0B] text-white text-xs font-semibold tracking-widest uppercase hover:bg-[#0B0B0B] cursor-pointer"
+                  disabled={isSubmittingReturn}
+                  className="w-full py-3.5 bg-[#0B0B0B] text-white text-xs font-semibold tracking-widest uppercase hover:bg-[#0B0B0B] cursor-pointer disabled:opacity-50"
                 >
-                  SUBMIT CONCIERGE REQUEST
+                  {isSubmittingReturn ? 'SUBMITTING…' : 'SUBMIT CONCIERGE REQUEST'}
                 </button>
               </form>
             </motion.div>
@@ -1325,7 +1442,10 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
               className="w-full max-w-lg bg-[#FAF9F6] border border-[#E8D5A8] p-6 sm:p-8 space-y-5 shadow-2xl relative"
             >
               <button
-                onClick={() => setIsAddAddressOpen(false)}
+                onClick={() => {
+                  setIsAddAddressOpen(false);
+                  setEditingAddressId(null);
+                }}
                 className="absolute top-5 right-5 text-[#6B6B6B] hover:text-[#121212]"
               >
                 <X className="w-5 h-5" />
@@ -1336,7 +1456,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   ATELIER DESTINATION
                 </span>
                 <h3 className="font-serif text-2xl text-[#121212] mt-0.5">
-                  ADD NEW SHIPPING ADDRESS
+                  {editingAddressId ? 'EDIT SHIPPING ADDRESS' : 'ADD NEW SHIPPING ADDRESS'}
                 </h3>
               </div>
 
@@ -1356,18 +1476,32 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   </div>
                   <div>
                     <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
-                      ADDRESS TYPE
+                      PHONE NUMBER *
                     </label>
-                    <select
-                      value={newAddress.type}
-                      onChange={(e) => setNewAddress({ ...newAddress, type: e.target.value as any })}
-                      className="w-full p-2.5 text-xs bg-white border border-[#E8D5A8] focus:border-[#0B0B0B] focus:outline-hidden"
-                    >
-                      <option value="Home">Home</option>
-                      <option value="Studio">Studio</option>
-                      <option value="Work">Work</option>
-                    </select>
+                    <input
+                      type="tel"
+                      required
+                      value={newAddress.phone}
+                      onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                      placeholder="9876543210"
+                      className="w-full p-2.5 text-xs bg-white border border-[#E8D5A8] focus:border-[#0B0B0B] focus:outline-hidden font-mono"
+                    />
                   </div>
+                </div>
+
+                <div>
+                  <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                    ADDRESS TYPE
+                  </label>
+                  <select
+                    value={newAddress.type}
+                    onChange={(e) => setNewAddress({ ...newAddress, type: e.target.value as any })}
+                    className="w-full p-2.5 text-xs bg-white border border-[#E8D5A8] focus:border-[#0B0B0B] focus:outline-hidden"
+                  >
+                    <option value="Home">Home</option>
+                    <option value="Studio">Studio</option>
+                    <option value="Work">Work</option>
+                  </select>
                 </div>
 
                 <div>
@@ -1427,11 +1561,13 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   </div>
                 </div>
 
+                {addressFormError && <p className="text-xs text-red-600">{addressFormError}</p>}
+
                 <button
                   type="submit"
                   className="w-full py-3 bg-[#0B0B0B] text-white text-xs font-semibold tracking-widest uppercase hover:bg-[#0B0B0B] cursor-pointer mt-2"
                 >
-                  SAVE ADDRESS
+                  {editingAddressId ? 'UPDATE ADDRESS' : 'SAVE ADDRESS'}
                 </button>
               </form>
             </motion.div>

@@ -1,27 +1,31 @@
 import React, { useState } from 'react';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { ProductCard } from '../product/ProductCard';
-import { Product, Shade } from '../../types';
+import { Product, Shade, CartItem } from '../../types';
 import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { useCMS } from '../../context/CMSContext';
 
 interface GlamirkEditProps {
   wishlist: string[];
+  cartItems: CartItem[];
   onToggleWishlist: (productId: string) => void;
-  onQuickView: (product: Product) => void;
   onSelectProduct: (product: Product) => void;
   onTryItOn: (product: Product) => void;
   onQuickAdd: (product: Product, shade?: Shade, size?: string) => void;
+  onGoToCart: () => void;
+  onBuyNow: (product: Product, shade?: Shade, size?: string) => void;
   onExploreShop?: () => void;
 }
 
 export const GlamirkEdit: React.FC<GlamirkEditProps> = ({
   wishlist,
+  cartItems,
   onToggleWishlist,
-  onQuickView,
   onSelectProduct,
   onTryItOn,
   onQuickAdd,
+  onGoToCart,
+  onBuyNow,
   onExploreShop,
 }) => {
   const { products: cmsProducts } = useCMS();
@@ -104,11 +108,13 @@ export const GlamirkEdit: React.FC<GlamirkEditProps> = ({
               key={product.id}
               product={product}
               isWishlisted={wishlist.includes(product.id)}
+              cartItems={cartItems}
               onToggleWishlist={onToggleWishlist}
-              onQuickView={onQuickView}
               onSelectProduct={onSelectProduct}
               onTryItOn={onTryItOn}
               onQuickAdd={onQuickAdd}
+              onGoToCart={onGoToCart}
+              onBuyNow={onBuyNow}
             />
           ))}
         </div>

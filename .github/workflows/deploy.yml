@@ -13,21 +13,15 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-
-          echo "${{ secrets.VPS_SSH_KEY }}" | base64 -d > ~/.ssh/id_ed25519
-
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          sed -i 's/\r$//' ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-
-          echo "Checking SSH private key format..."
-          ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null
-
-          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Test SSH connection
         run: |
           ssh -i ~/.ssh/id_ed25519 \
             -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
+            -o StrictHostKeyChecking=no \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
             "echo 'SSH connection successful'"
 
@@ -35,26 +29,14 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 \
             -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
+            -o StrictHostKeyChecking=no \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" << 'EOF'
             set -e
-
             cd /var/www/glamirk
-
-            echo "Pulling latest code..."
             git pull origin main
-
-            echo "Installing dependencies..."
             npm ci
-
-            echo "Building project..."
             npm run build
-
-            echo "Restarting application..."
             pm2 startOrReload ecosystem.config.cjs
-
-            echo "Saving PM2..."
             pm2 save
-
             echo "Deployment completed successfully!"
           EOF

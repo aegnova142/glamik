@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, ChevronDown, Filter as FilterIcon, Check } from 'lucide-react';
 import { FilterState, Product } from '../../types';
+import { PRODUCT_TAXONOMY } from '../../data/taxonomy';
 
 interface FilterPanelProps {
   filters: FilterState;
@@ -113,11 +114,16 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
-  const categories = [
+  // Derived from the fixed PRODUCT_TAXONOMY (see src/data/taxonomy.ts) —
+  // never hardcoded per-product here, and never dependent on the freely
+  // admin-renameable Categories & Taxonomy CMS records (a separate,
+  // presentation-only system for the homepage category grid). Adding a
+  // subcategory to that constant makes it filterable everywhere at once.
+  const categories: { label: string; category: string | null; subCategory: string | null }[] = [
     { label: 'All Creations', category: null, subCategory: null },
-    { label: 'Lips (Lipsticks)', category: 'Makeup', subCategory: 'Lips' },
-    { label: 'Face (Luxury Sindoor)', category: 'Makeup', subCategory: 'Face' },
-    { label: 'Cleansing (Balm To Water)', category: 'Skin', subCategory: 'Cleansing' },
+    ...Object.entries(PRODUCT_TAXONOMY).flatMap(([category, subs]) =>
+      subs.map((sub) => ({ label: sub, category, subCategory: sub }))
+    ),
   ];
 
   const categoryCounts = useMemo(() => {

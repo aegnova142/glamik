@@ -8,6 +8,7 @@ import { ArrowLeft, Sparkles, ShoppingBag, BookOpen } from 'lucide-react';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { Product } from '../../types';
 import { updatePageSeo } from '../../utils/seo';
+import { useCMS } from '../../context/CMSContext';
 
 interface NotFoundPageProps {
   onNavigateHome: () => void;
@@ -22,6 +23,9 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({
   onNavigateProduct,
   onNavigateJournal,
 }) => {
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+
   useEffect(() => {
     updatePageSeo({
       title: 'Page Not Found',
@@ -74,7 +78,7 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({
             OR DISCOVER VERIFIED SIGNATURES
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left max-w-2xl mx-auto">
-            {GLAMIRK_PRODUCTS.slice(0, 3).map((product: Product) => (
+            {catalogProducts.slice(0, 3).map((product: Product) => (
               <button
                 key={product.id}
                 onClick={() => onNavigateProduct(product.id)}

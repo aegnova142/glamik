@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Product, Shade, AssistantMessage } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
+import { useCMS } from '../../context/CMSContext';
 
 interface BeautyAssistantDrawerProps {
   isOpen: boolean;
@@ -35,9 +36,11 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
   onAddToBag,
   onViewProduct,
 }) => {
-  const lipstick = GLAMIRK_PRODUCTS.find((p) => p.id === 'matte-liquid-lipstick-collection') || GLAMIRK_PRODUCTS[0];
-  const sindoor = GLAMIRK_PRODUCTS.find((p) => p.id === 'luxury-sindoor-vermilion-crimson') || GLAMIRK_PRODUCTS[1];
-  const cleanser = GLAMIRK_PRODUCTS.find((p) => p.id === 'balm-to-water-cleanser-50g') || GLAMIRK_PRODUCTS[2];
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+  const lipstick = catalogProducts.find((p) => p.id === 'matte-liquid-lipstick-collection') || catalogProducts[0];
+  const sindoor = catalogProducts.find((p) => p.id === 'luxury-sindoor-vermilion-crimson') || catalogProducts[1];
+  const cleanser = catalogProducts.find((p) => p.id === 'balm-to-water-cleanser-50g') || catalogProducts[2];
 
   const getInitialMessage = (): AssistantMessage => {
     if (currentProductContext) {

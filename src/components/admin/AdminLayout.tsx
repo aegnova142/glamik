@@ -23,6 +23,8 @@ import {
   Sparkles,
   ChevronRight,
   Truck,
+  Camera,
+  Bell,
 } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminHero } from './AdminHero';
@@ -35,6 +37,7 @@ import { AdminPages } from './AdminPages';
 import { AdminProducts } from './AdminProducts';
 import { AdminOrders } from './AdminOrders';
 import { AdminNotificationBell } from './AdminNotificationBell';
+import { AdminNotifications } from './AdminNotifications';
 import { AdminCategories } from './AdminCategories';
 import { AdminOffers } from './AdminOffers';
 import { AdminPromoBanners } from './AdminPromoBanners';
@@ -45,6 +48,7 @@ import { AdminFaqs } from './AdminFaqs';
 import { AdminMediaLibrary } from './AdminMediaLibrary';
 import { AdminSettings } from './AdminSettings';
 import { AdminSecurity } from './AdminSecurity';
+import { AdminTryOnModels } from './AdminTryOnModels';
 
 interface AdminLayoutProps {
   onExitAdmin: () => void;
@@ -52,6 +56,7 @@ interface AdminLayoutProps {
 
 type AdminTab =
   | 'dashboard'
+  | 'notifications'
   | 'hero'
   | 'about'
   | 'benefits'
@@ -62,6 +67,7 @@ type AdminTab =
   | 'products'
   | 'orders'
   | 'categories'
+  | 'tryOnModels'
   | 'offers'
   | 'promoBanners'
   | 'navigation'
@@ -82,7 +88,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
   const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     {
       label: 'Overview',
-      items: [{ id: 'dashboard', label: 'Overview Dashboard', icon: LayoutDashboard }],
+      items: [
+        { id: 'dashboard', label: 'Overview Dashboard', icon: LayoutDashboard },
+        { id: 'notifications', label: 'Store Notifications', icon: Bell },
+      ],
     },
     {
       label: 'Orders',
@@ -106,6 +115,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
       items: [
         { id: 'products', label: 'Product Catalogue', icon: Package },
         { id: 'categories', label: 'Categories & Taxonomy', icon: Layers },
+        { id: 'tryOnModels', label: 'Virtual Try-On Models', icon: Camera },
       ],
     },
     {
@@ -162,7 +172,12 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         </div>
 
         <div className="flex items-center gap-2">
-          <AdminNotificationBell />
+          <AdminNotificationBell
+            onViewAll={() => {
+              setActiveTab('notifications');
+              setMobileMenuOpen(false);
+            }}
+          />
           <button
             onClick={onExitAdmin}
             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-[#0B0B0B] hover:bg-[#171717] border border-[#E8D5A8]/30 rounded-lg text-[#FAF9F6] font-medium transition-colors"
@@ -227,7 +242,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
                     CMS ATELIER
                   </span>
                 </div>
-                <AdminNotificationBell />
+                <AdminNotificationBell onViewAll={() => setActiveTab('notifications')} />
               </div>
               <p className="text-[11px] text-[#6B6B6B] mt-1">Full-Stack Real-Time Content Hub</p>
             </div>
@@ -309,12 +324,16 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#0B0B0B]">
           <div className="max-w-6xl mx-auto">
             {activeTab === 'dashboard' && <AdminDashboard onNavigateTab={(t) => setActiveTab(t as AdminTab)} />}
+            {activeTab === 'notifications' && (
+              <AdminNotifications onNavigateTab={(t) => setActiveTab(t as AdminTab)} />
+            )}
             {activeTab === 'hero' && <AdminHero />}
             {activeTab === 'about' && <AdminAbout />}
             {activeTab === 'benefits' && <AdminBenefits />}
             {activeTab === 'shadeFinder' && <AdminShadeFinder />}
             {activeTab === 'shadeIntelligence' && <AdminShadeIntelligence />}
             {activeTab === 'looks' && <AdminLooks />}
+            {activeTab === 'tryOnModels' && <AdminTryOnModels />}
             {activeTab === 'pages' && <AdminPages />}
             {activeTab === 'products' && <AdminProducts />}
             {activeTab === 'orders' && <AdminOrders />}

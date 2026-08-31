@@ -17,6 +17,7 @@ import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { SocialPostModal } from './SocialPostModal';
 import { updatePageSeo } from '../../utils/seo';
 import { trackEvent } from '../../utils/analytics';
+import { useCMS } from '../../context/CMSContext';
 
 interface SocialCommerceHubProps {
   onOpenProduct: (product: Product) => void;
@@ -29,6 +30,10 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
   onOpenLook,
   onAddToCart,
 }) => {
+  // Live, admin-controlled catalog — GLAMIRK_PRODUCTS is only the seed
+  // fallback for a not-yet-populated CMS, never the primary source.
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
   const [selectedPost, setSelectedPost] = useState<SocialPost | null>(null);
   const [filter, setFilter] = useState<'ALL' | 'CREATORS' | 'COMMUNITY'>('ALL');
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
@@ -164,7 +169,7 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {GLAMIRK_CREATORS.map((creator) => {
-              const curatedProducts = GLAMIRK_PRODUCTS.filter((p) =>
+              const curatedProducts = catalogProducts.filter((p) =>
                 creator.curatedProductIds.includes(p.id)
               );
 
@@ -258,6 +263,7 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
         isOpen={!!selectedPost}
         onClose={() => setSelectedPost(null)}
         post={selectedPost}
+        products={catalogProducts}
         onOpenProduct={onOpenProduct}
         onOpenLook={onOpenLook}
         onAddToCart={onAddToCart}

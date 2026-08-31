@@ -17,9 +17,27 @@ import {
   AlertCircle,
   Eye,
 } from 'lucide-react';
-import { Product, Shade, TryOnModelPreset } from '../../types';
+import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
+import { Product, Shade, TryOnModelPreset, TryOnConfig } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { TRY_ON_MODELS } from '../../data/models';
+import { useCMS } from '../../context/CMSContext';
+import { useFaceLandmarker } from '../../hooks/useFaceLandmarker';
+import { resolveTryOnConfig } from '../../utils/tryOnRenderer';
+import { TryOnCanvas, TryOnCanvasHandle } from './TryOnCanvas';
+import type { DetectionStatus } from '../../utils/faceMesh';
+
+type FaceStatus = DetectionStatus | 'idle' | 'detecting';
+
+const FACE_STATUS_MESSAGE: Record<FaceStatus, string | null> = {
+  idle: null,
+  detecting: 'Analyzing face…',
+  ok: null,
+  'no-face': 'No face detected. Center your face in frame with even lighting.',
+  'multiple-faces': null,
+  unsupported: "Your browser doesn't support live face analysis — showing the photo without the try-on effect.",
+  'load-error': 'Could not analyze this image. Please try a different photo.',
+};
 
 interface VirtualTryOnModalProps {
   isOpen: boolean;
@@ -45,10 +63,20 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
   onOpenShadeFinder,
 }) => {
   // Active product & shades
+  const { products: cmsProducts, tryOnModels: cmsTryOnModels } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
   const currentProduct =
-    GLAMIRK_PRODUCTS.find((p) => p.id === (initialProductId || 'matte-liquid-lipstick-collection')) ||
-    GLAMIRK_PRODUCTS[0];
+    catalogProducts.find((p) => p.id === (initialProductId || 'matte-liquid-lipstick-collection')) ||
+    catalogProducts[0];
   const allShades = currentProduct.shades || [];
+  const tryOnConfig = resolveTryOnConfig(currentProduct);
+
+  // Admin-managed (Admin → Virtual Try-On Models) — falls back to the
+  // static seed list only if the CMS has none configured yet.
+  const activeModels = (cmsTryOnModels && cmsTryOnModels.length > 0 ? cmsTryOnModels : TRY_ON_MODELS).filter(
+    (m) => m.isActive !== false
+  );
+  const defaultModels = activeModels.length > 0 ? activeModels : TRY_ON_MODELS;
 
   const [selectedShadeIndex, setSelectedShadeIndex] = useState(0);
   const [tryOnMode, setTryOnMode] = useState<'MODEL' | 'CAMERA' | 'UPLOAD'>('MODEL');
@@ -67,6 +95,36 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Real face-landmark detection + canvas rendering (src/utils/faceMesh.ts,
+  // src/utils/tryOnRenderer.ts) — replaces the old fixed CSS-gradient
+  // "lip overlay" with an actual per-frame lip/eye/face mask built from
+  // detected landmarks.
+  const { startVideoLoop, stopVideoLoop, detectImage } = useFaceLandmarker();
+  const canvasHandleRef = useRef<TryOnCanvasHandle>(null);
+  const modelImgRef = useRef<HTMLImageElement | null>(null);
+  const uploadImgRef = useRef<HTMLImageElement | null>(null);
+  const [modelLandmarks, setModelLandmarks] = useState<NormalizedLandmark[] | null>(null);
+  const [uploadLandmarks, setUploadLandmarks] = useState<NormalizedLandmark[] | null>(null);
+  const [faceStatus, setFaceStatus] = useState<FaceStatus>('idle');
+
+  // The live-camera detection loop runs outside React's render cycle
+  // (~12fps via requestAnimationFrame) to avoid re-rendering the whole
+  // modal on every frame — it reads shade/config through refs kept in
+  // sync below instead of closing over stale render-time values.
+  const shadeHexRef = useRef<string>('#F05A7E');
+  const configRef = useRef<TryOnConfig>({ enabled: true, type: 'lipstick', region: 'lips', intensity: 70, opacity: 85 });
+  const showBeforeAfterRef = useRef(false);
+
+  // The CMS model list loads asynchronously after mount — once it's in,
+  // make sure the selected model is actually one of the active ones
+  // (the initial state is just a reasonable static guess).
+  useEffect(() => {
+    if (defaultModels.length > 0 && !defaultModels.some((m) => m.id === selectedModel.id)) {
+      setSelectedModel(defaultModels[Math.min(2, defaultModels.length - 1)]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultModels]);
 
   // Sync initial shade
   useEffect(() => {
@@ -137,9 +195,98 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  if (!isOpen) return null;
-
   const currentShade = allShades[selectedShadeIndex] || allShades[0];
+
+  // Keep the live-camera loop's refs current without restarting the loop
+  // or re-rendering per frame — a shade/intensity change takes effect on
+  // the very next sampled frame.
+  useEffect(() => {
+    shadeHexRef.current = currentShade?.hex || '#F05A7E';
+  }, [currentShade]);
+  useEffect(() => {
+    configRef.current = { ...tryOnConfig, opacity: intensity, intensity };
+  }, [tryOnConfig, intensity]);
+  useEffect(() => {
+    showBeforeAfterRef.current = showBeforeAfter;
+  }, [showBeforeAfter]);
+
+  // STANDARD MODEL mode: detect once per model image, then redraw
+  // (cheap — no re-detection) whenever shade/intensity/before-after toggles.
+  useEffect(() => {
+    if (tryOnMode !== 'MODEL') return;
+    setModelLandmarks(null);
+    setFaceStatus('detecting');
+  }, [tryOnMode, selectedModel]);
+
+  const handleModelImageLoad = async () => {
+    const img = modelImgRef.current;
+    if (!img) return;
+    const result = await detectImage(img);
+    setModelLandmarks(result.landmarks);
+    setFaceStatus(result.status);
+  };
+
+  useEffect(() => {
+    if (tryOnMode !== 'MODEL' || !modelImgRef.current) return;
+    canvasHandleRef.current?.draw(
+      modelImgRef.current,
+      showBeforeAfter ? null : modelLandmarks,
+      currentShade?.hex || '#F05A7E',
+      { ...tryOnConfig, opacity: intensity, intensity }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tryOnMode, modelLandmarks, currentShade, intensity, showBeforeAfter, tryOnConfig]);
+
+  // UPLOAD PHOTO mode: detect once per uploaded photo, then redraw on the
+  // same shade/intensity/before-after changes as Standard Model.
+  const handleUploadImageLoad = async () => {
+    const img = uploadImgRef.current;
+    if (!img) return;
+    setFaceStatus('detecting');
+    const result = await detectImage(img);
+    setUploadLandmarks(result.landmarks);
+    setFaceStatus(result.status);
+  };
+
+  useEffect(() => {
+    if (tryOnMode !== 'UPLOAD' || !uploadImgRef.current) return;
+    canvasHandleRef.current?.draw(
+      uploadImgRef.current,
+      showBeforeAfter ? null : uploadLandmarks,
+      currentShade?.hex || '#F05A7E',
+      { ...tryOnConfig, opacity: intensity, intensity }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tryOnMode, uploadLandmarks, currentShade, intensity, showBeforeAfter, tryOnConfig]);
+
+  // LIVE CAMERA mode: continuous detect-and-draw loop, started once the
+  // stream is attached and stopped on mode change/close. Reads
+  // shade/config through the refs above rather than closure state so
+  // switching shades never needs to restart the loop.
+  useEffect(() => {
+    if (tryOnMode !== 'CAMERA' || !isCameraActive) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    setFaceStatus('detecting');
+    const cleanup = startVideoLoop(video, (result) => {
+      setFaceStatus(result.status);
+      canvasHandleRef.current?.draw(
+        video,
+        showBeforeAfterRef.current ? null : result.landmarks,
+        shadeHexRef.current,
+        configRef.current
+      );
+    });
+
+    return () => {
+      cleanup();
+      stopVideoLoop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tryOnMode, isCameraActive]);
+
+  if (!isOpen) return null;
 
   const handlePrevShade = () => {
     setSelectedShadeIndex((prev) => (prev > 0 ? prev - 1 : allShades.length - 1));
@@ -270,59 +417,36 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
             {/* Visualizer Area */}
             <div className="relative w-full h-full flex items-center justify-center">
               
-              {/* Mode 1: MODEL PREVIEW */}
+              {/* Mode 1: MODEL PREVIEW — real detected-landmark lip/eye/face
+                  mask (src/utils/tryOnRenderer.ts), not a fixed gradient.
+                  The <img> is the pixel source for detection/drawing only;
+                  the canvas is what's actually shown. */}
               {tryOnMode === 'MODEL' && (
                 <div className="relative w-full h-full flex items-center justify-center">
                   <img
+                    key={selectedModel.id}
+                    ref={modelImgRef}
                     src={selectedModel.image}
                     alt={selectedModel.name}
+                    crossOrigin="anonymous"
+                    onLoad={handleModelImageLoad}
+                    onError={() => setFaceStatus('load-error')}
+                    className="hidden"
+                  />
+                  <TryOnCanvas
+                    ref={canvasHandleRef}
                     className="w-full h-full object-cover object-center max-h-[600px] lg:max-h-full"
                   />
-                  {/* Digital Lip Color Blend Overlay (Simulated photorealistic lip shading) */}
-                  {!showBeforeAfter && currentShade && (
-                    <div
-                      className="absolute inset-0 pointer-events-none transition-all duration-300"
-                      style={{
-                        background: `radial-gradient(ellipse at 50% 64%, ${currentShade.hex} 0%, ${currentShade.hex}99 12%, transparent 22%)`,
-                        mixBlendMode: 'color-burn',
-                        opacity: intensity / 100,
-                      }}
-                    />
-                  )}
-                  {!showBeforeAfter && currentShade && (
-                    <div
-                      className="absolute inset-0 pointer-events-none transition-all duration-300"
-                      style={{
-                        background: `radial-gradient(ellipse at 50% 64%, ${currentShade.hex} 0%, transparent 20%)`,
-                        mixBlendMode: 'multiply',
-                        opacity: (intensity / 100) * 0.7,
-                      }}
-                    />
-                  )}
                 </div>
               )}
 
-              {/* Mode 2: LIVE CAMERA STREAM */}
+              {/* Mode 2: LIVE CAMERA STREAM — continuous detect+draw loop
+                  (see the CAMERA useEffect above); the <video> is hidden,
+                  the canvas mirrors it plus the live effect together. */}
               {tryOnMode === 'CAMERA' && (
                 <div className="relative w-full h-full flex items-center justify-center bg-[#0B0B0B]">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover transform -scale-x-100"
-                  />
-                  {/* Simulated live AR lip color overlay */}
-                  {!showBeforeAfter && currentShade && (
-                    <div
-                      className="absolute inset-0 pointer-events-none transition-all duration-300"
-                      style={{
-                        background: `radial-gradient(ellipse at 50% 62%, ${currentShade.hex} 0%, ${currentShade.hex}88 12%, transparent 20%)`,
-                        mixBlendMode: 'color-burn',
-                        opacity: intensity / 100,
-                      }}
-                    />
-                  )}
+                  <video ref={videoRef} autoPlay playsInline muted className="hidden" />
+                  <TryOnCanvas ref={canvasHandleRef} className="w-full h-full object-cover" mirror />
                   <div className="absolute top-4 left-4 bg-[#0B0B0B]/60 backdrop-blur-xs text-white px-3 py-1 text-[10px] tracking-widest uppercase flex items-center gap-2 border border-white/20">
                     <span className="w-2 h-2 rounded-full bg-[#F05A7E] animate-ping" />
                     <span>Live AR Studio</span>
@@ -330,24 +454,27 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                 </div>
               )}
 
-              {/* Mode 3: UPLOADED PHOTO */}
+              {/* Mode 3: UPLOADED PHOTO — detected once on load, then
+                  redrawn (no re-detection) on shade/intensity changes. */}
               {tryOnMode === 'UPLOAD' && uploadedPhoto && (
                 <div className="relative w-full h-full flex items-center justify-center bg-[#0B0B0B]">
                   <img
+                    ref={uploadImgRef}
                     src={uploadedPhoto}
                     alt="Uploaded Portrait"
-                    className="w-full h-full object-contain max-h-[600px]"
+                    onLoad={handleUploadImageLoad}
+                    className="hidden"
                   />
-                  {!showBeforeAfter && currentShade && (
-                    <div
-                      className="absolute inset-0 pointer-events-none transition-all duration-300"
-                      style={{
-                        background: `radial-gradient(ellipse at 50% 62%, ${currentShade.hex} 0%, transparent 22%)`,
-                        mixBlendMode: 'color-burn',
-                        opacity: intensity / 100,
-                      }}
-                    />
-                  )}
+                  <TryOnCanvas ref={canvasHandleRef} className="w-full h-full object-contain max-h-[600px]" />
+                </div>
+              )}
+
+              {/* Face analysis status — no-face / unsupported-browser /
+                  detecting states, per spec §11 & §23. Never silent. */}
+              {FACE_STATUS_MESSAGE[faceStatus] && (
+                <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10 bg-[#0B0B0B]/80 backdrop-blur-xs text-white text-[11px] px-4 py-2 border border-white/20 flex items-center gap-2 max-w-[90%] text-center">
+                  <AlertCircle className="w-3.5 h-3.5 text-[#C9972B] shrink-0" />
+                  <span>{FACE_STATUS_MESSAGE[faceStatus]}</span>
                 </div>
               )}
 
@@ -402,7 +529,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                   Complexion:
                 </span>
                 <div className="flex items-center gap-2">
-                  {TRY_ON_MODELS.map((model) => (
+                  {defaultModels.map((model) => (
                     <button
                       key={model.id}
                       onClick={() => setSelectedModel(model)}

@@ -5,6 +5,7 @@ import { GLAMIRK_QUIZ_QUESTIONS, GLAMIRK_QUIZ_RESULTS } from '../../data/editori
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { Product, Shade } from '../../types';
 import { trackEvent } from '../../utils/analytics';
+import { useCMS } from '../../context/CMSContext';
 
 interface BeautyQuizModalProps {
   isOpen: boolean;
@@ -52,7 +53,9 @@ export const BeautyQuizModal: React.FC<BeautyQuizModalProps> = ({
   // Determine quiz result key from aesthetic answer
   const aestheticKey = selectedAnswers['quiz-aesthetic'] || 'natural-refined';
   const result = GLAMIRK_QUIZ_RESULTS[aestheticKey] || GLAMIRK_QUIZ_RESULTS['natural-refined'];
-  const matchedProduct = GLAMIRK_PRODUCTS.find((p) => p.id === result.matchedProductId) || GLAMIRK_PRODUCTS[0];
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+  const matchedProduct = catalogProducts.find((p) => p.id === result.matchedProductId) || catalogProducts[0];
   const matchedShade = (matchedProduct && result.matchedShadeId)
     ? matchedProduct.shades?.find((s) => s.id === result.matchedShadeId)
     : matchedProduct.shades?.[0];

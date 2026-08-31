@@ -4,7 +4,17 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { pool, loadDatabase, saveDatabase, withStockLock, broadcastEvent, evaluateOffers, InternalCMSDatabaseSchema, JWT_SECRET } from './db';
-import { Product, Shade, ServerCartItem, Order, OrderItem, PaymentDetails, CODRules } from '../src/types';
+import {
+  Product,
+  Shade,
+  ServerCartItem,
+  Order,
+  OrderItem,
+  PaymentDetails,
+  CODRules,
+  DEFAULT_PROMO_NOTIFICATION_MESSAGES,
+  applyPromoMessageTemplate,
+} from '../src/types';
 import {
   CANCELLABLE_STATUSES,
   buildOrderFromRow,
@@ -370,6 +380,62 @@ function requiresVariant(product: Product): boolean {
   return !!product.shades && product.shades.length > 0;
 }
 
+// A variant's own price/stock override the product-level value when set —
+// old products/variants without either field keep behaving exactly as before.
+function getVariantPrice(product: Product, shade: Shade | undefined): number {
+  return shade?.price ?? product.price;
+}
+
+function getVariantStock(product: Product, shade: Shade | undefined): number {
+  return shade?.stock ?? product.stock;
+}
+
+// A shade can carry its own size list (one shade only in 50g, another in
+// 30g and 50g); a shade-less product can carry its own product-level sizes
+// (the cleanser jars). Whichever applies to the current selection is the
+// "active" size list — mirrors src/utils/productVariant.ts on the frontend.
+interface SizeOptionLike { label: string; price: number; compareAtPrice?: number; stock?: number }
+
+function getActiveSizeOptions(product: Product, shade: Shade | undefined): SizeOptionLike[] {
+  if (shade) return shade.sizes || [];
+  if (product.sizes && product.sizes.length > 0) {
+    return product.sizes.map((label) => ({
+      label,
+      price: product.sizePricing?.[label]?.price ?? product.price,
+      compareAtPrice: product.sizePricing?.[label]?.compareAtPrice,
+      stock: product.sizePricing?.[label]?.stock,
+    }));
+  }
+  return [];
+}
+
+function findSizeOption(product: Product, shade: Shade | undefined, size: string | null): SizeOptionLike | undefined {
+  if (!size) return undefined;
+  return getActiveSizeOptions(product, shade).find((o) => o.label === size);
+}
+
+function requiresSize(product: Product, shade: Shade | undefined): boolean {
+  return getActiveSizeOptions(product, shade).length > 0;
+}
+
+function isValidSize(product: Product, shade: Shade | undefined, size: string | null): boolean {
+  if (!size) return true;
+  const options = getActiveSizeOptions(product, shade);
+  return options.length === 0 || options.some((o) => o.label === size);
+}
+
+function getCurrentPrice(product: Product, shade: Shade | undefined, size: string | null): number {
+  const option = findSizeOption(product, shade, size);
+  if (option) return option.price;
+  return getVariantPrice(product, shade);
+}
+
+function getCurrentStock(product: Product, shade: Shade | undefined, size: string | null): number {
+  const option = findSizeOption(product, shade, size);
+  if (option) return option.stock ?? getVariantStock(product, shade);
+  return getVariantStock(product, shade);
+}
+
 // ==========================================
 // WISHLIST — userId + productId is UNIQUE (enforced at DB level)
 // ==========================================
@@ -416,24 +482,25 @@ function mapCartRow(row: any, db: Awaited<ReturnType<typeof loadDatabase>>): Ser
   const product = findProduct(db.products, row.product_id);
   const shade = product ? findShade(product, row.variant_id) : undefined;
   const unavailable = !product || product.inStock === false;
-  const unitPrice = product ? product.price : 0;
+  const unitPrice = product ? getCurrentPrice(product, shade, row.selected_size) : 0;
   return {
     id: row.id,
     productId: row.product_id,
     variantId: row.variant_id,
+    selectedSize: row.selected_size,
     quantity: row.quantity,
     product: product as Product,
     selectedShade: shade,
     lineTotal: unavailable ? 0 : unitPrice * row.quantity,
     unavailable,
-    maxAvailable: product ? product.stock : 0,
+    maxAvailable: product ? getCurrentStock(product, shade, row.selected_size) : 0,
   };
 }
 
 async function hydrateCart(userId: string): Promise<ServerCartItem[]> {
   const db = await loadDatabase();
   const result = await pool.query(
-    'SELECT id, product_id, variant_id, quantity FROM cart_items WHERE user_id = $1 AND saved = false ORDER BY created_at ASC',
+    'SELECT id, product_id, variant_id, selected_size, quantity FROM cart_items WHERE user_id = $1 AND saved = false ORDER BY created_at ASC',
     [userId]
   );
   return result.rows.map((row) => mapCartRow(row, db));
@@ -442,7 +509,7 @@ async function hydrateCart(userId: string): Promise<ServerCartItem[]> {
 async function hydrateSavedItems(userId: string): Promise<ServerCartItem[]> {
   const db = await loadDatabase();
   const result = await pool.query(
-    'SELECT id, product_id, variant_id, quantity FROM cart_items WHERE user_id = $1 AND saved = true ORDER BY created_at DESC',
+    'SELECT id, product_id, variant_id, selected_size, quantity FROM cart_items WHERE user_id = $1 AND saved = true ORDER BY created_at DESC',
     [userId]
   );
   return result.rows.map((row) => mapCartRow(row, db));
@@ -460,7 +527,7 @@ router.get('/cart/saved', requireCustomer, async (req: AuthenticatedCustomerRequ
 });
 
 router.post('/cart/items', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
-  const { productId, variantId, quantity } = req.body || {};
+  const { productId, variantId, quantity, size } = req.body || {};
   const requestedQty = Math.max(1, parseInt(quantity, 10) || 1);
 
   const db = await loadDatabase();
@@ -472,38 +539,48 @@ router.post('/cart/items', requireCustomer, async (req: AuthenticatedCustomerReq
   if (requiresVariant(product) && !normalizedVariantId) {
     return res.status(400).json({ error: `Please select a shade for ${product.name} before adding to bag.` });
   }
-  if (normalizedVariantId && !findShade(product, normalizedVariantId)) {
+  const selectedShade = normalizedVariantId ? findShade(product, normalizedVariantId) : undefined;
+  if (normalizedVariantId && !selectedShade) {
     return res.status(400).json({ error: 'Selected shade is not available for this product.' });
   }
 
+  const normalizedSize: string | null = size || null;
+  if (requiresSize(product, selectedShade) && !normalizedSize) {
+    return res.status(400).json({ error: `Please select a size for ${product.name} before adding to bag.` });
+  }
+  if (normalizedSize && !isValidSize(product, selectedShade, normalizedSize)) {
+    return res.status(400).json({ error: 'Selected size is not available for this product.' });
+  }
+  const currentStock = getCurrentStock(product, selectedShade, normalizedSize);
+
   const existing = await pool.query(
-    'SELECT id, quantity FROM cart_items WHERE user_id = $1 AND product_id = $2 AND variant_id IS NOT DISTINCT FROM $3',
-    [req.customer!.id, productId, normalizedVariantId]
+    'SELECT id, quantity FROM cart_items WHERE user_id = $1 AND product_id = $2 AND variant_id IS NOT DISTINCT FROM $3 AND selected_size IS NOT DISTINCT FROM $4',
+    [req.customer!.id, productId, normalizedVariantId, normalizedSize]
   );
 
   if (existing.rows.length > 0) {
     const row = existing.rows[0];
     const newQty = row.quantity + requestedQty;
-    if (newQty > product.stock) {
+    if (newQty > currentStock) {
       return res.status(400).json({
-        error: `Only ${product.stock} of ${product.name} available. You already have ${row.quantity} in your bag.`,
-        maxAvailable: product.stock,
+        error: `Only ${currentStock} of ${product.name} available. You already have ${row.quantity} in your bag.`,
+        maxAvailable: currentStock,
       });
     }
     // Reactivates a previously "saved for later" row too — Add to Cart always
     // means the item is active in the bag, regardless of its prior state.
     await pool.query('UPDATE cart_items SET quantity = $1, saved = false, updated_at = now() WHERE id = $2', [newQty, row.id]);
   } else {
-    if (requestedQty > product.stock) {
+    if (requestedQty > currentStock) {
       return res.status(400).json({
-        error: `Only ${product.stock} of ${product.name} available.`,
-        maxAvailable: product.stock,
+        error: `Only ${currentStock} of ${product.name} available.`,
+        maxAvailable: currentStock,
       });
     }
     const id = 'cart-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
     await pool.query(
-      'INSERT INTO cart_items (id, user_id, product_id, variant_id, quantity) VALUES ($1, $2, $3, $4, $5)',
-      [id, req.customer!.id, productId, normalizedVariantId, requestedQty]
+      'INSERT INTO cart_items (id, user_id, product_id, variant_id, selected_size, quantity) VALUES ($1, $2, $3, $4, $5, $6)',
+      [id, req.customer!.id, productId, normalizedVariantId, normalizedSize, requestedQty]
     );
   }
 
@@ -519,7 +596,7 @@ router.put('/cart/items/:id', requireCustomer, async (req: AuthenticatedCustomer
     return res.status(400).json({ error: 'Quantity must be at least 1. Use remove to delete the item instead.' });
   }
 
-  const ownerCheck = await pool.query('SELECT product_id FROM cart_items WHERE id = $1 AND user_id = $2', [req.params.id, req.customer!.id]);
+  const ownerCheck = await pool.query('SELECT product_id, variant_id, selected_size FROM cart_items WHERE id = $1 AND user_id = $2', [req.params.id, req.customer!.id]);
   if (ownerCheck.rows.length === 0) {
     return res.status(404).json({ error: 'Cart item not found.' });
   }
@@ -527,11 +604,13 @@ router.put('/cart/items/:id', requireCustomer, async (req: AuthenticatedCustomer
   const db = await loadDatabase();
   const product = findProduct(db.products, ownerCheck.rows[0].product_id);
   if (!product) return res.status(404).json({ error: 'Product no longer available.' });
+  const shade = findShade(product, ownerCheck.rows[0].variant_id);
+  const currentStock = getCurrentStock(product, shade, ownerCheck.rows[0].selected_size);
 
-  if (requestedQty > product.stock) {
+  if (requestedQty > currentStock) {
     return res.status(400).json({
-      error: `Maximum available quantity reached. Only ${product.stock} of ${product.name} in stock.`,
-      maxAvailable: product.stock,
+      error: `Maximum available quantity reached. Only ${currentStock} of ${product.name} in stock.`,
+      maxAvailable: currentStock,
     });
   }
 
@@ -650,6 +729,19 @@ function buildWhatsAppOrderLink(params: {
 // Discount is always computed server-side against the live, currently-active
 // offer list — never trusted from the client. Shared by checkout and the
 // standalone /coupons/validate endpoint so the two can never disagree.
+// Resolves the admin-configured override for one message slot, falling back
+// to the smart system default (which is itself scenario-specific) when
+// notifications are disabled for this offer or the field was left blank.
+function resolvePromoMessage(
+  offer: { notificationSettings?: { enabled: boolean; errorMessage?: string; eligibilityWarningMessage?: string } } | undefined,
+  slot: 'errorMessage' | 'eligibilityWarningMessage',
+  systemDefault: string,
+  vars: { code?: string; minOrder?: number; subtotal?: number }
+): string {
+  const custom = offer?.notificationSettings?.enabled ? offer.notificationSettings[slot] : undefined;
+  return applyPromoMessageTemplate(custom || systemDefault, vars);
+}
+
 function computeCouponDiscount(
   db: InternalCMSDatabaseSchema,
   couponCode: string | undefined | null,
@@ -657,15 +749,44 @@ function computeCouponDiscount(
 ): { discount: number; appliedCouponCode: string | null; offer?: ReturnType<typeof evaluateOffers>[number]; error?: string } {
   if (!couponCode) return { discount: 0, appliedCouponCode: null };
 
+  // Looked up by code across ALL offers regardless of status (not just
+  // 'active') so a scheduled/expired/inactive match can still surface its
+  // own admin-configured error message instead of a generic "not found".
+  // Offer creation has no coupon-code uniqueness check, so multiple offers
+  // can share a code — an active match always wins over a stale one so an
+  // old expired/archived duplicate can never shadow a currently-live offer.
   const liveOffers = evaluateOffers(db.offers || []);
-  const offer = liveOffers.find(
-    (o) => o.status === 'active' && o.couponCode && o.couponCode.toUpperCase() === String(couponCode).toUpperCase()
-  );
-  if (!offer) {
-    return { discount: 0, appliedCouponCode: null, error: 'This coupon code is invalid or has expired.' };
+  const upperCode = String(couponCode).toUpperCase();
+  const codeMatches = liveOffers.filter((o) => o.couponCode && o.couponCode.toUpperCase() === upperCode);
+  const codeMatch = codeMatches.find((o) => o.status === 'active') || codeMatches[0];
+
+  if (!codeMatch || codeMatch.status !== 'active') {
+    const systemDefault = !codeMatch
+      ? DEFAULT_PROMO_NOTIFICATION_MESSAGES.errorMessage
+      : codeMatch.status === 'scheduled'
+      ? 'This promotion is not available yet.'
+      : codeMatch.status === 'expired'
+      ? 'This promotion has expired.'
+      : 'This promotion is currently unavailable.';
+    return {
+      discount: 0,
+      appliedCouponCode: null,
+      error: resolvePromoMessage(codeMatch, 'errorMessage', systemDefault, { code: couponCode }),
+    };
   }
+
+  const offer = codeMatch;
   if (subtotal < (offer.minOrderValue || 0)) {
-    return { discount: 0, appliedCouponCode: null, error: `This code requires a minimum order value of ₹${offer.minOrderValue}.` };
+    return {
+      discount: 0,
+      appliedCouponCode: null,
+      error: resolvePromoMessage(
+        offer,
+        'eligibilityWarningMessage',
+        `This code requires a minimum order value of ₹${offer.minOrderValue}.`,
+        { code: offer.couponCode, minOrder: offer.minOrderValue, subtotal }
+      ),
+    };
   }
 
   let discount = 0;
@@ -823,6 +944,7 @@ router.post('/coupons/validate', requireCustomer, async (req: AuthenticatedCusto
       discountValue: offer.discountValue,
       minOrderValue: offer.minOrderValue || undefined,
       tag: offer.tag,
+      notificationSettings: offer.notificationSettings,
     },
     discount: result.discount,
   });
@@ -888,7 +1010,7 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
       }
 
       const cartRes = await pool.query(
-        'SELECT id, product_id, variant_id, quantity FROM cart_items WHERE user_id = $1 AND saved = false ORDER BY created_at ASC',
+        'SELECT id, product_id, variant_id, selected_size, quantity FROM cart_items WHERE user_id = $1 AND saved = false ORDER BY created_at ASC',
         [userId]
       );
       if (cartRes.rows.length === 0) {
@@ -903,9 +1025,11 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
         if (!product || product.inStock === false) {
           return { error: `${product?.name || 'An item'} in your bag is no longer available.`, status: 409 };
         }
-        if (row.quantity > product.stock) {
+        const shade = findShade(product, row.variant_id);
+        const currentStock = getCurrentStock(product, shade, row.selected_size);
+        if (row.quantity > currentStock) {
           return {
-            error: `Only ${product.stock} of ${product.name} are currently available. Please update the quantity in your bag.`,
+            error: `Only ${currentStock} of ${product.name} are currently available. Please update the quantity in your bag.`,
             status: 409,
           };
         }
@@ -919,14 +1043,17 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
       for (const row of cartRes.rows) {
         const product = findProduct(db.products, row.product_id)!;
         const shade = findShade(product, row.variant_id);
-        const lineTotal = product.price * row.quantity;
+        const unitPrice = getCurrentPrice(product, shade, row.selected_size);
+        const variantPrimaryImage = shade?.images?.find((img) => img.isPrimary)?.url || shade?.images?.[0]?.url;
+        const lineTotal = unitPrice * row.quantity;
         subtotal += lineTotal;
         orderItems.push({
           productId: product.id,
           productName: product.name,
-          productImage: product.images?.primary || '',
+          productImage: variantPrimaryImage || product.images?.primary || '',
           shade,
-          price: product.price,
+          size: row.selected_size || undefined,
+          price: unitPrice,
           quantity: row.quantity,
         });
       }
@@ -949,13 +1076,46 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
         }
       }
 
-      // Eligibility confirmed — now safe to deduct stock.
+      // Eligibility confirmed — now safe to deduct stock. Product-level stock
+      // is always decremented (unchanged behavior for variant-less products
+      // and the existing "is this product in stock at all" checks). A
+      // variant that tracks its own stock also gets decremented so its
+      // individual count stays accurate.
       for (const row of cartRes.rows) {
         const idx = db.products.findIndex((p) => p.id === row.product_id);
+        const nextStock = db.products[idx].stock - row.quantity;
+        let nextShades = db.products[idx].shades;
+        if (row.variant_id && nextShades) {
+          nextShades = nextShades.map((s) => {
+            if (s.id !== row.variant_id) return s;
+            // A shade with its own size list decrements the specific size
+            // that was bought; a shade without one decrements its own stock.
+            if (row.selected_size && s.sizes && s.sizes.length > 0) {
+              return {
+                ...s,
+                sizes: s.sizes.map((sz) =>
+                  sz.label === row.selected_size && sz.stock !== undefined
+                    ? { ...sz, stock: Math.max(0, sz.stock - row.quantity) }
+                    : sz
+                ),
+              };
+            }
+            return s.stock !== undefined ? { ...s, stock: Math.max(0, s.stock - row.quantity) } : s;
+          });
+        }
+        // Product-level sizePricing only applies to shade-less products
+        // (the shade's own sizes above already covered the shaded case).
+        let nextSizePricing = db.products[idx].sizePricing;
+        if (!row.variant_id && row.selected_size && nextSizePricing?.[row.selected_size]?.stock !== undefined) {
+          const entry = nextSizePricing[row.selected_size];
+          nextSizePricing = { ...nextSizePricing, [row.selected_size]: { ...entry, stock: Math.max(0, entry.stock! - row.quantity) } };
+        }
         db.products[idx] = {
           ...db.products[idx],
-          stock: db.products[idx].stock - row.quantity,
-          inStock: db.products[idx].stock - row.quantity > 0,
+          stock: nextStock,
+          inStock: nextStock > 0,
+          shades: nextShades,
+          sizePricing: nextSizePricing,
         };
       }
 
@@ -985,8 +1145,8 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
       for (const item of orderItems) {
         const itemId = 'oi-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
         await pool.query(
-          'INSERT INTO order_items (id, order_id, product_id, variant_id, product_name, quantity, price) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-          [itemId, orderId, item.productId, item.shade?.id || null, item.productName, item.quantity, item.price]
+          'INSERT INTO order_items (id, order_id, product_id, variant_id, selected_size, product_name, quantity, price) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [itemId, orderId, item.productId, item.shade?.id || null, item.size || null, item.productName, item.quantity, item.price]
         );
       }
 

@@ -95,7 +95,7 @@ function groupBy<T>(rows: T[], key: (row: T) => string): Map<string, T[]> {
 // Caller is responsible for wrapping this in withStockLock, matching
 // checkout's stock-mutation safety guarantee.
 export async function restockOrderItems(orderId: string): Promise<void> {
-  const itemsRes = await pool.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
+  const itemsRes = await pool.query('SELECT product_id, variant_id, selected_size, quantity FROM order_items WHERE order_id = $1', [orderId]);
   if (itemsRes.rows.length === 0) return;
 
   const db = await loadDatabase();
@@ -104,7 +104,33 @@ export async function restockOrderItems(orderId: string): Promise<void> {
     const idx = db.products.findIndex((p) => p.id === row.product_id);
     if (idx === -1) continue;
     const newStock = db.products[idx].stock + row.quantity;
-    db.products[idx] = { ...db.products[idx], stock: newStock, inStock: newStock > 0 };
+    let nextShades = db.products[idx].shades;
+    if (row.variant_id && nextShades) {
+      nextShades = nextShades.map((s) => {
+        if (s.id !== row.variant_id) return s;
+        if (row.selected_size && s.sizes && s.sizes.length > 0) {
+          return {
+            ...s,
+            sizes: s.sizes.map((sz) =>
+              sz.label === row.selected_size && sz.stock !== undefined ? { ...sz, stock: sz.stock + row.quantity } : sz
+            ),
+          };
+        }
+        return s.stock !== undefined ? { ...s, stock: s.stock + row.quantity } : s;
+      });
+    }
+    let nextSizePricing = db.products[idx].sizePricing;
+    if (!row.variant_id && row.selected_size && nextSizePricing?.[row.selected_size]?.stock !== undefined) {
+      const entry = nextSizePricing[row.selected_size];
+      nextSizePricing = { ...nextSizePricing, [row.selected_size]: { ...entry, stock: entry.stock! + row.quantity } };
+    }
+    db.products[idx] = {
+      ...db.products[idx],
+      stock: newStock,
+      inStock: newStock > 0,
+      shades: nextShades,
+      sizePricing: nextSizePricing,
+    };
     changed = true;
   }
   if (changed) await saveDatabase(db);
@@ -127,6 +153,7 @@ export function mapOrderItemRows(itemRows: any[], db: InternalCMSDatabaseSchema)
       productName: it.product_name,
       productImage: product?.images?.primary || '',
       shade: findShadeInDb(product, it.variant_id),
+      size: it.selected_size || undefined,
       price: Number(it.price),
       quantity: it.quantity,
     };

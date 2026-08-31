@@ -33,8 +33,11 @@ export const JournalPage: React.FC<JournalPageProps> = ({
   onOpenGuides,
   onOpenQuiz,
 }) => {
-  const { journalArticles } = useCMS();
-  const articles = journalArticles && journalArticles.length > 0 ? journalArticles : GLAMIRK_JOURNAL_ARTICLES_EXTENDED;
+  const { journalArticles, products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+  const articles = (journalArticles && journalArticles.length > 0 ? journalArticles : GLAMIRK_JOURNAL_ARTICLES_EXTENDED).filter(
+    (a) => a.status !== 'draft'
+  );
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory || 'ALL');
   const [showAllPicks, setShowAllPicks] = useState(false);
   const [showAllArticles, setShowAllArticles] = useState(false);
@@ -55,7 +58,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({
   });
 
   const heroArticle = articles.find((art) => art.isHero) || articles[0];
-  const editorsPicks = articles.filter((art) => art.isEditorsPick && art.id !== heroArticle.id);
+  const editorsPicks = articles.filter((art) => art.isEditorsPick && art.id !== heroArticle?.id);
 
   return (
     <div className="bg-[#FAF9F6] min-h-screen text-[#121212] pb-24 pt-8">
@@ -95,7 +98,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 space-y-20">
         
         {/* Magazine Cinematic Hero Cover (When viewing ALL or matching category) */}
-        {(selectedCategory === 'ALL' || selectedCategory === heroArticle.category) && (
+        {heroArticle && (selectedCategory === 'ALL' || selectedCategory === heroArticle.category) && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -260,7 +263,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({
           </div>
           <div className="lg:col-span-4 flex justify-start lg:justify-end">
             <button
-              onClick={() => onOpenProduct(GLAMIRK_PRODUCTS[0])}
+              onClick={() => onOpenProduct(catalogProducts[0])}
               className="px-8 py-4 bg-[#FAF9F6] text-[#121212] text-xs font-semibold tracking-[0.2em] uppercase hover:bg-[#E8D5A8] transition-colors cursor-pointer"
             >
               SHOP THE EDIT

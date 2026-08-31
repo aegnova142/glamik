@@ -2,6 +2,7 @@ import React from 'react';
 import { Product, Shade } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { ShoppingBag, Plus, Sparkles } from 'lucide-react';
+import { useCMS } from '../../context/CMSContext';
 
 interface CompleteTheLookProps {
   currentProduct: Product;
@@ -14,8 +15,10 @@ export const CompleteTheLook: React.FC<CompleteTheLookProps> = ({
   onAddLookToBag,
   onSelectProduct,
 }) => {
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
   const complementProducts = currentProduct.completeTheLookProductIds
-    .map((id) => GLAMIRK_PRODUCTS.find((p) => p.id === id))
+    .map((id) => catalogProducts.find((p) => p.id === id))
     .filter(Boolean) as Product[];
 
   if (complementProducts.length === 0) return null;

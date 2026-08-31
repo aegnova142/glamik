@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Droplets, Sparkles, ArrowRight, Check, ShieldCheck } from 'lucide-react';
 import { Product } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
+import { useCMS } from '../../context/CMSContext';
 
 interface CleanserShowcaseProps {
   onDiscoverCleanser: (product: Product) => void;
@@ -11,10 +12,12 @@ interface CleanserShowcaseProps {
 export const CleanserShowcase: React.FC<CleanserShowcaseProps> = ({ onDiscoverCleanser }) => {
   const [activeStep, setActiveStep] = useState<0 | 1 | 2>(0);
   const [selectedSize, setSelectedSize] = useState<'30g' | '50g'>('50g');
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
 
-  const cleanserProduct = GLAMIRK_PRODUCTS.find(
-    (p) => p.id === (selectedSize === '50g' ? 'balm-to-water-cleanser-50g' : 'balm-to-water-cleanser-30g')
-  ) || GLAMIRK_PRODUCTS[3];
+  const cleanser30 = catalogProducts.find((p) => p.id === 'balm-to-water-cleanser-30g') || catalogProducts[2];
+  const cleanser50 = catalogProducts.find((p) => p.id === 'balm-to-water-cleanser-50g') || catalogProducts[3];
+  const cleanserProduct = selectedSize === '50g' ? cleanser50 : cleanser30;
 
   const steps = [
     {
@@ -144,7 +147,9 @@ export const CleanserShowcase: React.FC<CleanserShowcaseProps> = ({ onDiscoverCl
                   }`}
                 >
                   <span className="text-xs font-bold text-[#121212] block">30g Discovery Jar</span>
-                  <span className="text-[10.5px] text-[#6B6B6B] block mt-0.5">₹549 • Travel Size</span>
+                  <span className="text-[10.5px] text-[#6B6B6B] block mt-0.5">
+                    {cleanser30.currency}{cleanser30.price} • Travel Size
+                  </span>
                 </button>
 
                 <button
@@ -159,7 +164,9 @@ export const CleanserShowcase: React.FC<CleanserShowcaseProps> = ({ onDiscoverCl
                     <span className="text-xs font-bold text-[#121212] block">50g Ritual Jar</span>
                     <span className="text-[9px] bg-[#F05A7E] text-white font-bold px-2 py-0.5 rounded-full uppercase">BESTSELLER</span>
                   </div>
-                  <span className="text-[10.5px] text-[#6B6B6B] block mt-0.5">₹849 • Full Vanity Jar</span>
+                  <span className="text-[10.5px] text-[#6B6B6B] block mt-0.5">
+                    {cleanser50.currency}{cleanser50.price} • Full Vanity Jar
+                  </span>
                 </button>
               </div>
             </div>

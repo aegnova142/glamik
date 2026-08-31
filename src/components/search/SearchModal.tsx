@@ -22,7 +22,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   onSelectLook,
   onSelectArticle,
 }) => {
-  const { looks: cmsLooks } = useCMS();
+  const { looks: cmsLooks, products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
   const displayLooks = cmsLooks && cmsLooks.length > 0 ? cmsLooks : GLAMIRK_LOOKS;
   const [query, setQuery] = useState('');
 
@@ -30,7 +31,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     const q = query.toLowerCase().trim();
     if (!q) return { products: [], looks: [], articles: [] };
 
-    const products = GLAMIRK_PRODUCTS.filter(
+    const products = catalogProducts.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
         p.category.toLowerCase().includes(q) ||

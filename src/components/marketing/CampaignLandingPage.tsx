@@ -13,6 +13,7 @@ import {
 import { Campaign, Product, Shade } from '../../types';
 import { GLAMIRK_CAMPAIGNS } from '../../data/editorial';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
+import { useCMS } from '../../context/CMSContext';
 import { updatePageSeo } from '../../utils/seo';
 import { trackEvent } from '../../utils/analytics';
 
@@ -47,7 +48,9 @@ export const CampaignLandingPage: React.FC<CampaignLandingPageProps> = ({
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [campaign.id]);
 
-  const featuredProducts = GLAMIRK_PRODUCTS.filter((p) =>
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+  const featuredProducts = catalogProducts.filter((p) =>
     campaign.featuredProductIds.includes(p.id)
   );
 

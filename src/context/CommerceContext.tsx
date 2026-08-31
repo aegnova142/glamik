@@ -3,6 +3,7 @@ import { customerApiFetch, getCustomerToken } from '../utils/cmsClient';
 import { CartItem, Product, Shade, ServerCartItem, Order, Address, Review, ReturnRequest, Coupon, PaymentMethodType, AppNotification } from '../types';
 import { useCustomerAuth } from './CustomerAuthContext';
 import { getSocket } from '../utils/socket';
+import { getCurrentPrice } from '../utils/productVariant';
 
 interface MutationResult {
   success: boolean;
@@ -59,7 +60,7 @@ interface CommerceContextType {
   markNotificationRead: (id: string) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
   isCommerceLoading: boolean;
-  addToCart: (product: Product, shade?: Shade, quantity?: number) => Promise<MutationResult>;
+  addToCart: (product: Product, shade?: Shade, quantity?: number, size?: string) => Promise<MutationResult>;
   updateCartItemQuantity: (index: number, quantity: number) => Promise<MutationResult>;
   removeCartItem: (index: number) => Promise<MutationResult>;
   saveForLater: (index: number) => Promise<MutationResult>;
@@ -107,14 +108,14 @@ function saveGuestCart(items: GuestCartItem[]) {
 }
 
 function guestCartSubtotal(items: GuestCartItem[]): number {
-  return items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  return items.reduce((sum, item) => sum + getCurrentPrice(item.product, item.selectedShade, item.selectedSize) * item.quantity, 0);
 }
 
 function mapServerItem(item: ServerCartItem): CartItem {
   return {
     product: item.product,
     selectedShade: item.selectedShade,
-    selectedSize: item.product?.selectedSize,
+    selectedSize: item.selectedSize || undefined,
     quantity: item.quantity,
   };
 }
@@ -189,7 +190,7 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
     for (const item of pending) {
       await customerApiFetch<{ items: ServerCartItem[]; subtotal: number }>('/api/customer/cart/items', {
         method: 'POST',
-        body: JSON.stringify({ productId: item.product.id, variantId: item.selectedShade?.id, quantity: item.quantity }),
+        body: JSON.stringify({ productId: item.product.id, variantId: item.selectedShade?.id, quantity: item.quantity, size: item.selectedSize }),
       });
     }
     setGuestCartItems([]);
@@ -242,12 +243,13 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCustomerLoggedIn]);
 
-  const addToCart = async (product: Product, shade?: Shade, quantity: number = 1): Promise<MutationResult> => {
+  const addToCart = async (product: Product, shade?: Shade, quantity: number = 1, size?: string): Promise<MutationResult> => {
+    const resolvedSize = size || product.selectedSize;
     if (!isCustomerLoggedIn) {
       // Guest checkout-free flow: keep the item in localStorage, no login required.
       setGuestCartItems((prev) => {
         const existingIndex = prev.findIndex(
-          (item) => item.product.id === product.id && item.selectedShade?.id === shade?.id
+          (item) => item.product.id === product.id && item.selectedShade?.id === shade?.id && item.selectedSize === resolvedSize
         );
         if (existingIndex >= 0) {
           const updated = [...prev];
@@ -257,13 +259,13 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
           };
           return updated;
         }
-        return [...prev, { product, selectedShade: shade, selectedSize: product.selectedSize, quantity }];
+        return [...prev, { product, selectedShade: shade, selectedSize: resolvedSize, quantity }];
       });
       return { success: true };
     }
     const res = await customerApiFetch<{ items: ServerCartItem[]; subtotal: number }>('/api/customer/cart/items', {
       method: 'POST',
-      body: JSON.stringify({ productId: product.id, variantId: shade?.id, quantity }),
+      body: JSON.stringify({ productId: product.id, variantId: shade?.id, quantity, size: resolvedSize }),
     });
     if (res.data) {
       setServerCartItems(res.data.items || []);

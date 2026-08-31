@@ -3,13 +3,56 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/** One gallery image belonging to a specific product variant/shade. */
+export interface VariantImage {
+  id: string;
+  url: string;
+  /** Cloudinary public ID, used to delete the asset on removal (mirrors CMSMediaItem). */
+  publicId?: string;
+  alt?: string;
+  sortOrder: number;
+  isPrimary: boolean;
+}
+
 export interface Shade {
   id: string;
   name: string;
   hex: string;
   undertone: 'Warm' | 'Cool' | 'Neutral' | 'Olive' | 'Universal' | string;
   description: string;
+  /** Legacy single swatch-dot image (kept for backward compatibility). */
   swatchImage?: string;
+  shortDescription?: string;
+  sku?: string;
+  /** Overrides product.price when set. */
+  price?: number;
+  /** Overrides product.originalPrice when set. */
+  compareAtPrice?: number;
+  /** Overrides product.stock when set. */
+  stock?: number;
+  /** Defaults to true when undefined — lets old data keep working unchanged. */
+  isActive?: boolean;
+  /** Variant-specific gallery. Falls back to product.images when empty/absent. */
+  images?: VariantImage[];
+  /** Per-shade size/weight options (e.g. this shade only comes in "50g",
+   * another comes in "30g" and "50g"). When set and non-empty, the
+   * customer must pick one of these and its price/stock apply instead of
+   * this shade's own price/stock. Absent/empty means this shade has no
+   * size dimension — its own price/stock apply directly, same as before
+   * this field existed. */
+  sizes?: SizeOption[];
+}
+
+/** A single size/weight option, either on a Shade (per-variant sizing) or
+ * resolved from Product.sizes/sizePricing (product-level sizing, used by
+ * products with no shades at all). */
+export interface SizeOption {
+  id: string;
+  label: string;
+  price: number;
+  compareAtPrice?: number;
+  stock?: number;
+  isActive?: boolean;
 }
 
 export type ProductCategory = 'Makeup' | 'Skin' | 'Nails' | 'Discover';
@@ -26,14 +69,69 @@ export type ProductSubCategory =
 
 export interface ProductDetails {
   overview: string;
+  /** Legacy free-text usage instructions. Kept as a display fallback for
+   * products saved before `usageSteps` existed — new content should use
+   * `Product.usageSteps` instead. */
   howToUse: string;
+  /** Legacy comma-separated ingredients. Kept as a display fallback for
+   * products saved before `Product.ingredients` existed. */
   ingredientsList: string;
+  /** Per-product shipping/returns override. Empty means the storefront
+   * falls back to the global shipping/returns copy (globalSettings). */
   shippingReturns: string;
   coverage?: string;
   finish?: string;
   texture?: string;
   skinType?: string;
   suitableOccasions?: string[];
+}
+
+/** One row in the dynamic "Details & Attributes" table — different product
+ * types need different attributes (a lipstick needs Finish/Coverage, a
+ * cleanser needs Skin Type/Texture), so this is a free-form name/value
+ * list rather than a fixed set of fields. */
+export interface ProductAttribute {
+  id: string;
+  name: string;
+  value: string;
+  sortOrder: number;
+}
+
+/** One step in the "How to Use / The Ritual" instructions. */
+export interface UsageStep {
+  id: string;
+  text: string;
+  image?: string;
+  sortOrder: number;
+}
+
+export type TryOnType =
+  | 'lipstick'
+  | 'kajal'
+  | 'eyeliner'
+  | 'foundation'
+  | 'concealer'
+  | 'blush'
+  | 'highlighter'
+  | 'skin'
+  | 'other';
+
+export type TryOnRegion = 'lips' | 'eyes' | 'fullFace' | 'cheeks' | 'underEyes' | 'custom';
+
+/** Admin-configured Virtual Try-On behavior for a product. Color always
+ * comes from the selected shade's own hex (never configured separately —
+ * a shade's Try-On color and its swatch color must never disagree), so
+ * this only holds *how* that color gets applied. Absent means Try-On
+ * falls back to a subCategory-based default (Lips→lipstick, Eyes→kajal,
+ * Face→foundation) rather than being unavailable. */
+export interface TryOnConfig {
+  enabled: boolean;
+  type: TryOnType;
+  region: TryOnRegion;
+  /** 0-100. How strong the mask/stroke effect is (e.g. eyeliner thickness). */
+  intensity: number;
+  /** 0-100. How opaque the applied color is. */
+  opacity: number;
 }
 
 export interface Product {
@@ -51,6 +149,10 @@ export interface Product {
   currency: string;
   sizes?: string[];
   selectedSize?: string;
+  /** Per-size price/stock overrides, keyed by the exact label in `sizes[]`
+   * (e.g. "30g"). Admin-controlled — falls back to `price`/`stock` above
+   * for any size with no entry here. */
+  sizePricing?: Record<string, { price: number; compareAtPrice?: number; stock?: number }>;
   images: {
     primary: string;
     secondary: string;
@@ -70,6 +172,17 @@ export interface Product {
   coverage?: 'Full Saturated' | 'Buildable' | 'Universal Cleansing' | 'Medium' | string;
   texture?: string;
   skinType?: string[];
+  /** Dynamic "Details & Attributes" rows. Takes precedence over the legacy
+   * finish/coverage/texture/skinType fields above when non-empty. */
+  attributes?: ProductAttribute[];
+  /** Structured "How to Use" steps. Takes precedence over
+   * `details.howToUse` when non-empty. */
+  usageSteps?: UsageStep[];
+  /** Structured ingredients list. Takes precedence over
+   * `details.ingredientsList` when non-empty. */
+  ingredients?: string[];
+  /** Admin-configured Virtual Try-On behavior — see TryOnConfig. */
+  tryOnConfig?: TryOnConfig;
   details: ProductDetails;
   relatedProductIds: string[];
   completeTheLookProductIds: string[];
@@ -161,6 +274,9 @@ export type JournalCategory =
 export interface JournalArticle {
   id: string;
   slug?: string;
+  /** Defaults to 'published' when absent, so articles saved before this
+   * field existed keep showing exactly as before. */
+  status?: 'draft' | 'published';
   title: string;
   subtitle?: string;
   category: JournalCategory;
@@ -442,6 +558,8 @@ export interface TryOnModelPreset {
   undertone: UndertoneType;
   image: string;
   description?: string;
+  isActive?: boolean;
+  sortOrder?: number;
 }
 
 // Phase 4: Conversion, Checkout & Retention Types
@@ -510,6 +628,7 @@ export interface ServerCartItem {
   id: string;
   productId: string;
   variantId: string | null;
+  selectedSize?: string | null;
   quantity: number;
   product: Product;
   selectedShade?: Shade;
@@ -556,6 +675,42 @@ export interface Order {
   giftMessage?: string;
 }
 
+// Admin-configurable copy shown to shoppers for this promotion's lifecycle
+// events. `enabled: false` (or a blank field) means fall back to the
+// hardcoded system default for that message — this lets an admin override
+// just one message without having to fill in all four.
+// Supported placeholder tokens, substituted at render time: {code},
+// {minOrder}, {amountNeeded}.
+export interface PromotionNotificationSettings {
+  enabled: boolean;
+  successMessage?: string;
+  eligibilityWarningMessage?: string;
+  autoRemovalMessage?: string;
+  errorMessage?: string;
+}
+
+export const DEFAULT_PROMO_NOTIFICATION_MESSAGES: Required<Omit<PromotionNotificationSettings, 'enabled'>> = {
+  successMessage: '🎉 Offer applied successfully!',
+  eligibilityWarningMessage: 'Add ₹{amountNeeded} more to unlock this offer.',
+  autoRemovalMessage: 'Your cart no longer qualifies for this offer.',
+  errorMessage: 'This promotion code is invalid or unavailable.',
+};
+
+// Substitutes {code}/{minOrder}/{amountNeeded} tokens in an admin-authored
+// promotion message template. Shared shape used both for the live rendered
+// toast/error text and the admin panel's message preview, so what an admin
+// sees while editing always matches what shoppers actually see.
+export function applyPromoMessageTemplate(
+  template: string,
+  vars: { code?: string; minOrder?: number; subtotal?: number }
+): string {
+  const amountNeeded = Math.max(0, (vars.minOrder || 0) - (vars.subtotal || 0));
+  return template
+    .replace(/\{code\}/g, vars.code || '')
+    .replace(/\{minOrder\}/g, String(vars.minOrder ?? ''))
+    .replace(/\{amountNeeded\}/g, String(amountNeeded));
+}
+
 export interface Coupon {
   code: string;
   title: string;
@@ -564,6 +719,7 @@ export interface Coupon {
   discountValue: number; // e.g. 10 for 10% or 150 for ₹150
   minOrderValue?: number;
   tag?: string;
+  notificationSettings?: PromotionNotificationSettings;
 }
 
 export type LoyaltyTier = 'MEMBER' | 'SIGNATURE' | 'PRIVÉ';
@@ -791,6 +947,7 @@ export interface CMSOffer {
   bannerTextColor?: string;
   applicableCategory?: string;
   isStackable?: boolean;
+  notificationSettings?: PromotionNotificationSettings;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -1171,5 +1328,8 @@ export interface CMSDatabaseSchema {
   journalSectionCopy: CMSJournalSectionCopy;
   findMyShadeResultsCopy: CMSFindMyShadeResultsCopy;
   findMyShadeHero: CMSFindMyShadeHero;
+  /** Admin-managed Virtual Try-On standard model presets — replaces the
+   * static src/data/models.ts list as the source of truth once populated. */
+  tryOnModels: TryOnModelPreset[];
 }
 

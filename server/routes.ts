@@ -47,6 +47,8 @@ import {
   CMSBenefit,
   Look,
   OrderStatus,
+  Shade,
+  TryOnModelPreset,
 } from '../src/types';
 
 const router = express.Router();
@@ -291,6 +293,9 @@ router.get('/cms/content', async (req: Request, res: Response) => {
     journalSectionCopy: db.journalSectionCopy,
     findMyShadeResultsCopy: db.findMyShadeResultsCopy,
     findMyShadeHero: db.findMyShadeHero,
+    tryOnModels: (db.tryOnModels || [])
+      .filter((m) => m.isActive !== false)
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
     serverTime: new Date().toISOString(),
   };
 
@@ -633,7 +638,81 @@ router.delete('/admin/pages/:id', requireAdmin, async (req: AuthenticatedRequest
 });
 
 // --- Products Management ---
+
+// Server-side re-check of the same rules the admin UI already enforces —
+// never trust that a request actually came from that UI.
+function validateProduct(product: Partial<Product>): string | null {
+  if (!product.name || !product.name.trim()) return 'Product name is required.';
+  if (typeof product.price !== 'number' || isNaN(product.price) || product.price < 0) {
+    return 'Product price must be a non-negative number.';
+  }
+  if (product.stock !== undefined && (typeof product.stock !== 'number' || isNaN(product.stock) || product.stock < 0)) {
+    return 'Product stock must be a non-negative number.';
+  }
+  const shades = product.shades || [];
+  const skus: string[] = [];
+  for (const shade of shades) {
+    if (!shade.name || !shade.name.trim()) return 'Every variant needs a name.';
+    if (shade.price !== undefined && (typeof shade.price !== 'number' || isNaN(shade.price) || shade.price < 0)) {
+      return `Variant "${shade.name}" has an invalid price.`;
+    }
+    if (shade.stock !== undefined && (typeof shade.stock !== 'number' || isNaN(shade.stock) || shade.stock < 0)) {
+      return `Variant "${shade.name}" has an invalid stock quantity.`;
+    }
+    if (shade.sku && shade.sku.trim()) skus.push(shade.sku.trim());
+    if (shade.sizes && shade.sizes.length > 0) {
+      const sizeLabels: string[] = [];
+      for (const sz of shade.sizes) {
+        if (!sz.label || !sz.label.trim()) return `A size on variant "${shade.name}" needs a label.`;
+        if (typeof sz.price !== 'number' || isNaN(sz.price) || sz.price < 0) {
+          return `Size "${sz.label}" on variant "${shade.name}" has an invalid price.`;
+        }
+        if (sz.stock !== undefined && (typeof sz.stock !== 'number' || isNaN(sz.stock) || sz.stock < 0)) {
+          return `Size "${sz.label}" on variant "${shade.name}" has an invalid stock quantity.`;
+        }
+        sizeLabels.push(sz.label.trim());
+      }
+      if (new Set(sizeLabels).size !== sizeLabels.length) {
+        return `Variant "${shade.name}" has duplicate size labels.`;
+      }
+    }
+  }
+  if (new Set(skus).size !== skus.length) {
+    return 'Variant SKUs must be unique within a product.';
+  }
+  if (product.sizePricing) {
+    for (const [label, entry] of Object.entries(product.sizePricing)) {
+      if (typeof entry.price !== 'number' || isNaN(entry.price) || entry.price < 0) {
+        return `Size "${label}" has an invalid price.`;
+      }
+      if (entry.stock !== undefined && (typeof entry.stock !== 'number' || isNaN(entry.stock) || entry.stock < 0)) {
+        return `Size "${label}" has an invalid stock quantity.`;
+      }
+    }
+  }
+  if ((product.benefits || []).some((b) => !b || !b.trim())) {
+    return 'Benefit text cannot be empty.';
+  }
+  for (const attr of product.attributes || []) {
+    if (!attr.name || !attr.name.trim() || !attr.value || !attr.value.trim()) {
+      return 'Every attribute needs both a name and a value.';
+    }
+  }
+  for (const step of product.usageSteps || []) {
+    if (!step.text || !step.text.trim()) return 'Every How-to-Use step needs instruction text.';
+  }
+  if ((product.ingredients || []).some((i) => !i || !i.trim())) {
+    return 'Ingredient entries cannot be empty.';
+  }
+  return null;
+}
+
 router.post('/admin/products', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const validationError = validateProduct(req.body);
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
   const db = await loadDatabase();
   const newProduct: Product = {
     ...req.body,
@@ -655,10 +734,13 @@ router.put('/admin/products/:id', requireAdmin, async (req: AuthenticatedRequest
     return res.status(404).json({ error: 'Product not found' });
   }
 
-  db.products[idx] = {
-    ...db.products[idx],
-    ...req.body,
-  };
+  const merged = { ...db.products[idx], ...req.body };
+  const validationError = validateProduct(merged);
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  db.products[idx] = merged;
 
   await saveDatabase(db);
   await logAudit(req, 'UPDATE_PRODUCT', 'PRODUCT', db.products[idx].id, db.products[idx].name);
@@ -674,10 +756,19 @@ router.post('/admin/products/duplicate/:id', requireAdmin, async (req: Authentic
     return res.status(404).json({ error: 'Product not found' });
   }
 
+  const cloneSuffix = Date.now();
+  const clonedShades: Shade[] = (JSON.parse(JSON.stringify(original.shades || [])) as Shade[]).map((shade, i) => ({
+    ...shade,
+    id: `shade-${cloneSuffix}-${i}`,
+    sku: undefined, // a cloned SKU would collide with the original — admin must assign a new one
+    images: (shade.images || []).map((img, j) => ({ ...img, id: `vimg-${cloneSuffix}-${i}-${j}` })),
+  }));
+
   const duplicated: Product = {
     ...JSON.parse(JSON.stringify(original)),
-    id: original.id + '-copy-' + Date.now(),
+    id: original.id + '-copy-' + cloneSuffix,
     name: `${original.name} (Copy)`,
+    shades: clonedShades,
   };
 
   db.products.push(duplicated);
@@ -873,6 +964,74 @@ router.delete('/admin/benefits/:id', requireAdmin, async (req: AuthenticatedRequ
   await saveDatabase(db);
   await logAudit(req, 'DELETE_BENEFIT', 'BENEFIT', benefit.id, benefit.title);
   broadcastEvent('CMS_UPDATE', 'benefits', { deletedId: benefit.id });
+
+  res.json({ success: true, id: req.params.id });
+});
+
+// --- Virtual Try-On Standard Models ---
+router.post('/admin/try-on-models', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const { name, skinTone, undertone, image, description, isActive, sortOrder } = req.body || {};
+  if (!name || !String(name).trim()) {
+    return res.status(400).json({ error: 'Model name is required.' });
+  }
+  if (!image || !String(image).trim()) {
+    return res.status(400).json({ error: 'A model image is required.' });
+  }
+
+  const db = await loadDatabase();
+  const newModel: TryOnModelPreset = {
+    id: 'tryon-model-' + Date.now(),
+    name,
+    skinTone: skinTone || 'Medium',
+    undertone: undertone || 'Warm',
+    image,
+    description: description || undefined,
+    isActive: isActive !== false,
+    sortOrder: typeof sortOrder === 'number' ? sortOrder : (db.tryOnModels || []).length,
+  };
+
+  db.tryOnModels = [...(db.tryOnModels || []), newModel];
+  await saveDatabase(db);
+  await logAudit(req, 'CREATE_TRY_ON_MODEL', 'TRY_ON_MODEL', newModel.id, newModel.name);
+  broadcastEvent('CMS_UPDATE', 'tryOnModels', newModel);
+
+  res.json(newModel);
+});
+
+router.put('/admin/try-on-models/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const idx = (db.tryOnModels || []).findIndex((m) => m.id === req.params.id);
+  if (idx === -1) {
+    return res.status(404).json({ error: 'Try-On model not found' });
+  }
+
+  const { name, image } = req.body || {};
+  if (name !== undefined && !String(name).trim()) {
+    return res.status(400).json({ error: 'Model name cannot be empty.' });
+  }
+  if (image !== undefined && !String(image).trim()) {
+    return res.status(400).json({ error: 'Model image cannot be empty.' });
+  }
+
+  db.tryOnModels[idx] = { ...db.tryOnModels[idx], ...req.body };
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_TRY_ON_MODEL', 'TRY_ON_MODEL', db.tryOnModels[idx].id, db.tryOnModels[idx].name);
+  broadcastEvent('CMS_UPDATE', 'tryOnModels', db.tryOnModels[idx]);
+
+  res.json(db.tryOnModels[idx]);
+});
+
+router.delete('/admin/try-on-models/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const model = (db.tryOnModels || []).find((m) => m.id === req.params.id);
+  if (!model) {
+    return res.status(404).json({ error: 'Try-On model not found' });
+  }
+
+  db.tryOnModels = db.tryOnModels.filter((m) => m.id !== req.params.id);
+  await saveDatabase(db);
+  await logAudit(req, 'DELETE_TRY_ON_MODEL', 'TRY_ON_MODEL', model.id, model.name);
+  broadcastEvent('CMS_UPDATE', 'tryOnModels', { deletedId: model.id });
 
   res.json({ success: true, id: req.params.id });
 });
@@ -1118,13 +1277,38 @@ router.put('/admin/benefits-section', requireAdmin, async (req: AuthenticatedReq
 });
 
 // --- Journal / Blog CMS ---
+// Only one article should ever read as the storefront's featured hero
+// story — the frontend just takes `articles.find(a => a.isHero)`, so if
+// two articles both carried isHero:true the "first in array order" would
+// win silently and the admin would have no idea why picking a new hero
+// didn't visibly change anything. Enforced here (not just in the admin
+// UI) so it holds regardless of which client made the request.
+function enforceSingleHero(articles: JournalArticle[], newHeroId: string): JournalArticle[] {
+  return articles.map((a) => (a.id === newHeroId ? a : a.isHero ? { ...a, isHero: false } : a));
+}
+
+function validateArticle(article: Partial<JournalArticle>): string | null {
+  if (!article.title || !article.title.trim()) return 'Article title is required.';
+  if (article.slug && !/^[a-z0-9-]+$/.test(article.slug)) {
+    return 'Slug can only contain lowercase letters, numbers, and hyphens.';
+  }
+  return null;
+}
+
 router.post('/admin/articles', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const validationError = validateArticle(req.body);
+  if (validationError) return res.status(400).json({ error: validationError });
+
   const db = await loadDatabase();
   const newArticle: JournalArticle = {
     ...req.body,
     id: req.body.id || req.body.slug || 'art-' + Date.now(),
   };
+  if (req.body.slug && db.journalArticles.some((a) => a.slug === req.body.slug)) {
+    return res.status(400).json({ error: 'An article with this slug already exists.' });
+  }
 
+  db.journalArticles = newArticle.isHero ? enforceSingleHero(db.journalArticles, newArticle.id) : db.journalArticles;
   db.journalArticles.push(newArticle);
   await saveDatabase(db);
   await logAudit(req, 'CREATE_ARTICLE', 'ARTICLE', newArticle.id, newArticle.title);
@@ -1134,18 +1318,26 @@ router.post('/admin/articles', requireAdmin, async (req: AuthenticatedRequest, r
 });
 
 router.put('/admin/articles/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const validationError = validateArticle(req.body);
+  if (validationError) return res.status(400).json({ error: validationError });
+
   const db = await loadDatabase();
   const idx = db.journalArticles.findIndex((a) => a.id === req.params.id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Article not found' });
   }
+  if (req.body.slug && db.journalArticles.some((a) => a.slug === req.body.slug && a.id !== req.params.id)) {
+    return res.status(400).json({ error: 'An article with this slug already exists.' });
+  }
 
-  db.journalArticles[idx] = { ...db.journalArticles[idx], ...req.body };
+  db.journalArticles = req.body.isHero ? enforceSingleHero(db.journalArticles, req.params.id) : db.journalArticles;
+  const refreshedIdx = db.journalArticles.findIndex((a) => a.id === req.params.id);
+  db.journalArticles[refreshedIdx] = { ...db.journalArticles[refreshedIdx], ...req.body };
   await saveDatabase(db);
-  await logAudit(req, 'UPDATE_ARTICLE', 'ARTICLE', db.journalArticles[idx].id, db.journalArticles[idx].title);
-  broadcastEvent('CMS_UPDATE', 'journalArticles', db.journalArticles[idx]);
+  await logAudit(req, 'UPDATE_ARTICLE', 'ARTICLE', db.journalArticles[refreshedIdx].id, db.journalArticles[refreshedIdx].title);
+  broadcastEvent('CMS_UPDATE', 'journalArticles', db.journalArticles[refreshedIdx]);
 
-  res.json(db.journalArticles[idx]);
+  res.json(db.journalArticles[refreshedIdx]);
 });
 
 router.delete('/admin/articles/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {

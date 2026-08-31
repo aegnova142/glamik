@@ -26,6 +26,7 @@ import {
   SupportFaq,
 } from '../src/types';
 import { GLAMIRK_LOOKS } from '../src/data/looks';
+import { TRY_ON_MODELS } from '../src/data/models';
 
 // Initial seed data imports
 import { GLAMIRK_PRODUCTS } from '../src/data/products';
@@ -110,6 +111,7 @@ export function ensureSchema(): Promise<void> {
       );
 
       ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS saved BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE cart_items ADD COLUMN IF NOT EXISTS selected_size TEXT;
 
       CREATE TABLE IF NOT EXISTS orders (
         id TEXT PRIMARY KEY,
@@ -143,6 +145,8 @@ export function ensureSchema(): Promise<void> {
         price NUMERIC NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
+
+      ALTER TABLE order_items ADD COLUMN IF NOT EXISTS selected_size TEXT;
 
       CREATE TABLE IF NOT EXISTS order_status_history (
         id TEXT PRIMARY KEY,
@@ -1119,6 +1123,7 @@ function getInitialDatabase(): InternalCMSDatabaseSchema {
     benefits: initialBenefits,
     benefitsSection: initialBenefitsSection,
     looks: GLAMIRK_LOOKS,
+    tryOnModels: TRY_ON_MODELS.map((m, i) => ({ ...m, isActive: true, sortOrder: i })),
     shadeJourney: initialShadeJourney,
     promoBanners: initialPromoBanners,
     shadeFinderTeaser: initialShadeFinderTeaser,
@@ -1192,12 +1197,40 @@ export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
       if (!cachedDb.globalSettings.codRules) {
         cachedDb.globalSettings.codRules = initial.globalSettings.codRules;
       }
+      if (!cachedDb.tryOnModels || cachedDb.tryOnModels.length === 0) {
+        cachedDb.tryOnModels = initial.tryOnModels;
+      }
       // Backfill stock on products persisted before the stock field existed
       cachedDb.products = cachedDb.products.map((p) => {
         if (typeof p.stock === 'number') return p;
         const seedMatch = initial.products.find((sp) => sp.id === p.id);
         return { ...p, stock: seedMatch ? seedMatch.stock : p.inStock ? 50 : 0 };
       });
+      // Trim stray whitespace on category/subCategory — free-text admin
+      // edits (before the Sub-Category field was a taxonomy-constrained
+      // dropdown) could save values like "Eyes " that then silently failed
+      // the Shop page's exact-match category filter. Whitespace is never
+      // semantically meaningful here, so trimming is always safe; it does
+      // NOT reassign a product to a different category/subcategory.
+      cachedDb.products = cachedDb.products.map((p) => {
+        const trimmedCategory = typeof p.category === 'string' ? (p.category.trim() as typeof p.category) : p.category;
+        const trimmedSubCategory = typeof p.subCategory === 'string' ? p.subCategory.trim() : p.subCategory;
+        if (trimmedCategory === p.category && trimmedSubCategory === p.subCategory) return p;
+        return { ...p, category: trimmedCategory, subCategory: trimmedSubCategory };
+      });
+      // One-time correction for these two specific, already-identified
+      // products: free-text admin edits (before Sub-Category became a
+      // constrained dropdown) had drifted their taxonomy to values outside
+      // PRODUCT_TAXONOMY ("Makeup Remover", and one even moved to
+      // Makeup/Eyes), which silently removed them from the Shop "Cleansing"
+      // filter. Both are cleansing balms — Skin/Cleansing is unambiguous.
+      // This does not touch any other product's category/subCategory.
+      const CLEANSER_IDS = ['balm-to-water-cleanser-30g', 'balm-to-water-cleanser-50g'];
+      cachedDb.products = cachedDb.products.map((p) =>
+        CLEANSER_IDS.includes(p.id) && (p.category !== 'Skin' || p.subCategory !== 'Cleansing')
+          ? { ...p, category: 'Skin', subCategory: 'Cleansing' }
+          : p
+      );
       return cachedDb!;
     }
   } catch (err) {

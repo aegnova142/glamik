@@ -2,13 +2,16 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, ShoppingBag, Heart, Share2, Check, Sparkles, ExternalLink, BadgeCheck } from 'lucide-react';
 import { SocialPost, Product, Shade } from '../../types';
-import { GLAMIRK_PRODUCTS } from '../../data/products';
+import { getCurrentPrice } from '../../utils/productVariant';
 import { trackEvent } from '../../utils/analytics';
 
 interface SocialPostModalProps {
   isOpen: boolean;
   onClose: () => void;
   post: SocialPost | null;
+  /** Live, admin-controlled catalog — the tagged-product price/stock shown
+   * here and added to cart must reflect this, never the static seed. */
+  products: Product[];
   onOpenProduct: (product: Product) => void;
   onOpenLook: (lookId: string) => void;
   onAddToCart: (product: Product, shade?: Shade) => void;
@@ -18,6 +21,7 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
   isOpen,
   onClose,
   post,
+  products,
   onOpenProduct,
   onOpenLook,
   onAddToCart,
@@ -130,8 +134,9 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
 
                 <div className="space-y-3">
                   {post.taggedProducts.map((tp) => {
-                    const fullProduct = GLAMIRK_PRODUCTS.find((p) => p.id === tp.productId);
+                    const fullProduct = products.find((p) => p.id === tp.productId);
                     const shadeMatch = fullProduct?.shades?.find((s) => s.name === tp.shadeName) || fullProduct?.shades?.[0];
+                    const livePrice = fullProduct ? getCurrentPrice(fullProduct, shadeMatch, undefined) : tp.price;
 
                     return (
                       <div
@@ -159,7 +164,7 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
                               </span>
                             )}
                             <span className="text-xs font-serif font-semibold text-[#121212] block">
-                              ₹{tp.price}
+                              ₹{livePrice}
                             </span>
                           </div>
                         </div>

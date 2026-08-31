@@ -92,6 +92,8 @@ import {
   Address,
   Review,
   ReturnRequest,
+  DEFAULT_PROMO_NOTIFICATION_MESSAGES,
+  applyPromoMessageTemplate,
 } from './types';
 import { GLAMIRK_PRODUCTS } from './data/products';
 import { customerApiFetch } from './utils/cmsClient';
@@ -197,6 +199,31 @@ function AppContent() {
 
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
 
+  // Auto-revalidate the applied coupon whenever the cart subtotal changes, so
+  // a discount that no longer qualifies (e.g. minimum order value no longer
+  // met after removing an item) never stays silently active. App.tsx is the
+  // only place that owns both `appliedCoupon` and the live `cartSubtotal`,
+  // so it's the only correct place to enforce this invariant — ShoppingBagPage
+  // and CheckoutPage just render whatever coupon state they're handed.
+  useEffect(() => {
+    if (!appliedCoupon) return;
+    if (cartSubtotal < (appliedCoupon.minOrderValue || 0)) {
+      const settings = appliedCoupon.notificationSettings;
+      const template =
+        settings?.enabled && settings.autoRemovalMessage
+          ? settings.autoRemovalMessage
+          : DEFAULT_PROMO_NOTIFICATION_MESSAGES.autoRemovalMessage;
+      setAppliedCoupon(null);
+      showToast(
+        applyPromoMessageTemplate(template, {
+          code: appliedCoupon.code,
+          minOrder: appliedCoupon.minOrderValue,
+          subtotal: cartSubtotal,
+        })
+      );
+    }
+  }, [cartSubtotal, appliedCoupon]);
+
   // Phase 4 Orders & Addresses State — a new user always starts with none;
   // real data is fetched from the backend once signed in, never seeded locally.
   const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
@@ -269,9 +296,9 @@ function AppContent() {
   const [recentlyViewedIds, setRecentlyViewedIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(recentlyViewedKey);
-      return saved ? JSON.parse(saved) : ['matte-liquid-lipstick-collection', 'balm-to-water-cleanser-50g'];
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return ['matte-liquid-lipstick-collection', 'balm-to-water-cleanser-50g'];
+      return [];
     }
   });
 
@@ -279,7 +306,23 @@ function AppContent() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(recentlyViewedKey);
-      setRecentlyViewedIds(saved ? JSON.parse(saved) : []);
+      let next: string[] = saved ? JSON.parse(saved) : [];
+
+      // On login, merge whatever this device's guest history was into the
+      // account's history instead of discarding it — guest items were
+      // viewed most recently (right before signing in), so they lead;
+      // duplicates already in the account history are dropped, not
+      // double-counted.
+      if (customerUser) {
+        const guestRaw = localStorage.getItem('glamirk_recently_viewed_guest');
+        const guestIds: string[] = guestRaw ? JSON.parse(guestRaw) : [];
+        if (guestIds.length > 0) {
+          next = [...guestIds, ...next.filter((id) => !guestIds.includes(id))].slice(0, 8);
+          localStorage.removeItem('glamirk_recently_viewed_guest');
+        }
+      }
+
+      setRecentlyViewedIds(next);
     } catch {
       setRecentlyViewedIds([]);
     }
@@ -520,7 +563,7 @@ function AppContent() {
   };
 
   const openVirtualTryOn = (product?: Product, shade?: Shade) => {
-    const prod = product || GLAMIRK_PRODUCTS[0];
+    const prod = product || allProducts[0];
     setTryOnProductId(prod.id);
     if (shade) {
       setTryOnShadeId(shade.id);
@@ -542,8 +585,10 @@ function AppContent() {
   // state) is kept working but unreachable — nothing opens it anymore —
   // in case that step needs to come back.
   const handleAddToCart = async (product: Product, shade?: Shade, size?: string, quantity: number = 1) => {
-    trackRecentlyViewed(product.id);
-    const res = await commerceRef.current.addToCart(product, shade, quantity);
+    // Recently Viewed only tracks genuine product-detail-page opens
+    // (navigateToProduct) — adding to cart from a quick-add button
+    // elsewhere isn't "viewing" the product, per the browsing-history spec.
+    const res = await commerceRef.current.addToCart(product, shade, quantity, size);
     if (res.success) {
       showToast('✓ Added to your bag', 2500);
     } else {
@@ -555,8 +600,7 @@ function AppContent() {
     if (!addToCartConfirm) return;
     const { product, shade, size, quantity } = addToCartConfirm;
     setIsConfirmingAddToCart(true);
-    trackRecentlyViewed(product.id);
-    const res = await commerceRef.current.addToCart(product, shade, quantity);
+    const res = await commerceRef.current.addToCart(product, shade, quantity, size);
     setIsConfirmingAddToCart(false);
     if (res.success) {
       setAddToCartConfirm({ mode: 'success', product, shade, size, quantity });
@@ -571,8 +615,7 @@ function AppContent() {
   };
 
   const handleBuyNow = async (product: Product, shade?: Shade, size?: string) => {
-    trackRecentlyViewed(product.id);
-    const res = await commerceRef.current.addToCart(product, shade, 1);
+    const res = await commerceRef.current.addToCart(product, shade, 1, size);
     if (res.success) {
       // Deliberately does NOT call navigateToCheckout() here — its
       // `cartItems.length === 0` guard reads `cartItems` from this render's
@@ -648,7 +691,18 @@ function AppContent() {
     const res = await commerceRef.current.validateCoupon(code, commerceRef.current.cartSubtotal);
     if (res.success && res.coupon) {
       setAppliedCoupon(res.coupon);
-      showToast(`Privilege code ${res.coupon.code} applied!`);
+      const settings = res.coupon.notificationSettings;
+      const template =
+        settings?.enabled && settings.successMessage
+          ? settings.successMessage
+          : `Privilege code ${res.coupon.code} applied!`;
+      showToast(
+        applyPromoMessageTemplate(template, {
+          code: res.coupon.code,
+          minOrder: res.coupon.minOrderValue,
+          subtotal: commerceRef.current.cartSubtotal,
+        })
+      );
       return { success: true };
     }
     if (res.loginRequired) {
@@ -780,8 +834,7 @@ function AppContent() {
   // Add multiple look products to bag
   const handleAddLookToBag = async (products: { product: Product; shade?: Shade; size?: string }[]) => {
     for (const item of products) {
-      trackRecentlyViewed(item.product.id);
-      await commerceRef.current.addToCart(item.product, item.shade, 1);
+      await commerceRef.current.addToCart(item.product, item.shade, 1, item.size);
     }
     showToast('All curated look creations added to shopping bag');
     setIsCartOpen(true);
@@ -912,7 +965,7 @@ function AppContent() {
               onOpenShadeFinder={navigateToFindMyShade}
               onOpenProduct={navigateToProduct}
               onOpenTryOn={(pId, sId) => {
-                const prod = GLAMIRK_PRODUCTS.find((p) => p.id === pId) || GLAMIRK_PRODUCTS[0];
+                const prod = allProducts.find((p) => p.id === pId) || allProducts[0];
                 const sh = prod.shades?.find((s) => s.id === sId) || prod.shades?.[0];
                 openVirtualTryOn(prod, sh);
               }}
@@ -1090,7 +1143,7 @@ function AppContent() {
             onPlaceOrderSuccess={handlePlaceOrderSuccess}
             onBackToCart={navigateToCart}
             onOpenProduct={(productId) => {
-              const p = GLAMIRK_PRODUCTS.find((item) => item.id === productId);
+              const p = allProducts.find((item) => item.id === productId);
               if (p) navigateToProduct(p);
             }}
             onCheckout={(addr, details) => commerceRef.current.checkout(addr, details)}
@@ -1190,7 +1243,7 @@ function AppContent() {
             onOpenArticle={navigateToArticle}
             onOpenShadeFinder={navigateToFindMyShade}
             onOpenTryOn={(pId, sId) => {
-              const prod = GLAMIRK_PRODUCTS.find((p) => p.id === pId) || GLAMIRK_PRODUCTS[0];
+              const prod = allProducts.find((p) => p.id === pId) || allProducts[0];
               const sh = prod.shades?.find((s) => s.id === sId) || prod.shades?.[0];
               openVirtualTryOn(prod, sh);
             }}
@@ -1212,7 +1265,7 @@ function AppContent() {
           <SocialCommerceHub
             onOpenProduct={navigateToProduct}
             onOpenTryOn={(pId, sId) => {
-              const prod = GLAMIRK_PRODUCTS.find((p) => p.id === pId) || GLAMIRK_PRODUCTS[0];
+              const prod = allProducts.find((p) => p.id === pId) || allProducts[0];
               const sh = prod.shades?.find((s) => s.id === sId) || prod.shades?.[0];
               openVirtualTryOn(prod, sh);
             }}
@@ -1226,7 +1279,7 @@ function AppContent() {
             campaignId={currentRoute.campaignId || 'sovereign-velvet-festive'}
             onOpenProduct={navigateToProduct}
             onOpenTryOn={(pId, sId) => {
-              const prod = GLAMIRK_PRODUCTS.find((p) => p.id === pId) || GLAMIRK_PRODUCTS[0];
+              const prod = allProducts.find((p) => p.id === pId) || allProducts[0];
               const sh = prod.shades?.find((s) => s.id === sId) || prod.shades?.[0];
               openVirtualTryOn(prod, sh);
             }}
@@ -1302,7 +1355,7 @@ function AppContent() {
             onNavigateHome={navigateToHome}
             onNavigateShop={navigateToShop}
             onNavigateProduct={(productId) => {
-              const prod = GLAMIRK_PRODUCTS.find((p) => p.id === productId);
+              const prod = allProducts.find((p) => p.id === productId);
               if (prod) navigateToProduct(prod);
             }}
             onNavigateJournal={navigateToJournal}

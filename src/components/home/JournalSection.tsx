@@ -18,7 +18,10 @@ const DEFAULT_COPY = {
 export const JournalSection: React.FC<JournalSectionProps> = ({ onReadArticle }) => {
   const { journalArticles, journalSectionCopy } = useCMS();
   const copy = journalSectionCopy || DEFAULT_COPY;
-  const articles = journalArticles && journalArticles.length > 0 ? journalArticles.slice(0, 3) : GLAMIRK_JOURNAL_ARTICLES;
+  const publishedArticles = (journalArticles && journalArticles.length > 0 ? journalArticles : GLAMIRK_JOURNAL_ARTICLES).filter(
+    (a) => a.status !== 'draft'
+  );
+  const articles = publishedArticles.slice(0, 3);
 
   return (
     <section id="the-glamirk-journal" className="py-16 sm:py-24 bg-white border-b border-[#E8D5A8]">

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CartItem, Product, Shade, Coupon } from '../../types';
+import { getCurrentPrice } from '../../utils/productVariant';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE, GLAMIRK_COUPONS } from '../../data/commerce';
 import { OffersDrawer } from '../marketing/OffersDrawer';
@@ -79,23 +80,37 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
   const [isApplyingPromo, setIsApplyingPromo] = useState(false);
   const [isOffersDrawerOpen, setIsOffersDrawerOpen] = useState(false);
 
+  // Clears any stale local error the moment a coupon is successfully applied
+  // through a different flow (e.g. the Offers drawer's own APPLY button,
+  // which doesn't go through handleApplyPromoCode below) — without this, a
+  // "Please enter a valid promotion code." from an earlier failed inline
+  // attempt could keep showing even after a valid coupon is now active.
+  useEffect(() => {
+    if (appliedCoupon) setPromoError(null);
+  }, [appliedCoupon]);
+
   // Gifting Option State
   const [isGift, setIsGift] = useState(false);
   const [giftMessage, setGiftMessage] = useState('');
 
   // Calculate financials
   const subtotal = cartItems.reduce((acc, item) => {
-    const itemPrice = item.selectedSize === '30g' ? 549 : item.product.price;
+    const itemPrice = getCurrentPrice(item.product, item.selectedShade, item.selectedSize);
     return acc + itemPrice * item.quantity;
   }, 0);
 
-  const discountAmount = appliedCoupon
+  // App.tsx auto-clears appliedCoupon once subtotal drops below its
+  // minOrderValue, but that revalidation runs in a useEffect one tick after
+  // the cart state changes — this guard closes that render-timing gap so the
+  // discount is never shown/applied for a coupon that no longer qualifies.
+  const isCouponEligible = !!appliedCoupon && subtotal >= (appliedCoupon.minOrderValue || 0);
+  const discountAmount = isCouponEligible && appliedCoupon
     ? appliedCoupon.discountType === 'percentage'
       ? Math.round((subtotal * appliedCoupon.discountValue) / 100)
       : appliedCoupon.discountValue
     : 0;
 
-  const isShippingFree = subtotal >= FREE_SHIPPING_THRESHOLD || appliedCoupon?.code === 'PRIVESHIP';
+  const isShippingFree = subtotal >= FREE_SHIPPING_THRESHOLD || (isCouponEligible && appliedCoupon?.code === 'PRIVESHIP');
   const shippingFee = cartItems.length === 0 ? 0 : isShippingFree ? 0 : STANDARD_SHIPPING_FEE;
   const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee);
 
@@ -225,7 +240,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
               {/* 2. Items List */}
               <div className="space-y-4">
                 {cartItems.map((item, index) => {
-                  const itemPrice = item.selectedSize === '30g' ? 549 : item.product.price;
+                  const itemPrice = getCurrentPrice(item.product, item.selectedShade, item.selectedSize);
                   const itemTotal = itemPrice * item.quantity;
                   const isWishlisted = wishlist.includes(item.product.id);
 
@@ -385,7 +400,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                             {item.product.name}
                           </h4>
                           <p className="text-xs text-[#6B6B6B] mt-0.5">
-                            {item.selectedShade ? `Shade: ${item.selectedShade.name}` : item.selectedSize ? `Size: ${item.selectedSize}` : ''} • ₹{item.product.price} • Qty: {item.quantity}
+                            {item.selectedShade ? `Shade: ${item.selectedShade.name}` : item.selectedSize ? `Size: ${item.selectedSize}` : ''} • ₹{getCurrentPrice(item.product, item.selectedShade, item.selectedSize)} • Qty: {item.quantity}
                           </p>
                           <div className="flex items-center gap-4 mt-2 text-[11px] font-medium tracking-wider uppercase">
                             <button
@@ -554,7 +569,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                     HAVE A PROMO CODE?
                   </label>
                   
-                  {appliedCoupon ? (
+                  {appliedCoupon && isCouponEligible ? (
                     <div className="p-3 bg-[#FAF9F6] border border-[#C9972B]/40 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Tag className="w-4 h-4 text-[#C9972B]" />

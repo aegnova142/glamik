@@ -47,9 +47,14 @@ export const AdminBlog: React.FC = () => {
   };
 
   const handleCreateArticle = () => {
+    const uid = Date.now();
     const newArt: JournalArticle = {
-      id: 'article-' + Date.now(),
-      slug: 'new-editorial-study',
+      id: 'article-' + uid,
+      // Unique per article — a repeated hardcoded slug here previously
+      // meant every new article silently collided with the last one on
+      // any slug-based lookup/route.
+      slug: 'new-editorial-study-' + uid,
+      status: 'draft',
       title: 'The Chemistry of Warm Lip Pigmentation',
       subtitle: '',
       category: 'BEAUTY GUIDES',
@@ -198,15 +203,45 @@ export const AdminBlog: React.FC = () => {
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                Publish Date
+              </label>
+              <input
+                type="text"
+                value={editingArticle.date}
+                onChange={(e) => setEditingArticle({ ...editingArticle, date: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                Status
+              </label>
+              <select
+                value={editingArticle.status || 'published'}
+                onChange={(e) => setEditingArticle({ ...editingArticle, status: e.target.value as 'draft' | 'published' })}
+                className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+              >
+                <option value="draft">Draft (hidden from storefront)</option>
+                <option value="published">Published</option>
+              </select>
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-              Publish Date
+              Slug <span className="normal-case text-[#6B6B6B]">(used in the article URL)</span>
             </label>
             <input
               type="text"
-              value={editingArticle.date}
-              onChange={(e) => setEditingArticle({ ...editingArticle, date: e.target.value })}
-              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+              value={editingArticle.slug || ''}
+              onChange={(e) =>
+                setEditingArticle({ ...editingArticle, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-') })
+              }
+              placeholder="e.g. find-your-signature-shade"
+              className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] font-mono"
             />
           </div>
 
@@ -276,6 +311,31 @@ export const AdminBlog: React.FC = () => {
             />
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#E8D5A8]/10">
+            <div>
+              <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                SEO Title <span className="normal-case text-[#6B6B6B]">(optional — falls back to Article Title)</span>
+              </label>
+              <input
+                type="text"
+                value={editingArticle.seoTitle || ''}
+                onChange={(e) => setEditingArticle({ ...editingArticle, seoTitle: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                SEO Description <span className="normal-case text-[#6B6B6B]">(optional — falls back to Excerpt)</span>
+              </label>
+              <input
+                type="text"
+                value={editingArticle.seoDescription || ''}
+                onChange={(e) => setEditingArticle({ ...editingArticle, seoDescription: e.target.value })}
+                className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+              />
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-[#E8D5A8]/10">
             <label className="flex items-center gap-2 text-xs text-[#FAF9F6] cursor-pointer">
               <input
@@ -293,7 +353,7 @@ export const AdminBlog: React.FC = () => {
                 onChange={(e) => setEditingArticle({ ...editingArticle, isHero: e.target.checked })}
                 className="accent-[#C9972B]"
               />
-              Featured Hero Story
+              Featured Hero Story <span className="normal-case text-[#6B6B6B]">(only one article can be featured at a time — saving this unfeatures any other)</span>
             </label>
             <label className="flex items-center gap-2 text-xs text-[#FAF9F6] cursor-pointer">
               <input
@@ -388,6 +448,9 @@ export const AdminBlog: React.FC = () => {
             <div className="h-44 relative bg-[#0B0B0B]">
               <img src={art.image} alt={art.title} className="w-full h-full object-cover" />
               <div className="absolute top-2 left-2 flex gap-1.5">
+                {art.status === 'draft' && (
+                  <span className="px-2 py-0.5 bg-[#6B6B6B] text-white text-[9px] font-bold uppercase tracking-wider rounded-full">Draft</span>
+                )}
                 {art.isHero && (
                   <span className="px-2 py-0.5 bg-[#F05A7E] text-white text-[9px] font-bold uppercase tracking-wider rounded-full">Hero</span>
                 )}

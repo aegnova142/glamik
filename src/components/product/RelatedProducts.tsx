@@ -2,6 +2,7 @@ import React from 'react';
 import { Product, Shade, CartItem } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { ProductCard } from './ProductCard';
+import { useCMS } from '../../context/CMSContext';
 
 interface RelatedProductsProps {
   currentProduct: Product;
@@ -26,8 +27,10 @@ export const RelatedProducts: React.FC<RelatedProductsProps> = ({
   onGoToCart,
   onBuyNow,
 }) => {
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
   const relatedProducts = currentProduct.relatedProductIds
-    .map((id) => GLAMIRK_PRODUCTS.find((p) => p.id === id))
+    .map((id) => catalogProducts.find((p) => p.id === id))
     .filter(Boolean) as Product[];
 
   if (relatedProducts.length === 0) return null;

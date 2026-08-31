@@ -15,6 +15,16 @@ export const ShadeSelector: React.FC<ShadeSelectorProps> = ({
   onSelectShade,
   onOpenShadeFinder,
 }) => {
+  // Hide shades the admin has paused — unless that would hide every shade
+  // (e.g. legacy data with no isActive field set), in which case show them
+  // all rather than leave the selector empty.
+  const visibleShades = shades.some((s) => s.isActive !== false)
+    ? shades.filter((s) => s.isActive !== false)
+    : shades;
+  const selectedStock = selectedShade.stock;
+  const isLowStock = typeof selectedStock === 'number' && selectedStock > 0 && selectedStock <= 5;
+  const isOutOfStock = typeof selectedStock === 'number' && selectedStock <= 0;
+
   return (
     <div className="space-y-3.5 py-4 border-t border-b border-[#E8D5A8]">
       <div className="flex items-center justify-between">
@@ -44,7 +54,7 @@ export const ShadeSelector: React.FC<ShadeSelectorProps> = ({
 
       {/* Swatches Grid */}
       <div className="flex items-center gap-3 flex-wrap pt-1">
-        {shades.map((shade) => {
+        {visibleShades.map((shade) => {
           const isSelected = selectedShade.id === shade.id;
           return (
             <button
@@ -67,6 +77,12 @@ export const ShadeSelector: React.FC<ShadeSelectorProps> = ({
       <p className="text-xs text-[#6B6B6B] bg-[#FCE8ED] p-3 rounded-2xl border border-[#E8D5A8] leading-relaxed">
         {selectedShade.description}
       </p>
+
+      {(isLowStock || isOutOfStock) && (
+        <p className={`text-[11px] font-bold ${isOutOfStock ? 'text-[#F05A7E]' : 'text-[#C9972B]'}`}>
+          {isOutOfStock ? 'Out of stock' : `Only ${selectedStock} left`}
+        </p>
+      )}
     </div>
   );
 };

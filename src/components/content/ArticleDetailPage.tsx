@@ -43,8 +43,11 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [activeSectionId, setActiveSectionId] = useState<string>('');
-  const { journalArticles, looks } = useCMS();
-  const articles = journalArticles && journalArticles.length > 0 ? journalArticles : GLAMIRK_JOURNAL_ARTICLES_EXTENDED;
+  const { journalArticles, looks, products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+  const articles = (journalArticles && journalArticles.length > 0 ? journalArticles : GLAMIRK_JOURNAL_ARTICLES_EXTENDED).filter(
+    (a) => a.status !== 'draft'
+  );
   const looksList = looks && looks.length > 0 ? looks : GLAMIRK_LOOKS;
 
   const article = articles.find((a) => a.id === articleId) || articles[0];
@@ -81,7 +84,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
   };
 
   // Find shoppable products
-  const shoppableProducts = GLAMIRK_PRODUCTS.filter((p) =>
+  const shoppableProducts = catalogProducts.filter((p) =>
     article.shoppableProductIds?.includes(p.id)
   );
 
@@ -224,7 +227,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
           {article.sections && article.sections.length > 0 ? (
             article.sections.map((section, sIdx) => {
               const matchingProduct = section.shoppableProductId
-                ? GLAMIRK_PRODUCTS.find((p) => p.id === section.shoppableProductId)
+                ? catalogProducts.find((p) => p.id === section.shoppableProductId)
                 : null;
               const matchingShade = (matchingProduct && section.shoppableShadeId)
                 ? matchingProduct.shades?.find((s) => s.id === section.shoppableShadeId)

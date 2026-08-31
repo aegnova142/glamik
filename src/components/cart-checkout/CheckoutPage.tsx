@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CartItem, Address, Order, Coupon, PaymentMethodType } from '../../types';
+import { getCurrentPrice } from '../../utils/productVariant';
 import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE } from '../../data/commerce';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
@@ -135,17 +136,22 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   // Financial Calculations
   const subtotal = cartItems.reduce((acc, item) => {
-    const itemPrice = item.selectedSize === '30g' ? 549 : item.product.price;
+    const itemPrice = getCurrentPrice(item.product, item.selectedShade, item.selectedSize);
     return acc + itemPrice * item.quantity;
   }, 0);
 
-  const discountAmount = appliedCoupon
+  // App.tsx auto-clears appliedCoupon once subtotal drops below its
+  // minOrderValue, but that revalidation runs in a useEffect one tick after
+  // cart state changes — this guard closes that render-timing gap so the
+  // discount is never shown/applied for a coupon that no longer qualifies.
+  const isCouponEligible = !!appliedCoupon && subtotal >= (appliedCoupon.minOrderValue || 0);
+  const discountAmount = isCouponEligible && appliedCoupon
     ? appliedCoupon.discountType === 'percentage'
       ? Math.round((subtotal * appliedCoupon.discountValue) / 100)
       : appliedCoupon.discountValue
     : 0;
 
-  const isShippingFree = subtotal >= FREE_SHIPPING_THRESHOLD || appliedCoupon?.code === 'PRIVESHIP';
+  const isShippingFree = subtotal >= FREE_SHIPPING_THRESHOLD || (isCouponEligible && appliedCoupon?.code === 'PRIVESHIP');
   const shippingFee = cartItems.length === 0 || isShippingFree ? 0 : STANDARD_SHIPPING_FEE;
   const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee);
 
@@ -251,7 +257,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       customerPhone,
       customerEmail,
       paymentMethod,
-      couponCode: appliedCoupon?.code,
+      couponCode: isCouponEligible ? appliedCoupon?.code : undefined,
       upiId: paymentMethod === 'upi' ? upiId.trim() : undefined,
       cardNumber: paymentMethod === 'card' ? cardNumber.replace(/\D/g, '') : undefined,
       bankName: paymentMethod === 'netbanking' ? bankName : undefined,
@@ -995,7 +1001,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </span>
                   <div className="divide-y divide-[#E8D5A8] border border-[#E8D5A8] bg-[#FAF9F6]">
                     {cartItems.map((item, i) => {
-                      const itemPrice = item.selectedSize === '30g' ? 549 : item.product.price;
+                      const itemPrice = getCurrentPrice(item.product, item.selectedShade, item.selectedSize);
                       return (
                         <div key={i} className="p-3.5 flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
@@ -1086,7 +1092,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               {/* Items List Preview */}
               <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
                 {cartItems.map((item, index) => {
-                  const itemPrice = item.selectedSize === '30g' ? 549 : item.product.price;
+                  const itemPrice = getCurrentPrice(item.product, item.selectedShade, item.selectedSize);
                   return (
                     <div key={index} className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2.5">

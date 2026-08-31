@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, ShoppingBag, Plus, Minus, Trash2, ArrowRight, Sparkles, ShieldCheck } from 'lucide-react';
 import { CartItem } from '../../types';
+import { getCurrentPrice } from '../../utils/productVariant';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -27,7 +28,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [promoApplied, setPromoApplied] = useState(false);
 
   const subtotal = cartItems.reduce((sum, item) => {
-    const price = item.product.price || 0;
+    const price = getCurrentPrice(item.product, item.selectedShade, item.selectedSize) || 0;
     return sum + price * item.quantity;
   }, 0);
 
@@ -204,7 +205,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         </div>
 
                         <span className="text-sm font-bold text-[#121212]">
-                          {item.product.currency || '₹'}{(item.product.price || 0) * item.quantity}
+                          {item.product.currency || '₹'}{(getCurrentPrice(item.product, item.selectedShade, item.selectedSize) || 0) * item.quantity}
                         </span>
                       </div>
                     </div>

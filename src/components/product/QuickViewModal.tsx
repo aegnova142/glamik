@@ -2,6 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Heart, ShoppingBag, Sparkles, Check, ChevronRight, ShieldCheck } from 'lucide-react';
 import { Product, Shade } from '../../types';
+import { resolveVariantGallery, getCurrentPrice, getDefaultShade, getActiveSizeOptions } from '../../utils/productVariant';
+
+/** The size to preselect for a given shade: that shade's own first size
+ * option if it has any, else the product-level default for shade-less
+ * products. */
+function defaultSizeFor(product: Product, shade: Shade | undefined): string | undefined {
+  const options = getActiveSizeOptions(product, shade);
+  if (options.length > 0) return options[0].label;
+  if (shade) return undefined;
+  return product.selectedSize || (product.sizes ? product.sizes[0] : undefined);
+}
 
 interface QuickViewModalProps {
   product: Product | null;
@@ -34,24 +45,33 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
 
   useEffect(() => {
     if (product) {
-      setSelectedShade(product.shades ? product.shades[0] : undefined);
-      setSelectedSize(product.selectedSize || (product.sizes ? product.sizes[0] : undefined));
+      const defaultShade = getDefaultShade(product);
+      setSelectedShade(defaultShade);
+      setSelectedSize(defaultSizeFor(product, defaultShade));
       setActiveImageIndex(0);
       setQuantity(1);
       setActiveTab('DESCRIPTION');
     }
   }, [product]);
 
+  // A different shade can have a different image count (and its own size
+  // list) — always land back on its primary image and re-derive the
+  // selected size rather than carrying over stale state from the last shade.
+  const handleSelectShade = (shade: Shade) => {
+    setSelectedShade(shade);
+    setSelectedSize(product ? defaultSizeFor(product, shade) : undefined);
+  };
+
+  useEffect(() => {
+    setActiveImageIndex(0);
+  }, [selectedShade]);
+
   if (!product) return null;
 
-  const imagesList = [
-    product.images.primary,
-    product.images.secondary,
-    product.images.detail,
-    product.images.texture,
-  ].filter(Boolean) as string[];
+  const imagesList = resolveVariantGallery(product, selectedShade).map((img) => img.url);
 
-  const currentPrice = selectedSize === '30g' ? 549 : product.price;
+  const currentPrice = getCurrentPrice(product, selectedShade, selectedSize);
+  const activeSizeOptions = getActiveSizeOptions(product, selectedShade);
 
   return (
     <AnimatePresence>
@@ -187,35 +207,6 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                   </span>
                 </div>
 
-                {/* Size Selector for Cleansers */}
-                {product.sizes && (
-                  <div className="space-y-2 pt-1">
-                    <label className="text-xs uppercase tracking-wider text-[#6B6B6B] font-bold block">
-                      Select Size:
-                    </label>
-                    <div className="grid grid-cols-2 gap-3">
-                      {product.sizes.map((size) => (
-                        <button
-                          key={size}
-                          onClick={() => setSelectedSize(size)}
-                          className={`p-3 text-left rounded-2xl border transition-all cursor-pointer ${
-                            selectedSize === size
-                              ? 'border-[#F05A7E] bg-[#FCE8ED] shadow-xs'
-                              : 'border-[#E8D5A8] bg-white text-[#6B6B6B] hover:border-[#F05A7E]/50'
-                          }`}
-                        >
-                          <span className="text-xs font-bold text-[#121212] block">
-                            {size} {size === '30g' ? 'Discovery Format' : 'Ritual Jar'}
-                          </span>
-                          <span className="text-[10.5px] text-[#6B6B6B] block mt-0.5">
-                            {size === '30g' ? '₹549' : '₹849'}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {/* Shade Swatch Selector */}
                 {product.shades && (
                   <div className="space-y-2 pt-1">
@@ -229,10 +220,13 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2.5 flex-wrap">
-                      {product.shades.map((shade) => (
+                      {(product.shades.some((s) => s.isActive !== false)
+                        ? product.shades.filter((s) => s.isActive !== false)
+                        : product.shades
+                      ).map((shade) => (
                         <button
                           key={shade.id}
-                          onClick={() => setSelectedShade(shade)}
+                          onClick={() => handleSelectShade(shade)}
                           className={`w-7 h-7 rounded-full border transition-all cursor-pointer ${
                             selectedShade?.id === shade.id
                               ? 'border-[#F05A7E] scale-110 ring-2 ring-[#F05A7E]/40'
@@ -251,6 +245,39 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       </p>
                     )}
                   </div>
+                )}
+
+                {/* Size Selector — from the selected shade's own sizes when
+                    it has any, else the shade-less product's own sizes. */}
+                {activeSizeOptions.length > 1 && (
+                  <div className="space-y-2 pt-1">
+                    <label className="text-xs uppercase tracking-wider text-[#6B6B6B] font-bold block">
+                      Select Size:
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {activeSizeOptions.map((opt) => (
+                        <button
+                          key={opt.id}
+                          onClick={() => setSelectedSize(opt.label)}
+                          className={`p-3 text-left rounded-2xl border transition-all cursor-pointer ${
+                            selectedSize === opt.label
+                              ? 'border-[#F05A7E] bg-[#FCE8ED] shadow-xs'
+                              : 'border-[#E8D5A8] bg-white text-[#6B6B6B] hover:border-[#F05A7E]/50'
+                          }`}
+                        >
+                          <span className="text-xs font-bold text-[#121212] block">{opt.label}</span>
+                          <span className="text-[10.5px] text-[#6B6B6B] block mt-0.5">
+                            {product.currency}{opt.price}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {activeSizeOptions.length === 1 && (
+                  <p className="text-[11px] text-[#6B6B6B] pt-1">
+                    Size: <span className="font-bold text-[#121212]">{activeSizeOptions[0].label}</span>
+                  </p>
                 )}
 
                 {/* Detail Tabs */}

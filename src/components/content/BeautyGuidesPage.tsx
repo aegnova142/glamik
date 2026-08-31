@@ -16,6 +16,7 @@ import { GLAMIRK_BEAUTY_GUIDES } from '../../data/editorial';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { updatePageSeo } from '../../utils/seo';
 import { trackEvent } from '../../utils/analytics';
+import { useCMS } from '../../context/CMSContext';
 
 interface BeautyGuidesPageProps {
   initialGuideId?: string;
@@ -51,7 +52,9 @@ export const BeautyGuidesPage: React.FC<BeautyGuidesPageProps> = ({
     trackEvent('guide_view', { guideId: activeGuide.id, title: activeGuide.title });
   }, [activeGuide.id]);
 
-  const activeProducts = GLAMIRK_PRODUCTS.filter((p) =>
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+  const activeProducts = catalogProducts.filter((p) =>
     activeGuide.shoppableProductIds.includes(p.id)
   );
 
@@ -165,7 +168,7 @@ export const BeautyGuidesPage: React.FC<BeautyGuidesPageProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {activeGuide.steps.map((step) => {
                   const stepProduct = step.recommendedProductId
-                    ? GLAMIRK_PRODUCTS.find((p) => p.id === step.recommendedProductId)
+                    ? catalogProducts.find((p) => p.id === step.recommendedProductId)
                     : null;
                   const stepShade = (stepProduct && step.recommendedShadeId)
                     ? stepProduct.shades?.find((s) => s.id === step.recommendedShadeId)

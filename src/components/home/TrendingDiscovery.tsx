@@ -18,8 +18,9 @@ export const TrendingDiscovery: React.FC<TrendingDiscoveryProps> = ({
   onOpenLook,
   onOpenArticle,
 }) => {
-  const { looks } = useCMS();
-  const trendingProduct = GLAMIRK_PRODUCTS[0];
+  const { looks, products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+  const trendingProduct = catalogProducts[0];
   const trendingLook = (looks && looks.length > 0 ? looks : GLAMIRK_LOOKS)[0];
   const trendingArticle = GLAMIRK_JOURNAL_ARTICLES_EXTENDED[0];
 

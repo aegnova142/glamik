@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Play, Pause, Volume2, VolumeX, Sparkles, ShoppingBag, ArrowRight } from 'lucide-react';
 import { Product, Shade } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
+import { useCMS } from '../../context/CMSContext';
 
 interface WatchTheGlamModalProps {
   isOpen: boolean;
@@ -15,12 +16,15 @@ interface WatchTheGlamModalProps {
 export const WatchTheGlamModal: React.FC<WatchTheGlamModalProps> = ({
   isOpen,
   onClose,
-  product = GLAMIRK_PRODUCTS[0],
+  product: productProp,
   videoTitle,
   onAddToCart,
 }) => {
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+  const product = productProp ?? catalogProducts[0];
 
   if (!isOpen || !product) return null;
 

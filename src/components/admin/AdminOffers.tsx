@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useCMS } from '../../context/CMSContext';
-import { CMSOffer } from '../../types';
+import { CMSOffer, PromotionNotificationSettings, DEFAULT_PROMO_NOTIFICATION_MESSAGES, applyPromoMessageTemplate } from '../../types';
 import {
   Tag,
   Plus,
@@ -18,6 +18,9 @@ import {
   ArrowLeft,
   Percent,
   Sparkles,
+  Bell,
+  RotateCcw,
+  Eye,
 } from 'lucide-react';
 import { LiveOfferCountdown } from '../marketing/LiveOfferCountdown';
 
@@ -26,6 +29,35 @@ export const AdminOffers: React.FC = () => {
   const [editingOffer, setEditingOffer] = useState<CMSOffer | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showMessagePreview, setShowMessagePreview] = useState(false);
+
+  const notificationSettings: PromotionNotificationSettings = editingOffer?.notificationSettings || {
+    enabled: false,
+  };
+
+  const updateNotificationSettings = (patch: Partial<PromotionNotificationSettings>) => {
+    if (!editingOffer) return;
+    setEditingOffer({
+      ...editingOffer,
+      notificationSettings: { ...notificationSettings, ...patch },
+    });
+  };
+
+  const handleResetNotificationMessages = () => {
+    if (!window.confirm('Reset all four notification messages back to the Glamirk default copy? The enable/disable toggle is left as-is.')) return;
+    updateNotificationSettings({ ...DEFAULT_PROMO_NOTIFICATION_MESSAGES });
+  };
+
+  const previewVars = editingOffer
+    ? {
+        code: editingOffer.couponCode || 'WELCOME10',
+        minOrder: editingOffer.minOrderValue || 0,
+        subtotal: Math.max(0, (editingOffer.minOrderValue || 0) - 200),
+      }
+    : { code: 'WELCOME10', minOrder: 0, subtotal: 0 };
+
+  const previewMessage = (slot: keyof typeof DEFAULT_PROMO_NOTIFICATION_MESSAGES) =>
+    applyPromoMessageTemplate(notificationSettings[slot] || DEFAULT_PROMO_NOTIFICATION_MESSAGES[slot], previewVars);
 
   const handleCreateOffer = () => {
     const now = new Date();
@@ -150,9 +182,8 @@ export const AdminOffers: React.FC = () => {
                     className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
                   >
                     <option value="percentage">Percentage (%) Off</option>
-                    <option value="fixed_amount">Fixed (₹) Off</option>
+                    <option value="flat">Fixed (₹) Off</option>
                     <option value="gift_with_purchase">Gift With Purchase</option>
-                    <option value="bogo">Buy 1 Get 1 (BOGO)</option>
                   </select>
                 </div>
 
@@ -291,6 +322,123 @@ export const AdminOffers: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Shopper-Facing Notification Messages */}
+        <div className="p-6 rounded-xl bg-[#171717] border border-[#E8D5A8]/30 space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-[#C9972B]" />
+              <h3 className="font-serif text-base text-[#FAF9F6]">Notifications</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="notificationsEnabled"
+                checked={notificationSettings.enabled}
+                onChange={(e) => updateNotificationSettings({ enabled: e.target.checked })}
+                className="rounded border-[#E8D5A8]/30 accent-[#F05A7E] w-4 h-4 cursor-pointer"
+              />
+              <label htmlFor="notificationsEnabled" className="text-xs text-[#FAF9F6] cursor-pointer font-semibold">
+                Enable Promotion Notifications
+              </label>
+            </div>
+          </div>
+          <p className="text-[11px] text-[#6B6B6B]">
+            Customize the copy shoppers see for this specific promotion. Leave a field blank, or leave the toggle
+            off, and Glamirk's default message is used instead. Placeholders: <code className="text-[#C9972B]">{'{code}'}</code>,{' '}
+            <code className="text-[#C9972B]">{'{minOrder}'}</code>, <code className="text-[#C9972B]">{'{amountNeeded}'}</code>.
+          </p>
+
+          <fieldset disabled={!notificationSettings.enabled} className="space-y-4 disabled:opacity-40">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                  Success Message
+                </label>
+                <textarea
+                  rows={2}
+                  value={notificationSettings.successMessage || ''}
+                  placeholder={DEFAULT_PROMO_NOTIFICATION_MESSAGES.successMessage}
+                  onChange={(e) => updateNotificationSettings({ successMessage: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                  Eligibility Warning Message
+                </label>
+                <textarea
+                  rows={2}
+                  value={notificationSettings.eligibilityWarningMessage || ''}
+                  placeholder={DEFAULT_PROMO_NOTIFICATION_MESSAGES.eligibilityWarningMessage}
+                  onChange={(e) => updateNotificationSettings({ eligibilityWarningMessage: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                  Auto-Removal Message
+                </label>
+                <textarea
+                  rows={2}
+                  value={notificationSettings.autoRemovalMessage || ''}
+                  placeholder={DEFAULT_PROMO_NOTIFICATION_MESSAGES.autoRemovalMessage}
+                  onChange={(e) => updateNotificationSettings({ autoRemovalMessage: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
+                  Error Message
+                </label>
+                <textarea
+                  rows={2}
+                  value={notificationSettings.errorMessage || ''}
+                  placeholder={DEFAULT_PROMO_NOTIFICATION_MESSAGES.errorMessage}
+                  onChange={(e) => updateNotificationSettings({ errorMessage: e.target.value })}
+                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                />
+              </div>
+            </div>
+          </fieldset>
+
+          <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowMessagePreview((v) => !v)}
+              className="flex items-center gap-1.5 text-[11px] text-[#C9972B] hover:underline font-semibold uppercase tracking-wider cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>{showMessagePreview ? 'Hide' : 'Show'} Message Preview</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleResetNotificationMessages}
+              className="flex items-center gap-1.5 text-[11px] text-[#6B6B6B] hover:text-[#F05A7E] font-semibold uppercase tracking-wider cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset to Default</span>
+            </button>
+          </div>
+
+          {showMessagePreview && (
+            <div className="p-4 rounded-lg bg-[#0B0B0B] border border-[#E8D5A8]/20 space-y-2.5">
+              <span className="text-[10px] text-[#6B6B6B] uppercase tracking-wider">
+                Preview — example: code {previewVars.code}, ₹{previewVars.minOrder} minimum, shopper currently at ₹
+                {previewVars.subtotal}
+              </span>
+              <div className="text-xs text-[#FAF9F6] space-y-1.5">
+                <p><span className="text-[#C9972B] font-semibold">Success:</span> {previewMessage('successMessage')}</p>
+                <p><span className="text-[#C9972B] font-semibold">Eligibility Warning:</span> {previewMessage('eligibilityWarningMessage')}</p>
+                <p><span className="text-[#C9972B] font-semibold">Auto-Removal:</span> {previewMessage('autoRemovalMessage')}</p>
+                <p><span className="text-[#C9972B] font-semibold">Error:</span> {previewMessage('errorMessage')}</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );

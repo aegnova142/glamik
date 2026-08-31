@@ -19,7 +19,8 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
   onSelectProduct,
   onOpenShadeFinder,
 }) => {
-  const { looks, activeOffers } = useCMS();
+  const { looks, activeOffers, products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
   const displayLooks = looks && looks.length > 0 ? looks : GLAMIRK_LOOKS;
   const [selectedFilter, setSelectedFilter] = useState<string>('ALL');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -149,7 +150,7 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 space-y-16">
         {filteredLooks.map((look) => {
           const resolvedProducts = look.productsUsed.map((item) => {
-            const prod = GLAMIRK_PRODUCTS.find((p) => p.id === item.productId) || GLAMIRK_PRODUCTS[0];
+            const prod = catalogProducts.find((p) => p.id === item.productId) || catalogProducts[0];
             const matchingShade = prod.shades?.find((s) => s.name === item.shadeName) || prod.shades?.[0];
             return {
               product: prod,

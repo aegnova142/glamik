@@ -20,6 +20,7 @@ import {
   CMSHeroContent,
   CMSAboutContent,
   CMSBenefit,
+  TryOnModelPreset,
   Look,
   CMSShadeJourney,
   CMSBenefitsSection,
@@ -50,6 +51,7 @@ export interface CMSContextType {
   shadeJourney: CMSShadeJourney | null;
   benefitsSection: CMSBenefitsSection | null;
   benefits: CMSBenefit[];
+  tryOnModels: TryOnModelPreset[];
   looks: Look[];
   offers: CMSOffer[];
   promoBanners: CMSPromoBannerConfig | null;
@@ -100,6 +102,8 @@ export interface CMSContextType {
   saveBenefitsSection: (section: CMSBenefitsSection) => Promise<boolean>;
   saveBenefit: (benefit: Partial<CMSBenefit>) => Promise<boolean>;
   deleteBenefit: (id: string) => Promise<boolean>;
+  saveTryOnModel: (model: Partial<TryOnModelPreset>) => Promise<boolean>;
+  deleteTryOnModel: (id: string) => Promise<boolean>;
   saveLook: (look: Partial<Look>) => Promise<boolean>;
   deleteLook: (id: string) => Promise<boolean>;
   saveArticle: (article: Partial<JournalArticle>) => Promise<boolean>;
@@ -191,6 +195,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [shadeJourney, setShadeJourney] = useState<CMSShadeJourney | null>(null);
   const [benefitsSection, setBenefitsSection] = useState<CMSBenefitsSection | null>(null);
   const [benefits, setBenefits] = useState<CMSBenefit[]>([]);
+  const [tryOnModels, setTryOnModels] = useState<TryOnModelPreset[]>([]);
   const [looks, setLooks] = useState<Look[]>(GLAMIRK_LOOKS);
   const [offers, setOffers] = useState<CMSOffer[]>([]);
   const [promoBanners, setPromoBanners] = useState<CMSPromoBannerConfig | null>(null);
@@ -251,6 +256,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (res.data.shadeJourney) setShadeJourney(res.data.shadeJourney);
         if (res.data.benefitsSection) setBenefitsSection(res.data.benefitsSection);
         if (res.data.benefits) setBenefits(res.data.benefits);
+        if (res.data.tryOnModels) setTryOnModels(res.data.tryOnModels);
         if (res.data.looks) setLooks(res.data.looks);
         if (res.data.offers) setOffers(res.data.offers);
         if (res.data.promoBanners) setPromoBanners(res.data.promoBanners);
@@ -585,6 +591,26 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
+  const saveTryOnModel = async (model: Partial<TryOnModelPreset>): Promise<boolean> => {
+    const endpoint = model.id && tryOnModels.some((m) => m.id === model.id) ? `/api/admin/try-on-models/${model.id}` : '/api/admin/try-on-models';
+    const method = model.id && tryOnModels.some((m) => m.id === model.id) ? 'PUT' : 'POST';
+    const res = await apiFetch(endpoint, { method, body: JSON.stringify(model) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
+  const deleteTryOnModel = async (id: string): Promise<boolean> => {
+    const res = await apiFetch(`/api/admin/try-on-models/${id}`, { method: 'DELETE' });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
   const saveLook = async (look: Partial<Look>): Promise<boolean> => {
     const endpoint = look.id && looks.some((l) => l.id === look.id) ? `/api/admin/looks/${look.id}` : '/api/admin/looks';
     const method = look.id && looks.some((l) => l.id === look.id) ? 'PUT' : 'POST';
@@ -700,6 +726,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     shadeJourney,
     benefitsSection,
     benefits,
+    tryOnModels,
     looks,
     offers,
     promoBanners,
@@ -744,6 +771,8 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     saveBenefitsSection,
     saveBenefit,
     deleteBenefit,
+    saveTryOnModel,
+    deleteTryOnModel,
     saveLook,
     deleteLook,
     saveArticle,

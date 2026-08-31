@@ -53,7 +53,8 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
   onToggleWishlist,
   wishlist,
 }) => {
-  const { shadeJourney, findMyShadeResultsCopy, findMyShadeHero } = useCMS();
+  const { shadeJourney, findMyShadeResultsCopy, findMyShadeHero, products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
   const resultsCopy = findMyShadeResultsCopy || {
     resultsBadge: 'YOUR GLAMIRK MATCH',
     resultsHeading: 'YOUR PERSONAL BEAUTY EDIT',
@@ -188,7 +189,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
         capturedPhoto: capturedPhoto || undefined,
         savedAt: new Date().toISOString(),
       };
-      const result = generateBeautyMatch(profile);
+      const result = generateBeautyMatch(profile, catalogProducts);
       setMatchResult(result);
       setCurrentStep(8); // Results view
     }, 1600);
@@ -825,6 +826,18 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
               Finding formulations and shades calibrated for your {skinTone.toLowerCase()} skin tone with {undertone.toLowerCase()} undertones.
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Genuine empty state — the catalog currently has no active,
+          in-stock shaded products to recommend from. Never fabricate a
+          match here. */}
+      {currentStep === 8 && !matchResult && (
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24 text-center space-y-4">
+          <h2 className="font-serif text-2xl text-[#121212]">No Shades Available Right Now</h2>
+          <p className="text-sm text-[#6B6B6B]">
+            We couldn't find any active shade formulations to match against. Please check back soon or explore the full shop.
+          </p>
         </div>
       )}
 

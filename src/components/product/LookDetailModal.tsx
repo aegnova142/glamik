@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, ShoppingBag, Sparkles, ArrowRight } from 'lucide-react';
 import { Look, Product, Shade } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
+import { useCMS } from '../../context/CMSContext';
 
 interface LookDetailModalProps {
   look: Look | null;
@@ -17,10 +18,13 @@ export const LookDetailModal: React.FC<LookDetailModalProps> = ({
   onClose,
   onAddLookToBag
 }) => {
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+
   if (!look) return null;
 
   const resolvedProducts = look.productsUsed.map((item) => {
-    const prod = GLAMIRK_PRODUCTS.find((p) => p.id === item.productId) || GLAMIRK_PRODUCTS[0];
+    const prod = catalogProducts.find((p) => p.id === item.productId) || catalogProducts[0];
     const matchingShade = prod.shades?.find((s) => s.name === item.shadeName) || prod.shades?.[0];
     return {
       product: prod,

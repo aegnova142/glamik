@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { Sparkles, ArrowRight, Camera, Check, RotateCcw, Heart } from 'lucide-react';
 import { BeautyProfile, Product, Shade } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
+import { useCMS } from '../../context/CMSContext';
 
 interface PersonalizedHomeBannerProps {
   beautyProfile: BeautyProfile | null;
@@ -74,7 +75,9 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
 }) => {
   const [selectedUndertone, setSelectedUndertone] = useState<'Warm' | 'Neutral' | 'Cool' | 'Olive'>('Warm');
   
-  const lipstickProduct = GLAMIRK_PRODUCTS.find((p) => p.id === 'matte-liquid-lipstick-collection') || GLAMIRK_PRODUCTS[0];
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+  const lipstickProduct = catalogProducts.find((p) => p.id === 'matte-liquid-lipstick-collection') || catalogProducts[0];
 
   // Case 1: User already completed Diagnostic / has a stored profile
   if (beautyProfile) {

@@ -47,6 +47,7 @@ import {
 } from '../../data/commerce';
 import { AuthModal } from './AuthModal';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { useCMS } from '../../context/CMSContext';
 
 interface MyGlamDashboardProps {
   profile: BeautyProfile | null;
@@ -114,6 +115,10 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>('PROFILE');
   const [orderStatusFilter, setOrderStatusFilter] = useState<'ALL' | 'ACTIVE' | 'DELIVERED' | 'CANCELLED' | 'RETURNED'>('ALL');
   const [loyalty, setLoyalty] = useState<LoyaltyAccount>(DEFAULT_LOYALTY);
+  // Live, admin-controlled catalog — GLAMIRK_PRODUCTS is only the seed
+  // fallback for a not-yet-populated CMS, never the primary source.
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
 
   // Authentication Modal State — real identity comes from CustomerAuthContext (Postgres-backed)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -174,7 +179,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
 
   // Review Modal State
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
-  const [selectedProductForReview, setSelectedProductForReview] = useState<Product>(GLAMIRK_PRODUCTS[0]);
+  const [selectedProductForReview, setSelectedProductForReview] = useState<Product>(catalogProducts[0]);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewTitle, setReviewTitle] = useState('');
   const [reviewComment, setReviewComment] = useState('');
@@ -190,9 +195,9 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
   const [returnError, setReturnError] = useState<string | null>(null);
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
 
-  const wishlistedProducts = GLAMIRK_PRODUCTS.filter((p) => wishlist.includes(p.id));
-  const recentProducts = GLAMIRK_PRODUCTS.filter((p) => recentlyViewedIds.includes(p.id));
-  const lipstick = GLAMIRK_PRODUCTS.find((p) => p.id === 'matte-liquid-lipstick-collection') || GLAMIRK_PRODUCTS[0];
+  const wishlistedProducts = catalogProducts.filter((p) => wishlist.includes(p.id));
+  const recentProducts = catalogProducts.filter((p) => recentlyViewedIds.includes(p.id));
+  const lipstick = catalogProducts.find((p) => p.id === 'matte-liquid-lipstick-collection') || catalogProducts[0];
 
   const handleCopyReferral = () => {
     navigator.clipboard?.writeText(`https://glamirk.com/invite/${loyalty.referralCode}`);
@@ -454,7 +459,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {GLAMIRK_PRODUCTS.map((prod) => (
+                    {catalogProducts.map((prod) => (
                       <div
                         key={prod.id}
                         className="p-5 bg-white border border-[#E8D5A8] flex flex-col justify-between space-y-4 group"
@@ -686,7 +691,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                         <div className="flex items-center gap-3">
                           <button
                             onClick={() => {
-                              const prod = GLAMIRK_PRODUCTS.find((p) => p.id === item.productId) || GLAMIRK_PRODUCTS[0];
+                              const prod = catalogProducts.find((p) => p.id === item.productId) || catalogProducts[0];
                               onAddToBag(prod, item.shade, item.size);
                             }}
                             className="px-3 py-1.5 border border-[#0B0B0B] text-[#121212] text-[11px] font-semibold tracking-wider uppercase hover:bg-[#0B0B0B] hover:text-white transition-colors cursor-pointer"
@@ -696,7 +701,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
 
                           <button
                             onClick={() => {
-                              const prod = GLAMIRK_PRODUCTS.find((p) => p.id === item.productId) || GLAMIRK_PRODUCTS[0];
+                              const prod = catalogProducts.find((p) => p.id === item.productId) || catalogProducts[0];
                               setSelectedProductForReview(prod);
                               setIsReviewModalOpen(true);
                             }}

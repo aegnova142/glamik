@@ -2,12 +2,15 @@ import React from 'react';
 import { Instagram, ArrowUpRight, Sparkles } from 'lucide-react';
 import { Product } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
+import { useCMS } from '../../context/CMSContext';
 
 interface GlamirkOnYouProps {
   onQuickView: (product: Product) => void;
 }
 
 export const GlamirkOnYou: React.FC<GlamirkOnYouProps> = ({ onQuickView }) => {
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
   const socialGallery = [
     {
       id: 'social-1',
@@ -73,7 +76,7 @@ export const GlamirkOnYou: React.FC<GlamirkOnYouProps> = ({ onQuickView }) => {
         {/* Editorial Social Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
           {socialGallery.map((tile) => {
-            const product = GLAMIRK_PRODUCTS.find((p) => p.id === tile.productId) || GLAMIRK_PRODUCTS[0];
+            const product = catalogProducts.find((p) => p.id === tile.productId) || catalogProducts[0];
 
             return (
               <div

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Heart, ShoppingBag, Trash2, ArrowRight } from 'lucide-react';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { Product, Shade } from '../../types';
+import { useCMS } from '../../context/CMSContext';
 
 interface WishlistDrawerProps {
   isOpen: boolean;
@@ -21,7 +22,9 @@ export const WishlistDrawer: React.FC<WishlistDrawerProps> = ({
   onQuickAdd,
   onQuickView
 }) => {
-  const wishlistedProducts = GLAMIRK_PRODUCTS.filter((p) => wishlist.includes(p.id));
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+  const wishlistedProducts = catalogProducts.filter((p) => wishlist.includes(p.id));
 
   return (
     <AnimatePresence>

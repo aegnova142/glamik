@@ -38,7 +38,9 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
   // ever empty, same fallback pattern used by ShopPage and everywhere else
   // that lists products.
   const displayProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
-  const displayArticles = cmsArticles && cmsArticles.length > 0 ? cmsArticles : GLAMIRK_JOURNAL_ARTICLES_EXTENDED;
+  const displayArticles = (cmsArticles && cmsArticles.length > 0 ? cmsArticles : GLAMIRK_JOURNAL_ARTICLES_EXTENDED).filter(
+    (a) => a.status !== 'draft'
+  );
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'ALL' | 'PRODUCTS' | 'GUIDES' | 'STORIES' | 'LOOKS'>('ALL');
 

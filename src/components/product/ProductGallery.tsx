@@ -3,35 +3,35 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, Sparkles, ZoomIn, X } from 'lucide-react';
 
 interface ProductGalleryProps {
-  images: {
-    primary: string;
-    secondary: string;
-    detail?: string;
-    texture?: string;
-    lifestyle?: string;
-    swatch?: string;
-  };
+  images: { url: string; alt?: string }[];
+  /** Changes exactly when the gallery should jump back to its first image —
+   * e.g. when the selected variant/shade changes. Without this, switching
+   * from a variant you were mid-browsing (e.g. viewing image 3 of 4) to one
+   * with fewer images would leave activeIndex pointing past the end of the
+   * new list. */
+  resetKey: string;
   productName: string;
   tag?: string;
 }
 
 export const ProductGallery: React.FC<ProductGalleryProps> = ({
   images,
+  resetKey,
   productName,
   tag,
 }) => {
-  const imagesList = [
-    images.primary,
-    images.secondary,
-    images.detail,
-    images.texture,
-    images.lifestyle,
-    images.swatch,
-  ].filter(Boolean) as string[];
+  const imagesList = images.map((img) => img.url);
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const touchStartX = useRef<number | null>(null);
+
+  // The selected variant/product changed — always land on its primary image
+  // rather than carrying over an index that may not exist in the new gallery.
+  useEffect(() => {
+    setActiveIndex(0);
+    setIsLightboxOpen(false);
+  }, [resetKey]);
 
   const nextImage = () => {
     setActiveIndex((prev) => (prev + 1) % imagesList.length);

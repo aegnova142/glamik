@@ -9,6 +9,18 @@ import { DeliveryCheck } from './DeliveryCheck';
 import { WatchTheGlamModal } from '../social/WatchTheGlamModal';
 import { Product, Shade, CartItem } from '../../types';
 import { GLAMIRK_JOURNAL_ARTICLES_EXTENDED, GLAMIRK_BEAUTY_GUIDES } from '../../data/editorial';
+import { resolveVariantGallery, variantGalleryResetKey, getCurrentPrice, getCurrentCompareAtPrice, getDefaultShade, getActiveSizeOptions } from '../../utils/productVariant';
+import { useCMS } from '../../context/CMSContext';
+
+/** The size to preselect for a given shade: that shade's own first size
+ * option if it has any (a shade with exactly one size just uses it
+ * silently), else the product-level default for shade-less products. */
+function defaultSizeFor(product: Product, shade: Shade | undefined): string | undefined {
+  const options = getActiveSizeOptions(product, shade);
+  if (options.length > 0) return options[0].label;
+  if (shade) return undefined;
+  return product.selectedSize || (product.sizes ? product.sizes[0] : undefined);
+}
 import {
   Heart,
   ShoppingBag,
@@ -57,13 +69,19 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
   onAddLookToBag,
   onOpenArticle,
 }) => {
-  const [selectedShade, setSelectedShade] = useState<Shade | undefined>(
-    product.shades ? product.shades[0] : undefined
-  );
-  const [selectedSize, setSelectedSize] = useState<string | undefined>(
-    product.selectedSize || (product.sizes ? product.sizes[0] : undefined)
+  const [selectedShade, setSelectedShade] = useState<Shade | undefined>(getDefaultShade(product));
+  const [selectedSize, setSelectedSize] = useState<string | undefined>(() =>
+    defaultSizeFor(product, getDefaultShade(product))
   );
   const [quantity, setQuantity] = useState(1);
+
+  // A shade can carry its own size list (one shade only in 50g, another in
+  // 30g and 50g) — switching shades must re-derive which size is selected
+  // rather than carrying over a label that may not exist for the new shade.
+  const handleSelectShade = (shade: Shade) => {
+    setSelectedShade(shade);
+    setSelectedSize(defaultSizeFor(product, shade));
+  };
   const [isWatchVideoOpen, setIsWatchVideoOpen] = useState(false);
 
   // Accordion open states
@@ -76,8 +94,9 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
   });
 
   useEffect(() => {
-    setSelectedShade(product.shades ? product.shades[0] : undefined);
-    setSelectedSize(product.selectedSize || (product.sizes ? product.sizes[0] : undefined));
+    const defaultShade = getDefaultShade(product);
+    setSelectedShade(defaultShade);
+    setSelectedSize(defaultSizeFor(product, defaultShade));
     setQuantity(1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [product]);
@@ -87,7 +106,43 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
   };
 
   const isWishlisted = wishlist.includes(product.id);
-  const currentPrice = selectedSize === '30g' ? 549 : product.price;
+  const currentPrice = getCurrentPrice(product, selectedShade, selectedSize);
+  const currentCompareAtPrice = getCurrentCompareAtPrice(product, selectedShade, selectedSize);
+  const galleryImages = resolveVariantGallery(product, selectedShade);
+  const galleryResetKey = variantGalleryResetKey(product, selectedShade);
+  const activeSizeOptions = getActiveSizeOptions(product, selectedShade);
+  const { globalSettings } = useCMS();
+
+  // Each content section prefers the new admin-managed structured data;
+  // falls back to the legacy single-field content for products saved
+  // before that structure existed; hides entirely if neither is set,
+  // instead of rendering an empty accordion.
+  const hasOverviewContent = !!product.details.overview || product.benefits.length > 0;
+
+  const legacyAttributeRows = [
+    product.finish ? { name: 'Finish', value: product.finish } : null,
+    product.coverage ? { name: 'Coverage', value: product.coverage } : null,
+    product.texture ? { name: 'Texture', value: product.texture } : null,
+    product.skinType && product.skinType.length > 0 ? { name: 'Suitability', value: product.skinType.join(', ') } : null,
+  ].filter((row): row is { name: string; value: string } => !!row);
+  const displayAttributes =
+    product.attributes && product.attributes.length > 0
+      ? [...product.attributes].sort((a, b) => a.sortOrder - b.sortOrder)
+      : legacyAttributeRows;
+
+  const usageStepsSorted =
+    product.usageSteps && product.usageSteps.length > 0
+      ? [...product.usageSteps].sort((a, b) => a.sortOrder - b.sortOrder)
+      : null;
+  const hasHowToUse = !!usageStepsSorted || !!product.details.howToUse;
+
+  const displayIngredients = product.ingredients && product.ingredients.length > 0 ? product.ingredients : null;
+  const hasIngredients = !!displayIngredients || !!product.details.ingredientsList;
+
+  const shippingReturnsText =
+    product.details.shippingReturns ||
+    globalSettings?.shippingNotice ||
+    'Complimentary shipping across India on orders above ₹999. 7-day hassle-free returns on unopened goods.';
 
   // Filter relevant journal articles
   const relatedJournalArticles = GLAMIRK_JOURNAL_ARTICLES_EXTENDED.filter((art) =>
@@ -145,7 +200,8 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
           {/* Left Column: Image Gallery (7 cols on lg) */}
           <div className="lg:col-span-7">
             <ProductGallery
-              images={product.images}
+              images={galleryImages}
+              resetKey={galleryResetKey}
               productName={product.name}
               tag={product.tag}
             />
@@ -180,9 +236,9 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
               <span className="text-2xl sm:text-3xl text-[#121212] font-extrabold">
                 {product.currency}{currentPrice}
               </span>
-              {product.originalPrice && product.originalPrice > currentPrice && (
+              {currentCompareAtPrice && currentCompareAtPrice > currentPrice && (
                 <span className="text-sm text-[#6B6B6B] line-through">
-                  {product.currency}{product.originalPrice}
+                  {product.currency}{currentCompareAtPrice}
                 </span>
               )}
               <span className="text-[11px] text-[#6B6B6B] ml-auto">
@@ -190,43 +246,49 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
               </span>
             </div>
 
-            {/* Size Selector for Cleansers */}
-            {product.sizes && (
+            {/* Shade Selector for Lipsticks & Sindoor */}
+            {product.shades && selectedShade && (
+              <ShadeSelector
+                shades={product.shades}
+                selectedShade={selectedShade}
+                onSelectShade={handleSelectShade}
+                onOpenShadeFinder={onOpenShadeFinder}
+              />
+            )}
+
+            {/* Size Selector — options come from the selected shade when it
+                has its own (some shades offer one size, others several), or
+                from the product directly for shade-less products like the
+                cleanser jars. A single available size needs no picker. */}
+            {activeSizeOptions.length > 1 && (
               <div className="space-y-2.5 pt-2">
                 <label className="text-[11px] uppercase tracking-[0.2em] font-bold text-[#121212] block">
                   Select Format / Size:
                 </label>
                 <div className="grid grid-cols-2 gap-3">
-                  {product.sizes.map((size) => (
+                  {activeSizeOptions.map((opt) => (
                     <button
-                      key={size}
-                      onClick={() => setSelectedSize(size)}
+                      key={opt.id}
+                      onClick={() => setSelectedSize(opt.label)}
                       className={`p-3.5 text-left rounded-2xl border transition-all cursor-pointer ${
-                        selectedSize === size
+                        selectedSize === opt.label
                           ? 'border-[#F05A7E] bg-[#FCE8ED] ring-2 ring-[#F05A7E]/30 shadow-xs'
                           : 'border-[#E8D5A8] bg-white text-[#6B6B6B] hover:border-[#F05A7E]'
                       }`}
                     >
-                      <span className="text-xs font-bold text-[#121212] block">
-                        {size} {size === '30g' ? 'Discovery Size' : 'Ritual Jar'}
-                      </span>
+                      <span className="text-xs font-bold text-[#121212] block">{opt.label}</span>
                       <span className="text-[11px] text-[#F05A7E] font-semibold block mt-0.5">
-                        {size === '30g' ? '₹549' : '₹849'}
+                        {product.currency}{opt.price}
                       </span>
                     </button>
                   ))}
                 </div>
               </div>
             )}
-
-            {/* Shade Selector for Lipsticks & Sindoor */}
-            {product.shades && selectedShade && (
-              <ShadeSelector
-                shades={product.shades}
-                selectedShade={selectedShade}
-                onSelectShade={(s) => setSelectedShade(s)}
-                onOpenShadeFinder={onOpenShadeFinder}
-              />
+            {activeSizeOptions.length === 1 && (
+              <p className="text-[11px] text-[#6B6B6B] pt-1">
+                Size: <span className="font-bold text-[#121212]">{activeSizeOptions[0].label}</span>
+              </p>
             )}
 
             {/* Delivery Availability */}
@@ -312,99 +374,117 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
             <div className="pt-2 border-t border-[#E8D5A8] space-y-2.5">
               
               {/* 1. Overview */}
-              <div className="border border-[#E8D5A8] rounded-2xl bg-[#FCE8ED] overflow-hidden">
-                <button
-                  onClick={() => toggleAccordion('overview')}
-                  className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
-                >
-                  <span>PRODUCT OVERVIEW</span>
-                  {openAccordions.overview ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
-                </button>
-                {openAccordions.overview && (
-                  <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3 space-y-3">
-                    <p>{product.details.overview}</p>
-                    <ul className="space-y-1.5 pt-1">
-                      {product.benefits.map((b, i) => (
-                        <li key={i} className="flex items-center gap-2">
-                          <Check className="w-3.5 h-3.5 text-[#F05A7E] flex-shrink-0" />
-                          <span>{b}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
+              {hasOverviewContent && (
+                <div className="border border-[#E8D5A8] rounded-2xl bg-[#FCE8ED] overflow-hidden">
+                  <button
+                    onClick={() => toggleAccordion('overview')}
+                    className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
+                  >
+                    <span>PRODUCT OVERVIEW</span>
+                    {openAccordions.overview ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
+                  </button>
+                  {openAccordions.overview && (
+                    <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3 space-y-3">
+                      {product.details.overview && <p>{product.details.overview}</p>}
+                      <ul className="space-y-1.5 pt-1">
+                        {product.benefits.map((b, i) => (
+                          <li key={i} className="flex items-center gap-2">
+                            <Check className="w-3.5 h-3.5 text-[#F05A7E] flex-shrink-0" />
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 2. Details & Specifications */}
-              <div className="border border-[#E8D5A8] rounded-2xl bg-[#FCE8ED] overflow-hidden">
-                <button
-                  onClick={() => toggleAccordion('details')}
-                  className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
-                >
-                  <span>DETAILS &amp; ATTRIBUTES</span>
-                  {openAccordions.details ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
-                </button>
-                {openAccordions.details && (
-                  <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3 space-y-2">
-                    {product.finish && (
-                      <div className="flex justify-between py-1 border-b border-[#E8D5A8]/40">
-                        <span className="text-[#6B6B6B] uppercase tracking-wider text-[11px]">Finish:</span>
-                        <span className="font-bold text-[#121212]">{product.finish}</span>
-                      </div>
-                    )}
-                    {product.coverage && (
-                      <div className="flex justify-between py-1 border-b border-[#E8D5A8]/40">
-                        <span className="text-[#6B6B6B] uppercase tracking-wider text-[11px]">Coverage:</span>
-                        <span className="font-bold text-[#121212]">{product.coverage}</span>
-                      </div>
-                    )}
-                    {product.texture && (
-                      <div className="flex justify-between py-1 border-b border-[#E8D5A8]/40">
-                        <span className="text-[#6B6B6B] uppercase tracking-wider text-[11px]">Texture:</span>
-                        <span className="font-bold text-[#121212]">{product.texture}</span>
-                      </div>
-                    )}
-                    {product.skinType && (
-                      <div className="flex justify-between py-1 border-b border-[#E8D5A8]/40">
-                        <span className="text-[#6B6B6B] uppercase tracking-wider text-[11px]">Suitability:</span>
-                        <span className="font-bold text-[#121212]">{product.skinType.join(', ')}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              {displayAttributes.length > 0 && (
+                <div className="border border-[#E8D5A8] rounded-2xl bg-[#FCE8ED] overflow-hidden">
+                  <button
+                    onClick={() => toggleAccordion('details')}
+                    className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
+                  >
+                    <span>DETAILS &amp; ATTRIBUTES</span>
+                    {openAccordions.details ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
+                  </button>
+                  {openAccordions.details && (
+                    <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3 space-y-2">
+                      {displayAttributes.map((row, i) => (
+                        <div key={i} className="flex justify-between py-1 border-b border-[#E8D5A8]/40 last:border-b-0">
+                          <span className="text-[#6B6B6B] uppercase tracking-wider text-[11px]">{row.name}:</span>
+                          <span className="font-bold text-[#121212]">{row.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 3. How to Use / The Ritual */}
-              <div className="border border-[#E8D5A8] rounded-2xl bg-[#FCE8ED] overflow-hidden">
-                <button
-                  onClick={() => toggleAccordion('howToUse')}
-                  className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
-                >
-                  <span>HOW TO USE / THE RITUAL</span>
-                  {openAccordions.howToUse ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
-                </button>
-                {openAccordions.howToUse && (
-                  <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3">
-                    <p>{product.details.howToUse}</p>
-                  </div>
-                )}
-              </div>
+              {hasHowToUse && (
+                <div className="border border-[#E8D5A8] rounded-2xl bg-[#FCE8ED] overflow-hidden">
+                  <button
+                    onClick={() => toggleAccordion('howToUse')}
+                    className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
+                  >
+                    <span>HOW TO USE / THE RITUAL</span>
+                    {openAccordions.howToUse ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
+                  </button>
+                  {openAccordions.howToUse && (
+                    <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3">
+                      {usageStepsSorted ? (
+                        <ol className="space-y-3">
+                          {usageStepsSorted.map((step, i) => (
+                            <li key={step.id} className="flex gap-3">
+                              <span className="shrink-0 w-5 h-5 rounded-full bg-[#F05A7E] text-white text-[10px] font-bold flex items-center justify-center">
+                                {i + 1}
+                              </span>
+                              <div className="space-y-2">
+                                <p>{step.text}</p>
+                                {step.image && (
+                                  <img src={step.image} alt={`Step ${i + 1}`} className="w-20 h-20 rounded-xl object-cover border border-[#E8D5A8]" />
+                                )}
+                              </div>
+                            </li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <p>{product.details.howToUse}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 4. Clean Ingredients */}
-              <div className="border border-[#E8D5A8] rounded-2xl bg-[#FCE8ED] overflow-hidden">
-                <button
-                  onClick={() => toggleAccordion('ingredients')}
-                  className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
-                >
-                  <span>CLEAN INGREDIENTS LIST</span>
-                  {openAccordions.ingredients ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
-                </button>
-                {openAccordions.ingredients && (
-                  <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3">
-                    <p>{product.details.ingredientsList}</p>
-                  </div>
-                )}
-              </div>
+              {hasIngredients && (
+                <div className="border border-[#E8D5A8] rounded-2xl bg-[#FCE8ED] overflow-hidden">
+                  <button
+                    onClick={() => toggleAccordion('ingredients')}
+                    className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
+                  >
+                    <span>CLEAN INGREDIENTS LIST</span>
+                    {openAccordions.ingredients ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
+                  </button>
+                  {openAccordions.ingredients && (
+                    <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3">
+                      {displayIngredients ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {displayIngredients.map((ing, i) => (
+                            <span key={i} className="px-2.5 py-1 bg-white rounded-full border border-[#E8D5A8]">
+                              {ing}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p>{product.details.ingredientsList}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* 5. Shipping & Returns */}
               <div className="border border-[#E8D5A8] rounded-2xl bg-[#FCE8ED] overflow-hidden">
@@ -417,7 +497,7 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                 </button>
                 {openAccordions.shipping && (
                   <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3">
-                    <p>{product.details.shippingReturns}</p>
+                    <p>{shippingReturnsText}</p>
                   </div>
                 )}
               </div>

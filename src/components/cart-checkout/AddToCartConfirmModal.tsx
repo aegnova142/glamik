@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Check, ShoppingBag, X, Loader2 } from 'lucide-react';
 import { Product, Shade } from '../../types';
+import { getCurrentPrice } from '../../utils/productVariant';
 
 interface AddToCartConfirmModalProps {
   isOpen: boolean;
@@ -33,7 +34,7 @@ export const AddToCartConfirmModal: React.FC<AddToCartConfirmModalProps> = ({
   onGoToCart,
 }) => {
   if (!product) return null;
-  const price = size === '30g' ? 549 : product.price;
+  const price = getCurrentPrice(product, shade, size);
 
   return (
     <AnimatePresence>

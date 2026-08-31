@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Product } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { useCMS } from '../../context/CMSContext';
 
 interface RecentlyViewedProps {
   recentlyViewedIds: string[];
@@ -15,9 +16,11 @@ export const RecentlyViewed: React.FC<RecentlyViewedProps> = ({
   onSelectProduct,
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
 
   const products = recentlyViewedIds
-    .map((id) => GLAMIRK_PRODUCTS.find((p) => p.id === id))
+    .map((id) => catalogProducts.find((p) => p.id === id))
     .filter(Boolean) as Product[];
 
   if (products.length === 0) return null;

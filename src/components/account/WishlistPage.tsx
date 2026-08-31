@@ -2,6 +2,7 @@ import React from 'react';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
 import { Product, Shade } from '../../types';
 import { Heart, ShoppingBag, Trash2, ArrowRight, Sparkles } from 'lucide-react';
+import { useCMS } from '../../context/CMSContext';
 
 interface WishlistPageProps {
   wishlist: string[];
@@ -18,7 +19,9 @@ export const WishlistPage: React.FC<WishlistPageProps> = ({
   onSelectProduct,
   onExploreShop,
 }) => {
-  const wishlistedProducts = GLAMIRK_PRODUCTS.filter((p) => wishlist.includes(p.id));
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
+  const wishlistedProducts = catalogProducts.filter((p) => wishlist.includes(p.id));
 
   return (
     <div className="bg-[#FAF9F6] min-h-screen">

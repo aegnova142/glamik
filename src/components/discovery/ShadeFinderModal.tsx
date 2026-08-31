@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Sparkles, ArrowRight, Check, RefreshCw, ShoppingBag } from 'lucide-react';
 import { Product, Shade } from '../../types';
 import { GLAMIRK_PRODUCTS } from '../../data/products';
+import { useCMS } from '../../context/CMSContext';
 
 interface ShadeFinderModalProps {
   isOpen: boolean;
@@ -18,6 +19,8 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
   onAddToBag,
 }) => {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const { products: cmsProducts } = useCMS();
+  const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
   const [skinDepth, setSkinDepth] = useState<string>('Medium Wheatish');
   const [undertone, setUndertone] = useState<'Warm' | 'Neutral' | 'Cool' | 'Olive'>('Warm');
   const [occasion, setOccasion] = useState<string>('Everyday Glamour');
@@ -60,9 +63,9 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
 
   // Matched Shade logic based on user selections
   const getMatchedShade = () => {
-    const lipProduct = GLAMIRK_PRODUCTS[0]; // Matte Liquid Lipstick
-    const sindoorProduct = GLAMIRK_PRODUCTS[1]; // Luxury Sindoor
-    const cleanserProduct = GLAMIRK_PRODUCTS[3]; // Balm To Water 50g
+    const lipProduct = catalogProducts.find((p) => p.id === 'matte-liquid-lipstick-collection') || catalogProducts[0];
+    const sindoorProduct = catalogProducts.find((p) => p.id === 'luxury-sindoor-collection') || catalogProducts[1];
+    const cleanserProduct = catalogProducts.find((p) => p.id === 'balm-to-water-cleanser-50g') || catalogProducts[3];
 
     let matchedLipShade = lipProduct.shades?.[0]; // Default Royal Rose
     let matchedSindoorShade = sindoorProduct.shades?.[0]; // Ceremonial Scarlet

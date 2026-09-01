@@ -45,6 +45,25 @@ let landmarkerPromise: Promise<FaceLandmarker> | null = null;
 // The SDK doesn't expose a getter for the landmarker's current running
 // mode, so it's tracked here alongside the singleton instead.
 let currentRunningMode: 'IMAGE' | 'VIDEO' = 'IMAGE';
+// Switching mode is async (setOptions), and the landmarker instance is a
+// shared singleton — without serializing switches, two callers racing (e.g.
+// Upload Photo and Live Camera triggered back-to-back) could each read a
+// stale currentRunningMode, both decide a switch isn't needed or step on
+// each other's switch, and then call the mode-specific detect method
+// (detect() vs detectForVideo()) while the landmarker is actually in the
+// other mode, throwing. Chaining every switch onto this promise means each
+// one always waits for the previous to fully land before checking/acting.
+let modeSwitchChain: Promise<void> = Promise.resolve();
+
+function ensureRunningMode(landmarker: FaceLandmarker, mode: 'IMAGE' | 'VIDEO'): Promise<void> {
+  modeSwitchChain = modeSwitchChain.then(async () => {
+    if (currentRunningMode !== mode) {
+      await landmarker.setOptions({ runningMode: mode });
+      currentRunningMode = mode;
+    }
+  });
+  return modeSwitchChain;
+}
 
 /** Loads the WASM runtime + model exactly once per page session and reuses
  * it for every detection call after that — this is a multi-megabyte
@@ -91,10 +110,7 @@ export async function detectFaceInImage(image: HTMLImageElement): Promise<Detect
   if (typeof WebAssembly === 'undefined') return { status: 'unsupported', landmarks: null };
   try {
     const landmarker = await getLandmarker();
-    if (currentRunningMode !== 'IMAGE') {
-      await landmarker.setOptions({ runningMode: 'IMAGE' });
-      currentRunningMode = 'IMAGE';
-    }
+    await ensureRunningMode(landmarker, 'IMAGE');
     const result = landmarker.detect(image);
     return toDetectionResult(result.faceLandmarks);
   } catch (err) {
@@ -109,10 +125,7 @@ export async function detectFaceInImage(image: HTMLImageElement): Promise<Detect
  * their frame loop, not on every frame. */
 export async function ensureVideoMode(): Promise<FaceLandmarker> {
   const landmarker = await getLandmarker();
-  if (currentRunningMode !== 'VIDEO') {
-    await landmarker.setOptions({ runningMode: 'VIDEO' });
-    currentRunningMode = 'VIDEO';
-  }
+  await ensureRunningMode(landmarker, 'VIDEO');
   return landmarker;
 }
 

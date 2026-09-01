@@ -154,7 +154,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0B0B] text-[#FAF9F6] flex flex-col font-sans">
+    <div className="h-screen overflow-hidden bg-[#0B0B0B] text-[#FAF9F6] flex flex-col font-sans">
       {/* Top Mobile Bar */}
       <div className="lg:hidden flex items-center justify-between p-3.5 bg-[#171717] border-b border-[#E8D5A8]/20 sticky top-0 z-40">
         <div className="flex items-center gap-2">

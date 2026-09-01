@@ -73,9 +73,21 @@ const upload = multer({
 // actual file content, so callers never need to duplicate that check.
 function uploadBufferToCloudinary(buffer: Buffer): Promise<{ url: string; publicId: string }> {
   return new Promise((resolve, reject) => {
+    // Cloudinary's SDK has no built-in timeout, so a stalled network call
+    // (bad credentials, DNS/firewall issue, dropped connection) leaves the
+    // callback never firing — the caller hangs forever instead of erroring.
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('Cloudinary upload timed out after 30s'));
+    }, 30000);
     const stream = cloudinary.uploader.upload_stream(
       { folder: 'glamirk-beauty', resource_type: 'auto' },
       (err, result) => {
+        if (settled) return;
+        clearTimeout(timer);
+        settled = true;
         if (err || !result) return reject(err || new Error('Cloudinary upload failed'));
         resolve({ url: result.secure_url, publicId: result.public_id });
       }

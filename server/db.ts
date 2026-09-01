@@ -48,6 +48,12 @@ if (!connectionString) {
 const pool = new Pool({
   connectionString,
   ssl: { rejectUnauthorized: false },
+  // Neon can be slow to wake a suspended endpoint or briefly unreachable;
+  // without these, a stalled connection/query hangs the pool client forever
+  // and every request waiting on it (e.g. admin media upload) never
+  // resolves or rejects — it just spins.
+  connectionTimeoutMillis: 10000,
+  query_timeout: 15000,
 });
 
 // Neon suspends/drops idle connections; without this handler an idle

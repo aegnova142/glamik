@@ -687,22 +687,39 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (altText) formData.append('altText', altText);
 
     const token = getAdminToken();
+    // Without a client-side timeout, a stalled request (dropped connection,
+    // server-side hang) leaves the caller's "Uploading..." spinner stuck
+    // forever with no feedback — abort and surface an error instead.
+    // Kept comfortably above the server's own worst-case legitimate runtime
+    // (30s Cloudinary + 10s DB connect + 15s + 15s query timeouts ≈ 70s) so
+    // a slow-but-successful upload isn't aborted client-side while the
+    // server is still about to succeed.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 90000);
     try {
       const res = await fetch('/api/admin/media/upload', {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
+        signal: controller.signal,
       });
 
       if (!res.ok) {
-        throw new Error('Upload failed');
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Upload failed (${res.status})`);
       }
 
       const mediaItem = await res.json();
       return mediaItem;
-    } catch (err) {
-      console.error('Media upload error:', err);
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        console.error('Media upload error: timed out after 45s');
+      } else {
+        console.error('Media upload error:', err);
+      }
       return null;
+    } finally {
+      clearTimeout(timer);
     }
   };
 

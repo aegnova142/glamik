@@ -23,6 +23,9 @@ import {
   Upload,
   GripVertical,
   X,
+  ImageOff,
+  RefreshCw,
+  Link,
 } from 'lucide-react';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useDragReorder } from '../../hooks/useDragReorder';
@@ -43,6 +46,11 @@ export const AdminProducts: React.FC = () => {
   const [uploadingSlot, setUploadingSlot] = useState<ProductImageSlot | null>(null);
   const [uploadingShadeIndex, setUploadingShadeIndex] = useState<number | null>(null);
   const [dragImage, setDragImage] = useState<{ shadeIdx: number; imgIdx: number } | null>(null);
+  const [brokenVariantImageIds, setBrokenVariantImageIds] = useState<Set<string>>(new Set());
+  const [variantImageUrlDraft, setVariantImageUrlDraft] = useState<Record<number, string>>({});
+  const [replacingVariantImageId, setReplacingVariantImageId] = useState<string | null>(null);
+  const [editingUrlImageId, setEditingUrlImageId] = useState<string | null>(null);
+  const [editingUrlDraft, setEditingUrlDraft] = useState('');
   const [uploadingStepId, setUploadingStepId] = useState<string | null>(null);
 
   const { upload, error: uploadError } = useFileUpload({
@@ -390,6 +398,80 @@ export const AdminProducts: React.FC = () => {
       shades[shadeIndex] = { ...shade, images: merged };
       return { ...prev, shades };
     });
+  };
+
+  const handleAddVariantImageUrl = (shadeIndex: number, url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setEditingProduct((prev) => {
+      if (!prev || !prev.shades) return prev;
+      const shades = [...prev.shades];
+      const shade = shades[shadeIndex];
+      const newImage: VariantImage = {
+        id: newVariantImageId(),
+        url: trimmed,
+        publicId: '',
+        alt: '',
+        sortOrder: 0,
+        isPrimary: false,
+      };
+      const merged = [...(shade.images || []), newImage].map((img, i) => ({ ...img, sortOrder: i }));
+      if (!merged.some((img) => img.isPrimary)) merged[0].isPrimary = true;
+      shades[shadeIndex] = { ...shade, images: merged };
+      return { ...prev, shades };
+    });
+    setVariantImageUrlDraft((prev) => ({ ...prev, [shadeIndex]: '' }));
+  };
+
+  const handleReplaceVariantImage = async (shadeIndex: number, imageId: string, file: File | undefined) => {
+    if (!file) return;
+    setReplacingVariantImageId(imageId);
+    const mediaItem = await upload(file);
+    setReplacingVariantImageId(null);
+    if (!mediaItem) return;
+    setBrokenVariantImageIds((prev) => {
+      if (!prev.has(imageId)) return prev;
+      const next = new Set(prev);
+      next.delete(imageId);
+      return next;
+    });
+    setEditingProduct((prev) => {
+      if (!prev || !prev.shades) return prev;
+      const shades = [...prev.shades];
+      const shade = shades[shadeIndex];
+      shades[shadeIndex] = {
+        ...shade,
+        images: (shade.images || []).map((img) =>
+          img.id === imageId ? { ...img, url: mediaItem.url, publicId: mediaItem.publicId } : img
+        ),
+      };
+      return { ...prev, shades };
+    });
+  };
+
+  const handleUpdateVariantImageUrl = (shadeIndex: number, imageId: string, url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setBrokenVariantImageIds((prev) => {
+      if (!prev.has(imageId)) return prev;
+      const next = new Set(prev);
+      next.delete(imageId);
+      return next;
+    });
+    setEditingProduct((prev) => {
+      if (!prev || !prev.shades) return prev;
+      const shades = [...prev.shades];
+      const shade = shades[shadeIndex];
+      shades[shadeIndex] = {
+        ...shade,
+        images: (shade.images || []).map((img) =>
+          img.id === imageId ? { ...img, url: trimmed, publicId: '' } : img
+        ),
+      };
+      return { ...prev, shades };
+    });
+    setEditingUrlImageId(null);
+    setEditingUrlDraft('');
   };
 
   const handleDeleteVariantImage = (shadeIndex: number, imageId: string) => {
@@ -1054,25 +1136,50 @@ export const AdminProducts: React.FC = () => {
 
                       {/* Variant image gallery */}
                       <div className="pt-1 border-t border-[#E8D5A8]/10">
-                        <div className="flex items-center justify-between pt-2 mb-2">
+                        <div className="flex items-center justify-between pt-2 mb-2 gap-2 flex-wrap">
                           <span className="text-[10px] font-semibold text-[#E8D5A8] uppercase tracking-wider">
                             Variant Images ({shadeImages.length})
                           </span>
-                          <label className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#171717] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-[10.5px] font-semibold text-[#FAF9F6] transition-colors cursor-pointer">
-                            <Upload className="w-3 h-3" />
-                            <span>{uploadingShadeIndex === idx ? 'Uploading...' : 'Upload Images'}</span>
+                          <div className="flex items-center gap-1.5">
                             <input
-                              type="file"
-                              accept="image/*"
-                              multiple
-                              className="hidden"
-                              disabled={uploadingShadeIndex === idx}
-                              onChange={(e) => {
-                                handleAddVariantImages(idx, e.target.files);
-                                e.target.value = '';
+                              type="text"
+                              value={variantImageUrlDraft[idx] || ''}
+                              onChange={(e) =>
+                                setVariantImageUrlDraft((prev) => ({ ...prev, [idx]: e.target.value }))
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddVariantImageUrl(idx, variantImageUrlDraft[idx] || '');
+                                }
                               }}
+                              placeholder="https://... image URL"
+                              className="w-40 px-2 py-1.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-[10.5px] text-[#FAF9F6]"
                             />
-                          </label>
+                            <button
+                              type="button"
+                              onClick={() => handleAddVariantImageUrl(idx, variantImageUrlDraft[idx] || '')}
+                              disabled={!(variantImageUrlDraft[idx] || '').trim()}
+                              className="px-2.5 py-1.5 bg-[#171717] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-[10.5px] font-semibold text-[#FAF9F6] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Add URL
+                            </button>
+                            <label className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#171717] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-[10.5px] font-semibold text-[#FAF9F6] transition-colors cursor-pointer">
+                              <Upload className="w-3 h-3" />
+                              <span>{uploadingShadeIndex === idx ? 'Uploading...' : 'Upload Images'}</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                disabled={uploadingShadeIndex === idx}
+                                onChange={(e) => {
+                                  handleAddVariantImages(idx, e.target.files);
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                          </div>
                         </div>
 
                         {shadeImages.length === 0 ? (
@@ -1088,12 +1195,82 @@ export const AdminProducts: React.FC = () => {
                                 onDragStart={() => setDragImage({ shadeIdx: idx, imgIdx })}
                                 onDragOver={(e) => e.preventDefault()}
                                 onDrop={() => handleVariantImageDrop(idx, imgIdx)}
-                                className={`relative aspect-square rounded-lg overflow-hidden border bg-[#171717] group cursor-grab active:cursor-grabbing ${
+                                className={`relative aspect-square rounded-lg overflow-hidden border bg-[#0B0B0B] flex items-center justify-center group cursor-grab active:cursor-grabbing ${
                                   img.isPrimary ? 'border-[#C9972B] ring-1 ring-[#C9972B]' : 'border-[#E8D5A8]/20'
                                 }`}
                                 title="Drag to reorder"
                               >
-                                <img src={img.url} alt={img.alt || shade.name} className="w-full h-full object-contain" />
+                                {editingUrlImageId === img.id ? (
+                                  <div
+                                    className="absolute inset-0 z-20 flex flex-col items-stretch justify-center gap-1.5 bg-[#0B0B0B]/95 p-2"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <input
+                                      autoFocus
+                                      type="text"
+                                      value={editingUrlDraft}
+                                      onChange={(e) => setEditingUrlDraft(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          handleUpdateVariantImageUrl(idx, img.id, editingUrlDraft);
+                                        } else if (e.key === 'Escape') {
+                                          setEditingUrlImageId(null);
+                                        }
+                                      }}
+                                      placeholder="https://... image URL"
+                                      className="w-full px-1.5 py-1 bg-[#171717] border border-[#E8D5A8]/30 rounded text-[9.5px] text-[#FAF9F6]"
+                                    />
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleUpdateVariantImageUrl(idx, img.id, editingUrlDraft)}
+                                        disabled={!editingUrlDraft.trim()}
+                                        className="p-1 bg-[#171717] hover:bg-[#C9972B] hover:text-[#0B0B0B] text-[#E8D5A8] rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                        title="Save URL"
+                                      >
+                                        <Check className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingUrlImageId(null)}
+                                        className="p-1 bg-[#171717] hover:bg-[#F05A7E] hover:text-white text-[#E8D5A8] rounded cursor-pointer"
+                                        title="Cancel"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : replacingVariantImageId === img.id ? (
+                                  <div className="flex flex-col items-center gap-1 text-[#E8D5A8] px-1 text-center">
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    <span className="text-[8.5px] leading-tight">Replacing...</span>
+                                  </div>
+                                ) : brokenVariantImageIds.has(img.id) ? (
+                                  <div
+                                    className="flex flex-col items-center gap-1 text-[#6B6B6B] px-1 text-center cursor-pointer"
+                                    onClick={() => {
+                                      setEditingUrlDraft(img.url);
+                                      setEditingUrlImageId(img.id);
+                                    }}
+                                  >
+                                    <ImageOff className="w-4 h-4" />
+                                    <span className="text-[8.5px] leading-tight">Failed to load — click to fix URL</span>
+                                  </div>
+                                ) : (
+                                  <img
+                                    src={img.url}
+                                    alt={img.alt || shade.name}
+                                    className="w-full h-full object-contain cursor-pointer"
+                                    onClick={() => {
+                                      setEditingUrlDraft(img.url);
+                                      setEditingUrlImageId(img.id);
+                                    }}
+                                    onError={() =>
+                                      setBrokenVariantImageIds((prev) => new Set(prev).add(img.id))
+                                    }
+                                  />
+                                )}
                                 <div className="absolute top-1 left-1 p-0.5 bg-[#0B0B0B]/70 rounded text-[#E8D5A8]">
                                   <GripVertical className="w-3 h-3" />
                                 </div>
@@ -1102,7 +1279,42 @@ export const AdminProducts: React.FC = () => {
                                     Primary
                                   </span>
                                 )}
-                                <div className="absolute top-1 right-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div
+                                  className={`absolute top-1 right-1 flex items-center gap-1 transition-opacity ${
+                                    editingUrlImageId === img.id
+                                      ? 'hidden'
+                                      : brokenVariantImageIds.has(img.id)
+                                      ? 'opacity-100'
+                                      : 'opacity-0 group-hover:opacity-100'
+                                  }`}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingUrlDraft(img.url);
+                                      setEditingUrlImageId(img.id);
+                                    }}
+                                    className="p-1 bg-[#0B0B0B]/80 hover:bg-[#C9972B] hover:text-[#0B0B0B] text-[#E8D5A8] rounded cursor-pointer"
+                                    title="Change image URL"
+                                  >
+                                    <Link className="w-3 h-3" />
+                                  </button>
+                                  <label
+                                    className="p-1 bg-[#0B0B0B]/80 hover:bg-[#C9972B] hover:text-[#0B0B0B] text-[#E8D5A8] rounded cursor-pointer"
+                                    title="Replace this image"
+                                  >
+                                    <RefreshCw className="w-3 h-3" />
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      disabled={replacingVariantImageId === img.id}
+                                      onChange={(e) => {
+                                        handleReplaceVariantImage(idx, img.id, e.target.files?.[0]);
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                  </label>
                                   {!img.isPrimary && (
                                     <button
                                       type="button"

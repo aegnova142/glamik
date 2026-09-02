@@ -24,6 +24,7 @@ export const AdminMediaLibrary: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchMedia = async () => {
@@ -65,7 +66,12 @@ export const AdminMediaLibrary: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    await deleteMedia(id);
+    setDeleteError(null);
+    const result = await deleteMedia(id);
+    if (!result.success) {
+      setDeleteError(result.error || 'Delete failed. Please try again.');
+      return;
+    }
     fetchMedia();
   };
 
@@ -105,6 +111,12 @@ export const AdminMediaLibrary: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {deleteError && (
+        <p className="text-xs text-[#F05A7E] bg-[#F05A7E]/10 border border-[#F05A7E]/30 rounded-lg px-3 py-2">
+          {deleteError}
+        </p>
+      )}
 
       {/* Drag & Drop Area */}
       <div

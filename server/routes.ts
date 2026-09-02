@@ -1477,6 +1477,19 @@ router.delete('/admin/media/:id', requireAdmin, async (req: AuthenticatedRequest
     return res.status(404).json({ error: 'Media not found' });
   }
 
+  // Media Library items are shared: the same upload can also be referenced by
+  // a product image slot or a shade's variant images. Deleting it here used
+  // to destroy the Cloudinary asset unconditionally, leaving those product
+  // fields pointing at a 404'd URL with no way to notice until an admin
+  // reopened that product. Block the delete instead, same "still referenced"
+  // scan releaseReplacedMedia uses for admin-initiated replacements.
+  const { media, ...contentOnly } = db;
+  if (JSON.stringify(contentOnly).includes(item.url)) {
+    return res.status(409).json({
+      error: 'This image is still used on a product, shade, or page and cannot be deleted. Remove it from there first.',
+    });
+  }
+
   // Remove the asset from Cloudinary if it was uploaded there
   if (item.publicId) {
     try {

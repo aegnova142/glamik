@@ -47,6 +47,7 @@ export const AdminProducts: React.FC = () => {
   const [uploadingShadeIndex, setUploadingShadeIndex] = useState<number | null>(null);
   const [dragImage, setDragImage] = useState<{ shadeIdx: number; imgIdx: number } | null>(null);
   const [brokenVariantImageIds, setBrokenVariantImageIds] = useState<Set<string>>(new Set());
+  const [brokenSlotKeys, setBrokenSlotKeys] = useState<Set<ProductImageSlot>>(new Set());
   const [variantImageUrlDraft, setVariantImageUrlDraft] = useState<Record<number, string>>({});
   const [replacingVariantImageId, setReplacingVariantImageId] = useState<string | null>(null);
   const [editingUrlImageId, setEditingUrlImageId] = useState<string | null>(null);
@@ -169,6 +170,12 @@ export const AdminProducts: React.FC = () => {
     const mediaItem = await upload(file);
     setUploadingSlot(null);
     if (mediaItem) {
+      setBrokenSlotKeys((prev) => {
+        if (!prev.has(slot)) return prev;
+        const next = new Set(prev);
+        next.delete(slot);
+        return next;
+      });
       setEditingProduct((prev) => (prev ? { ...prev, images: { ...prev.images, [slot]: mediaItem.url } } : prev));
     }
   };
@@ -1659,7 +1666,21 @@ export const AdminProducts: React.FC = () => {
                     </div>
                     {url && (
                       <div className="mt-2 w-full h-28 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B] flex items-center justify-center">
-                        <img src={url} alt={slot.label} className="w-full h-full object-contain" />
+                        {brokenSlotKeys.has(slot.key) ? (
+                          <div className="flex flex-col items-center gap-1 text-[#6B6B6B] px-1 text-center">
+                            <ImageOff className="w-4 h-4" />
+                            <span className="text-[8.5px] leading-tight">
+                              Failed to load — the uploaded image was removed from storage. Re-upload or fix the URL above.
+                            </span>
+                          </div>
+                        ) : (
+                          <img
+                            src={url}
+                            alt={slot.label}
+                            className="w-full h-full object-contain"
+                            onError={() => setBrokenSlotKeys((prev) => new Set(prev).add(slot.key))}
+                          />
+                        )}
                       </div>
                     )}
                   </div>

@@ -112,7 +112,7 @@ export interface CMSContextType {
   deleteFaq: (id: string) => Promise<boolean>;
   saveGlobalSettings: (settings: Partial<CMSGlobalSettings>) => Promise<boolean>;
   uploadMedia: (file: File, name?: string, altText?: string) => Promise<CMSMediaItem | null>;
-  deleteMedia: (id: string) => Promise<boolean>;
+  deleteMedia: (id: string) => Promise<{ success: boolean; error?: string }>;
   refreshPublicContent: () => Promise<void>;
 }
 
@@ -723,13 +723,13 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const deleteMedia = async (id: string): Promise<boolean> => {
+  const deleteMedia = async (id: string): Promise<{ success: boolean; error?: string }> => {
     const res = await apiFetch(`/api/admin/media/${id}`, { method: 'DELETE' });
     if (res.status < 400) {
       await loadPublicContent();
-      return true;
+      return { success: true };
     }
-    return false;
+    return { success: false, error: res.error || `Delete failed (${res.status})` };
   };
 
   const value: CMSContextType = {

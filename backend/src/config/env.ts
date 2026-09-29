@@ -37,6 +37,24 @@ export const env = {
   appUrl: process.env.APP_URL && process.env.APP_URL !== 'MY_APP_URL' ? process.env.APP_URL : null,
   cloudinaryUrl: process.env.CLOUDINARY_URL || null,
 
+  /**
+   * Hostname the admin back office is served from, e.g. `admin.glamirk.com`.
+   *
+   * Unset (the default) keeps the original layout: admin lives at `/admin` on
+   * the same host as the storefront. Set it and admin moves to its own
+   * hostname, with `/admin` on the main host becoming a redirect.
+   *
+   * Opt-in on purpose. A deploy that shipped the subdomain switch before DNS
+   * and TLS were actually pointing at the box would take the back office
+   * offline; leaving this unset means the deploy is a no-op until the
+   * infrastructure is genuinely ready.
+   *
+   * The admin bundle's Vite `base` is derived from this same variable at build
+   * time (see admin/vite.config.ts) — asset URLs have to agree with where the
+   * app is mounted, so the two cannot be configured separately.
+   */
+  adminHost: process.env.ADMIN_HOST?.trim().toLowerCase() || null,
+
   smtp: {
     host: process.env.SMTP_HOST || null,
     port: Number(process.env.SMTP_PORT) || 587,

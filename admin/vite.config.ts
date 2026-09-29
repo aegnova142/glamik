@@ -5,9 +5,16 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
-    // The admin is served from /admin, not the domain root, so every asset URL
-    // Vite emits has to be prefixed or the bundle 404s once deployed.
-    base: '/admin/',
+    // Where the admin is mounted decides how its asset URLs must be written,
+    // so this is derived from the same ADMIN_HOST variable the server routes
+    // on rather than configured separately — set one, both agree.
+    //
+    //   ADMIN_HOST set   -> served at the root of its own hostname -> '/'
+    //   ADMIN_HOST unset -> served under /admin on the main host   -> '/admin/'
+    //
+    // Getting this wrong doesn't fail the build; it produces a bundle whose
+    // asset URLs 404 at runtime.
+    base: process.env.ADMIN_HOST?.trim() ? '/' : '/admin/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

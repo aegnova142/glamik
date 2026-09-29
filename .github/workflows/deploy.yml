@@ -33,7 +33,28 @@ jobs:
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" << 'EOF'
             set -e
             cd /var/www/glamirk
-            git pull origin main
+
+            # Make the checkout an exact mirror of origin/main rather than
+            # merging into it.
+            #
+            # `git pull` aborts when an incoming commit adds a file that
+            # already exists untracked on the server — which is exactly how
+            # the monorepo deploy failed: ecosystem.config.cjs used to live
+            # only on the VPS, so versioning it in the repo made every
+            # subsequent pull refuse to run ("untracked working tree files
+            # would be overwritten by merge"). The deploy then aborted before
+            # npm/build/pm2, silently leaving the old code running.
+            #
+            # reset --hard resolves that: it overwrites conflicting untracked
+            # files with the committed version, while leaving genuinely
+            # server-only untracked files (.env, logs/) alone. A deploy
+            # target should mirror the repo, so discarding local edits to
+            # tracked files here is the intended behaviour, not a loss.
+            # FETCH_HEAD rather than origin/main: `git fetch origin main`
+            # always sets FETCH_HEAD, but only updates the remote-tracking
+            # ref when the remote is configured with the usual refspec.
+            git fetch origin main
+            git reset --hard FETCH_HEAD
 
             # npm workspaces: a single install at the root links shared/ into
             # frontend, admin and backend, and installs every workspace's deps.
@@ -48,6 +69,19 @@ jobs:
             # backend/dist/server.cjs. startOrReload picks up the updated file.
             pm2 startOrReload ecosystem.config.cjs
             pm2 save
+
+            # pm2 records a process's script path when it is first created, so
+            # reloading an app that predates the monorepo split can keep
+            # launching the OLD root-level dist/server.cjs. That path is
+            # gitignored, so the stale bundle is still sitting on disk and the
+            # health check below would happily pass — reporting a green deploy
+            # over code that never updated. Check the path explicitly instead.
+            pm2 jlist | grep -q "backend/dist/server.cjs" || {
+              echo "pm2 is still running the pre-monorepo bundle path."
+              echo "Fix (one time, on the VPS):"
+              echo "  cd /var/www/glamirk && pm2 delete glamirk-beauty && pm2 start ecosystem.config.cjs && pm2 save"
+              exit 1
+            }
 
             # Fail loudly if the app didn't actually come up, instead of
             # reporting a green deploy over a site that is down.

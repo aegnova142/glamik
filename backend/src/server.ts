@@ -126,15 +126,51 @@ async function startServer() {
   // ------------------------------------------------------------------
   // Serve the two frontends.
   //
-  // Storefront at /, admin at /admin, both from this one process and one
-  // origin — so there is no CORS to configure and the admin bundle is never
-  // downloaded by a shopper.
+  // Both are served by this one process, and `/api/*` above is registered
+  // before any of the host/path routing below — so the API answers on every
+  // hostname this server responds to. That is what keeps the admin's
+  // relative `fetch('/api/...')` calls and its `io()` socket connection
+  // same-origin no matter which layout is active, and why moving admin to a
+  // subdomain needs no CORS configuration at all.
   //
-  // ORDER MATTERS: everything /admin must be registered before the
-  // storefront's catch-all, or an admin deep link falls through and renders
-  // the storefront instead.
+  // Two layouts, chosen by whether ADMIN_HOST is set:
+  //
+  //   unset  — storefront at `/`, admin at `/admin`, one hostname.
+  //   set    — admin gets its own hostname and is served at the root of it;
+  //            the storefront no longer serves the admin bundle at all, and
+  //            `/admin` there becomes a redirect to the new home.
+  //
+  // ORDER MATTERS in both: everything admin must be registered before the
+  // storefront's `*` catch-all, or an admin deep link falls through and
+  // renders the storefront instead.
   // ------------------------------------------------------------------
   const isProduction = env.isProduction;
+  const adminHost = env.adminHost;
+
+  // `req.hostname` is the Host header with any port stripped, so this matches
+  // whether the site is reached on :3000 behind a proxy or on :443 directly.
+  const isAdminHost = (req: express.Request) =>
+    adminHost !== null && req.hostname.toLowerCase() === adminHost;
+
+  /** Send `/admin[/...]` on the storefront host to the same path on the admin
+   *  host, so existing bookmarks and links keep working after the move. */
+  const redirectLegacyAdminPath = (req: express.Request, res: express.Response) => {
+    const suffix = req.originalUrl.replace(/^\/admin\/?/, '');
+    // Carry the port across. `req.hostname` drops it, and in production
+    // (behind a proxy on 80/443) that is exactly right — but on a dev or
+    // staging box reached at :3001 a portless redirect points at a host that
+    // isn't listening.
+    const requestedPort = req.get('host')?.split(':')[1];
+    const isDefaultPort =
+      !requestedPort ||
+      (req.protocol === 'https' && requestedPort === '443') ||
+      (req.protocol === 'http' && requestedPort === '80');
+    const target = isDefaultPort ? adminHost : `${adminHost}:${requestedPort}`;
+    // 302, not 301: browsers cache a permanent redirect indefinitely, which
+    // would strand anyone who visited during the move if ADMIN_HOST is ever
+    // unset again.
+    res.redirect(302, `${req.protocol}://${target}/${suffix}`);
+  };
 
   if (!isProduction) {
     // Two Vite dev servers in middleware mode on the same Express instance.
@@ -154,7 +190,10 @@ async function startServer() {
       ...adminConfig,
       configFile: false,
       root: PATHS.adminRoot,
-      base: '/admin/',
+      // Must match the built bundle's base (admin/vite.config.ts), which is
+      // derived from the same variable — otherwise dev and prod disagree
+      // about where admin's assets live.
+      base: adminHost ? '/' : '/admin/',
       server: {
         ...adminConfig.server,
         middlewareMode: true,
@@ -162,7 +201,6 @@ async function startServer() {
       },
       appType: 'spa',
     });
-    app.use('/admin', adminVite.middlewares);
 
     const frontendConfig = await loadViteConfig(PATHS.frontendRoot);
     const frontendVite = await createViteServer({
@@ -176,23 +214,51 @@ async function startServer() {
       },
       appType: 'spa',
     });
-    app.use(frontendVite.middlewares);
+
+    if (adminHost) {
+      // Admin host serves only the admin app; the storefront host never sees
+      // the admin bundle at all.
+      app.use((req, res, next) => (isAdminHost(req) ? adminVite.middlewares(req, res, next) : next()));
+      app.get('/admin', redirectLegacyAdminPath);
+      app.get('/admin/*', redirectLegacyAdminPath);
+      app.use((req, res, next) => (isAdminHost(req) ? next() : frontendVite.middlewares(req, res, next)));
+    } else {
+      app.use('/admin', adminVite.middlewares);
+      app.use(frontendVite.middlewares);
+    }
   } else {
     const frontendDist = PATHS.frontendDist;
     const adminDist = PATHS.adminDist;
+    const adminIndex = path.join(adminDist, 'index.html');
+    const frontendIndex = path.join(frontendDist, 'index.html');
 
-    // `redirect: false` stops express.static bouncing /admin -> /admin/ with a
-    // 301. Harmless in a browser, but it makes production behave differently
-    // from dev (where Vite serves /admin directly) and adds a round trip to
-    // every admin visit.
-    app.use('/admin', express.static(adminDist, { redirect: false }));
-    app.get('/admin', (_req, res) => res.sendFile(path.join(adminDist, 'index.html')));
-    app.get('/admin/*', (_req, res) => res.sendFile(path.join(adminDist, 'index.html')));
+    if (adminHost) {
+      const adminStatic = express.static(adminDist, { redirect: false });
+      app.use((req, res, next) => (isAdminHost(req) ? adminStatic(req, res, next) : next()));
+      // SPA fallback for the admin host. This sits BEFORE the legacy /admin
+      // redirect on purpose: it only ever handles requests whose Host is the
+      // admin host, so by the time the redirect below is reached the request
+      // is guaranteed to be on the storefront host — which is exactly where a
+      // stale /admin link needs redirecting from.
+      app.get('*', (req, res, next) => (isAdminHost(req) ? res.sendFile(adminIndex) : next()));
 
-    app.use(express.static(frontendDist));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(frontendDist, 'index.html'));
-    });
+      app.get('/admin', redirectLegacyAdminPath);
+      app.get('/admin/*', redirectLegacyAdminPath);
+
+      app.use(express.static(frontendDist));
+      app.get('*', (_req, res) => res.sendFile(frontendIndex));
+    } else {
+      // `redirect: false` stops express.static bouncing /admin -> /admin/ with a
+      // 301. Harmless in a browser, but it makes production behave differently
+      // from dev (where Vite serves /admin directly) and adds a round trip to
+      // every admin visit.
+      app.use('/admin', express.static(adminDist, { redirect: false }));
+      app.get('/admin', (_req, res) => res.sendFile(adminIndex));
+      app.get('/admin/*', (_req, res) => res.sendFile(adminIndex));
+
+      app.use(express.static(frontendDist));
+      app.get('*', (_req, res) => res.sendFile(frontendIndex));
+    }
   }
 
   httpServer.listen(PORT, '0.0.0.0', () => {

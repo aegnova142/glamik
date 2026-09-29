@@ -5,8 +5,14 @@ services:
     plan: free
     region: singapore
     branch: main
-    buildCommand: npm install && npm run build
+    # npm workspaces: one root install links shared/ into the other three
+    # workspaces; the root build script then builds storefront -> admin ->
+    # backend in dependency order.
+    buildCommand: npm ci && npm run build
+    # Starts the already-built bundle. (The old start script rebuilt on every
+    # boot, which wasted the whole free-tier startup budget.)
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production

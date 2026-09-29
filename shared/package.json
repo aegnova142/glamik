@@ -1,0 +1,33 @@
+{
+  "name": "@glamirk/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Code used by two or more Glamirk workspaces: domain types, the API client, the CMS context, shared utilities, seed catalog data and the recommendation engine.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./context/*": "./src/context/*.tsx",
+    "./components": "./src/components/index.ts",
+    "./utils/*": "./src/utils/*.ts",
+    "./data/*": "./src/data/*.ts",
+    "./ai/*": "./src/ai/*.ts"
+  },
+  "scripts": {
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3"
+  },
+  "peerDependencies": {
+    "react": "^19.0.1"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18"
+  }
+}

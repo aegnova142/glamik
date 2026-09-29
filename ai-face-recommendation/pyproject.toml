@@ -1,0 +1,141 @@
+[project]
+name = "glamirk-ai-face-recommendation"
+version = "1.0.0"
+description = "Internal AI microservice for Glamirk: skin analysis and virtual try-on."
+requires-python = ">=3.12,<3.13"
+readme = "README.md"
+
+# ---------------------------------------------------------------------------
+# PRODUCTION RUNTIME ONLY.
+#
+# PyTorch, timm and scikit-image are deliberately absent. They belong to the
+# offline training/export environment (see offline-models/), never to the
+# runtime image — the production service consumes ONNX and nothing else.
+#
+# There is also no PostgreSQL driver: this service is stateless and the Node
+# backend owns the database.
+# ---------------------------------------------------------------------------
+dependencies = [
+    # --- web ---
+    "fastapi==0.115.6",
+    "uvicorn==0.34.0",
+    "orjson==3.10.13",
+    "pydantic==2.10.4",
+    "pydantic-settings==2.7.0",
+    "python-multipart==0.0.20",
+    # uvloop and gunicorn are POSIX-only. Marked so a Windows dev machine can
+    # still install the project; the Linux production image gets both.
+    "uvloop==0.21.0; sys_platform != 'win32'",
+    "httptools==0.6.4",
+    "gunicorn==23.0.0; sys_platform != 'win32'",
+
+    # --- vision ---
+    "opencv-python-headless==4.10.0.84",
+    "numpy==1.26.4",
+    "mediapipe==0.10.20",
+    "colour-science==0.4.6",
+    # Input loading only: HEIC decode, EXIF orientation, ICC -> sRGB.
+    "pillow==11.0.0",
+    "pillow-heif==0.21.0",
+
+    # --- inference ---
+    "onnxruntime==1.20.1",
+
+    # --- integration ---
+    "httpx==0.28.1",
+    "tenacity==9.0.0",
+    "redis==5.2.1",
+
+    # --- observability ---
+    "structlog==24.4.0",
+    "prometheus-client==0.21.1",
+    "sentry-sdk==2.19.2",
+]
+
+[project.optional-dependencies]
+# Installed in CI and locally, never in the runtime image.
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.25.0",
+    "pytest-cov==6.0.0",
+    "ruff==0.8.4",
+    "mypy==1.14.0",
+    "pre-commit==4.0.1",
+    "types-redis==4.6.0.20241004",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [".venv", "offline-models", "models"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort
+    "B",        # bugbear
+    "UP",       # pyupgrade
+    "SIM",      # simplify
+    "C4",       # comprehensions
+    "BLE",      # blind excepts must be justified, not habitual
+    "RUF",      # ruff-specific
+]
+ignore = [
+    "E501",    # line length is enforced by the formatter
+    "B008",    # FastAPI's Depends()/File() in defaults is the documented idiom
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+# `l` is the CIELAB lightness component. Renaming it to `lightness` inside the
+# colour maths would make the code harder to check against the literature, not
+# easier.
+"app/utils/color.py" = ["E741"]
+"app/services/skin_tone.py" = ["E741"]
+
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = false
+exclude = ["offline-models/", "\\.venv/"]
+
+# These ship no type stubs; typing them ourselves would be fiction.
+[[tool.mypy.overrides]]
+module = ["mediapipe.*", "onnxruntime.*", "colour.*", "pillow_heif.*"]
+ignore_missing_imports = true
+
+# OpenCV does ship stubs, but they model NumPy dtypes invariantly: every
+# overload is declared for `dtype[integer | floating]`, which rejects the uint8
+# arrays that are the only thing this service ever passes it. Following them
+# would mean a `# type: ignore` on every image operation in the codebase, which
+# is noise, not safety.
+[[tool.mypy.overrides]]
+module = ["cv2", "cv2.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q --strict-markers"
+filterwarnings = [
+    "ignore::DeprecationWarning:google.protobuf.*",
+    "ignore::UserWarning:mediapipe.*",
+]

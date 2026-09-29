@@ -34,9 +34,26 @@ jobs:
             set -e
             cd /var/www/glamirk
             git pull origin main
+
+            # npm workspaces: a single install at the root links shared/ into
+            # frontend, admin and backend, and installs every workspace's deps.
             npm ci
+
+            # Builds in dependency order: storefront -> admin -> backend bundle.
+            # Both dist/ folders must exist before the server starts, because it
+            # serves them as static assets.
             npm run build
+
+            # ecosystem.config.cjs is versioned in the repo now and points at
+            # backend/dist/server.cjs. startOrReload picks up the updated file.
             pm2 startOrReload ecosystem.config.cjs
             pm2 save
+
+            # Fail loudly if the app didn't actually come up, instead of
+            # reporting a green deploy over a site that is down.
+            sleep 5
+            curl -fsS http://127.0.0.1:3000/api/health > /dev/null \
+              || { echo "Health check FAILED after deploy"; pm2 logs glamirk-beauty --lines 40 --nostream; exit 1; }
+
             echo "Deployment completed successfully!"
           EOF

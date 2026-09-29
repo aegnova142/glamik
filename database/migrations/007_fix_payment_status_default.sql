@@ -1,0 +1,32 @@
+-- ==========================================================================
+-- 007_fix_payment_status_default.sql
+-- ==========================================================================
+--
+-- Corrects a schema drift found by diffing production against the migrations.
+--
+-- Production had:  orders.payment_status DEFAULT 'PENDING'
+-- The code expects: orders.payment_status DEFAULT 'COD_PENDING'
+--
+-- Cause: 002 adds the column with
+--   ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL
+--     DEFAULT 'COD_PENDING';
+-- On a database where the column already existed with the older 'PENDING'
+-- default, ADD COLUMN IF NOT EXISTS is a no-op — it will not correct the
+-- default of an existing column. So the codebase moved to 'COD_PENDING' while
+-- production silently kept 'PENDING'. This is precisely the class of drift the
+-- old inline ensureSchema() could never surface, and the reason for the ledger.
+--
+-- 'PENDING' is not a member of PaymentDetails['status'] ('COD_PENDING' | 'PAID')
+-- in shared/src/types.ts, so the stale default was also an invalid value.
+--
+-- Scope: schema only. The default applies solely to INSERTs that omit the
+-- column, and checkout always supplies it explicitly — so this changes no
+-- behaviour today and touches no existing row. Backfilling the historical rows
+-- that already carry 'PENDING' is deliberately NOT done here; that is a data
+-- change to real orders and belongs in its own reviewed migration.
+--
+-- Unlike 001-006 (the idempotent historical baseline) this migration is
+-- tracked by the ledger and runs exactly once.
+-- ==========================================================================
+
+ALTER TABLE orders ALTER COLUMN payment_status SET DEFAULT 'COD_PENDING';

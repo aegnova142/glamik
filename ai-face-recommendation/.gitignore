@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Model weights — large, licensed separately, fetched via scripts/download_models.py
+models/**/*.task
+models/**/*.onnx
+models/**/*.tflite
+models/**/*.pt
+models/**/*.pth
+
+# Never commit sample faces. This service does not store images, and neither
+# should the repository.
+*.jpg
+*.jpeg
+*.png
+*.webp
+!docs/**/*.png

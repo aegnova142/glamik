@@ -1,0 +1,56 @@
+# Local development stack: the AI service plus Redis.
+#
+# The Node backend is deliberately NOT defined here. It is a separate
+# application with its own lifecycle, and duplicating it would create a second
+# source of truth. Point NODE_BACKEND_URL at wherever it is running.
+#
+#   docker compose up --build
+#   docker compose run --rm ai python scripts/download_models.py
+
+services:
+  ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: glamirk-ai
+    ports:
+      - "8001:8001"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8001
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      LOG_JSON: "true"
+      WEB_CONCURRENCY: 2
+      REDIS_URL: redis://redis:6379
+      MODEL_DIR: /app/models
+      # host.docker.internal reaches the Node backend running on the host.
+      NODE_BACKEND_URL: ${NODE_BACKEND_URL:-http://host.docker.internal:3000}
+      # Supplied from the host environment or a .env file — never hardcoded.
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:?set INTERNAL_API_KEY in your environment or .env}
+    volumes:
+      # Weights live on the host so rebuilding the image does not re-download
+      # them, and so they are never baked into a layer.
+      - ./models:/app/models
+    depends_on:
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: glamirk-ai-redis
+    # No persistence. Everything cached here is derived from a face photo and
+    # is cheap to recompute; keeping it in memory only means a restart cannot
+    # leave analysis results sitting on disk.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped

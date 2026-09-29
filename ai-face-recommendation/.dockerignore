@@ -1,0 +1,35 @@
+# Keep the build context small and keep training assets out of the runtime
+# image entirely.
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets never enter the image.
+.env
+.env.*
+!.env.example
+
+# Training and export code — PyTorch, timm, notebooks, datasets. The whole
+# point of the ONNX boundary is that none of this ships.
+offline-models/
+
+# Model weights are mounted or downloaded at deploy time, not baked in.
+models/
+
+.git/
+.github/
+.gitignore
+tests/
+docs/
+*.md
+!README.md
+docker-compose.yml
+Dockerfile
+.dockerignore
+.pre-commit-config.yaml

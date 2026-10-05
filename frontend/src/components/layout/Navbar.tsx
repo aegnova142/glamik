@@ -103,7 +103,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onNavigateAbout,
   onOpenOrder,
 }) => {
-  const { globalSettings } = useCMS();
+  const { globalSettings, shopMegaMenu } = useCMS();
   const { customerUser, isCustomerLoggedIn } = useCustomerAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [activeMegaMenu, setActiveMegaMenu] = useState<string | null>(null);
@@ -137,6 +137,25 @@ export const Navbar: React.FC<NavbarProps> = ({
     setActiveMegaMenu(null);
     setMobileMenuOpen(false);
     onNavigateShop(category, subCategory);
+  };
+
+  // Route a CMS-configured Shop URL to the right existing flow. Supports
+  // "#find-my-shade", external links, and "/shop[/<category>[/<subcategory>]]".
+  const runShopCta = (url?: string) => {
+    setActiveMegaMenu(null);
+    setMobileMenuOpen(false);
+    if (!url) return onNavigateShop(null, null);
+    if (url.startsWith('#find-my-shade') || url.startsWith('/find-my-shade')) return onOpenShadeFinder();
+    if (url.startsWith('http')) {
+      window.location.href = url;
+      return;
+    }
+    const parts = url.replace(/^\/+/, '').split('/');
+    if (parts[0] === 'shop') {
+      const cap = (s?: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : null);
+      return onNavigateShop(cap(parts[1]), cap(parts[2]));
+    }
+    onNavigateShop(null, null);
   };
 
   return (
@@ -513,146 +532,167 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Shop Mega Menu Overlay with Product Categories */}
         <AnimatePresence>
-          {activeMegaMenu && (
+          {/* [Glamik CMS] 2026-10-03 — Shop mega-menu is now CMS-driven (columns,
+              items, promo). Image onError guards added 2026-10-05. */}
+          {activeMegaMenu === 'SHOP' && shopMegaMenu && shopMegaMenu.enabled !== false && (
             <motion.div
-              id={`mega-menu-${activeMegaMenu.toLowerCase()}`}
+              id="mega-menu-shop"
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.2 }}
-              className="hidden lg:block absolute left-0 w-full bg-white border-b border-[#E8D5A8] shadow-[0_16px_36px_rgba(240, 90, 126,0.08)] z-30 pt-6 pb-10"
-              onMouseEnter={() => setActiveMegaMenu(activeMegaMenu)}
+              className="hidden lg:block absolute left-0 w-full z-30 pt-3 pb-8"
+              onMouseEnter={() => setActiveMegaMenu('SHOP')}
               onMouseLeave={() => setActiveMegaMenu(null)}
             >
-              <div className="max-w-7xl mx-auto px-8 grid grid-cols-12 gap-8">
-                
-                {/* Column 1: Lips & Makeup */}
-                <div className="col-span-4 space-y-3">
-                  <div className="flex items-center justify-between border-b border-[#E8D5A8] pb-2">
-                    <h4 className="text-sm font-bold text-[#121212] uppercase tracking-wider">
-                      Lips &amp; Makeup
-                    </h4>
-                    <span className="text-[10px] bg-[#FCE8ED] text-[#F05A7E] font-bold px-2 py-0.5 rounded-full">
-                      8 Shades
-                    </span>
-                  </div>
-                  <ul className="space-y-2.5 text-[13px] text-[#6B6B6B]">
-                    <li>
-                      <button
-                        onClick={() => handleShopNavigation('Makeup', 'Lips')}
-                        className="hover:text-[#F05A7E] transition-colors text-left flex items-center justify-between w-full"
-                      >
-                        <span>Matte Liquid Lipsticks</span>
-                        <span className="text-[11px] text-[#C9972B] font-semibold">Bestseller</span>
-                      </button>
-                    </li>
-                    <li>
-                      <button
-                        onClick={() => handleShopNavigation('Makeup', 'Lips')}
-                        className="hover:text-[#F05A7E] transition-colors text-left"
-                      >
-                        Velvet Lip Stains &amp; Liners
-                      </button>
-                    </li>
-                    <li>
-                      <button
-                        onClick={() => handleShopNavigation('Makeup', 'Face')}
-                        className="hover:text-[#F05A7E] transition-colors text-left"
-                      >
-                        Luxury Sindoor (Scarlet &amp; Maroon)
-                      </button>
-                    </li>
-                    <li className="pt-1">
-                      <button
-                        onClick={() => handleShopNavigation('Makeup', null)}
-                        className="text-[#F05A7E] font-bold hover:underline transition-all text-xs flex items-center gap-1"
-                      >
-                        <span>Explore All Makeup</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    </li>
-                  </ul>
-                </div>
+              <div className="max-w-7xl mx-auto px-6">
+                <div className="relative bg-white rounded-3xl border border-[#F3D9E0] shadow-[0_24px_60px_rgba(240,90,126,0.14)] p-5 xl:p-6">
+                  {/* Caret pointing to the Shop tab */}
+                  <span className="absolute -top-2 left-[8.5rem] w-4 h-4 bg-white border-l border-t border-[#F3D9E0] rotate-45 rounded-tl-sm" />
 
-                {/* Column 2: Skin & Cleansing */}
-                <div className="col-span-4 space-y-3">
-                  <div className="flex items-center justify-between border-b border-[#E8D5A8] pb-2">
-                    <h4 className="text-sm font-bold text-[#121212] uppercase tracking-wider">
-                      Skin &amp; Cleansing
-                    </h4>
-                    <span className="text-[10px] bg-[#FCE8ED] text-[#F05A7E] font-bold px-2 py-0.5 rounded-full">
-                      Balm
-                    </span>
-                  </div>
-                  <ul className="space-y-2.5 text-[13px] text-[#6B6B6B]">
-                    <li>
-                      <button
-                        onClick={() => handleShopNavigation('Skin', 'Cleansing')}
-                        className="hover:text-[#F05A7E] transition-colors text-left font-medium text-[#121212] flex items-center justify-between w-full"
-                      >
-                        <span>Balm To Water Cleanser (50g)</span>
-                        <span className="text-[11px] text-[#C9972B] font-semibold">Hero</span>
-                      </button>
-                    </li>
-                    <li>
-                      <button
-                        onClick={() => handleShopNavigation('Skin', 'Cleansing')}
-                        className="hover:text-[#F05A7E] transition-colors text-left"
-                      >
-                        Travel Cleanser Format (30g)
-                      </button>
-                    </li>
-                    <li>
-                      <button
-                        onClick={() => handleShopNavigation('Skin', null)}
-                        className="hover:text-[#F05A7E] transition-colors text-left"
-                      >
-                        Skin Barrier &amp; Ceramide Formulations
-                      </button>
-                    </li>
-                    <li className="pt-1">
-                      <button
-                        onClick={() => handleShopNavigation('Skin', null)}
-                        className="text-[#F05A7E] font-bold hover:underline transition-all text-xs flex items-center gap-1"
-                      >
-                        <span>Explore All Skincare</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    </li>
-                  </ul>
-                </div>
+                  <div className="relative grid grid-cols-12 gap-5">
+                    {/* Category columns */}
+                    {shopMegaMenu.columns.map((col, ci) => (
+                      <div key={col.id} className={`col-span-4 ${ci > 0 ? 'lg:border-l lg:border-[#F0E6E9] lg:pl-5' : ''}`}>
+                        {/* Column header */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <span className="w-11 h-11 rounded-full bg-[#FCE8ED] border border-[#F3D9E0] flex items-center justify-center overflow-hidden shrink-0">
+                              {col.iconUrl ? (
+                                <img src={col.iconUrl} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                              ) : ci === 0 ? (
+                                <Sparkles className="w-5 h-5 text-[#F05A7E]" />
+                              ) : (
+                                <Flower2 className="w-5 h-5 text-[#F05A7E]" />
+                              )}
+                            </span>
+                            <h4 className="text-sm font-bold text-[#121212] uppercase tracking-wide">{col.title}</h4>
+                          </div>
+                          {col.badgeEnabled && col.badge && (
+                            <button
+                              onClick={() => runShopCta(col.viewAllUrl)}
+                              className="inline-flex items-center gap-1 text-[11px] bg-[#FCE8ED] text-[#F05A7E] font-bold px-2.5 py-1 rounded-full hover:bg-[#F8D3DD] transition-colors cursor-pointer"
+                            >
+                              {col.badge}
+                              <ArrowRight className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
 
-                {/* Column 3: Quick Atelier Spotlight */}
-                <div className="col-span-4 bg-[#FCE8ED] p-5 rounded-2xl border border-[#E8D5A8] flex flex-col justify-between">
-                  <div>
-                    <span className="text-[10px] tracking-[0.2em] uppercase text-[#F05A7E] font-bold">
-                      THE GLAMIRK ATELIER
-                    </span>
-                    <h3 className="text-base font-bold text-[#121212] mt-1 mb-1.5">
-                      Tailored for Indian undertones.
-                    </h3>
-                    <p className="text-[12px] text-[#6B6B6B] leading-relaxed">
-                      Precision shade matching for warm, neutral, cool, and olive complexions.
-                    </p>
-                  </div>
-                  <div className="pt-3 space-y-2">
-                    <button
-                      onClick={() => handleShopNavigation(null, null)}
-                      className="w-full py-2.5 bg-[#F05A7E] text-white text-[11px] font-bold uppercase tracking-wider rounded-xl hover:bg-[#F05A7E] transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-                    >
-                      <span>SHOP ENTIRE CATALOG</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setActiveMegaMenu(null);
-                        onOpenShadeFinder();
-                      }}
-                      className="w-full py-2 bg-white border border-[#E8D5A8] text-[#121212] hover:text-[#F05A7E] text-[11px] font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-[#F05A7E]" />
-                      <span>START DIAGNOSTIC</span>
-                    </button>
+                        <div className="h-px bg-[#F0E6E9] mb-2" />
+
+                        {/* Items */}
+                        <ul className="space-y-1">
+                          {col.items.map((item) => (
+                            <li key={item.id}>
+                              <button
+                                onClick={() => runShopCta(item.url)}
+                                className="group w-full flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-[#FDF2F5] transition-colors text-left cursor-pointer"
+                              >
+                                <span className="w-11 h-11 rounded-lg bg-[#FCE8ED] border border-[#F3D9E0] overflow-hidden shrink-0 flex items-center justify-center">
+                                  {item.imageUrl ? (
+                                    <img src={item.imageUrl} alt={item.altText || item.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                                  ) : (
+                                    <ShoppingBag className="w-4 h-4 text-[#F05A7E]/50" />
+                                  )}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="flex items-center gap-2">
+                                    <span className="text-[13px] font-semibold text-[#121212] group-hover:text-[#F05A7E] transition-colors truncate">
+                                      {item.name}
+                                    </span>
+                                    {item.badge && (
+                                      <span className="text-[10px] bg-[#FBE6C9] text-[#B07A1E] font-bold px-1.5 py-0.5 rounded-full shrink-0">
+                                        {item.badge}
+                                      </span>
+                                    )}
+                                  </span>
+                                  {item.subtitle && <span className="block text-[11px] text-[#9A9A9A] truncate">{item.subtitle}</span>}
+                                </span>
+                                <ArrowRight className="w-4 h-4 text-[#D9C3C9] group-hover:text-[#F05A7E] group-hover:translate-x-0.5 transition-all shrink-0" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+
+                        {/* View-all button */}
+                        <button
+                          onClick={() => runShopCta(col.viewAllUrl)}
+                          className="mt-3 w-full py-3 rounded-2xl border border-[#F3D9E0] bg-[#FDF2F5] text-[#F05A7E] text-[13px] font-bold hover:bg-[#FCE8ED] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <span>{col.viewAllLabel}</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+
+                    {/* Promotional banner */}
+                    {shopMegaMenu.promo && shopMegaMenu.promo.isActive !== false && (
+                      <div className="col-span-4 relative overflow-hidden rounded-2xl border border-[#F3D9E0] bg-gradient-to-br from-[#FDE7EE] via-[#FBD9E4] to-[#F6C6D5] p-5 flex flex-col">
+                        {/* Media (right-anchored) */}
+                        {shopMegaMenu.promo.mediaUrl && (
+                          <div className="pointer-events-none absolute -right-2 bottom-0 top-8 w-1/2">
+                            {shopMegaMenu.promo.mediaType === 'video' ? (
+                              <video
+                                src={shopMegaMenu.promo.mediaUrl}
+                                poster={shopMegaMenu.promo.posterUrl || undefined}
+                                muted
+                                loop
+                                autoPlay
+                                playsInline
+                                preload="metadata"
+                                className="w-full h-full object-contain object-bottom"
+                              />
+                            ) : (
+                              <img
+                                src={shopMegaMenu.promo.mediaUrl}
+                                alt=""
+                                loading="lazy"
+                                className="w-full h-full object-contain object-bottom"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            )}
+                          </div>
+                        )}
+
+                        <div className="relative max-w-[62%]">
+                          {shopMegaMenu.promo.label && (
+                            <span className="text-[10px] tracking-[0.18em] uppercase text-[#C23B63] font-bold">
+                              {shopMegaMenu.promo.label}
+                            </span>
+                          )}
+                          <h3 className="mt-1 font-serif text-xl xl:text-2xl font-bold text-[#2B1016] leading-snug">
+                            {shopMegaMenu.promo.title.split(' ').map((w, i, arr) =>
+                              i >= arr.length - 2 ? <span key={i} className="text-[#E0265F]">{w} </span> : <span key={i}>{w} </span>
+                            )}
+                          </h3>
+                          {shopMegaMenu.promo.description && (
+                            <p className="mt-2 text-[12px] text-[#6B4A52] leading-relaxed">{shopMegaMenu.promo.description}</p>
+                          )}
+                        </div>
+
+                        <div className="relative mt-auto pt-4 space-y-2 max-w-[80%]">
+                          {shopMegaMenu.promo.primaryCtaLabel && (
+                            <button
+                              onClick={() => runShopCta(shopMegaMenu.promo.primaryCtaUrl)}
+                              className="w-full py-3 bg-[#E0265F] text-white text-[11px] font-bold uppercase tracking-wider rounded-xl hover:bg-[#C81F53] transition-colors flex items-center justify-center gap-1.5 shadow-[0_6px_16px_rgba(224,38,95,0.3)] cursor-pointer"
+                            >
+                              <span>{shopMegaMenu.promo.primaryCtaLabel}</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {shopMegaMenu.promo.secondaryCtaLabel && (
+                            <button
+                              onClick={() => runShopCta(shopMegaMenu.promo.secondaryCtaUrl)}
+                              className="w-full py-2.5 bg-white/90 backdrop-blur text-[#2B1016] hover:text-[#E0265F] text-[11px] font-bold uppercase tracking-wider rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-[#E0265F]" />
+                              <span>{shopMegaMenu.promo.secondaryCtaLabel}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

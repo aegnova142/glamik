@@ -970,7 +970,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#121212] font-sans antialiased selection:bg-[#C9972B] selection:text-white relative">
-      
+
       {/* Offline Connectivity Resilience Banner */}
       <OfflineBanner />
 
@@ -1089,26 +1089,24 @@ function AppContent() {
             />
 
             {/* 7th: Match Your Shade CTA Banner (just before Footer) */}
+            {/* [Glamik] 2026-10-04 — restyled to match the site's pink "Still have
+                questions?" bar (icon + copy + pill CTA). */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-24">
-              <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#E8D5A8] shadow-[0_8px_30px_rgba(240,90,126,0.06)] flex flex-col sm:flex-row items-center justify-between gap-6">
-                <div className="space-y-1.5 text-center sm:text-left">
-                  <span className="text-[10.5px] tracking-wider uppercase text-[#F05A7E] font-bold">
-                    Unsure About Your Undertone?
-                  </span>
-                  <h3 className="text-xl sm:text-2xl font-bold text-[#121212]">
-                    Match Your Shade with Precision
-                  </h3>
-                  <p className="text-xs sm:text-sm text-[#6B6B6B] max-w-xl">
-                    Explore our shade intelligence algorithm to find your exact match across liquid lipsticks and ceremonial sindoor.
-                  </p>
+              <div className="bg-[#F05A7E] rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-5">
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center shrink-0">
+                    <Sparkles className="w-5 h-5 text-[#F05A7E]" />
+                  </div>
+                  <div className="text-center sm:text-left">
+                    <h3 className="text-base font-bold text-white">Unsure about your undertone?</h3>
+                    <p className="text-xs text-white/80">Match your shade with precision across liquid lipsticks and ceremonial sindoor.</p>
+                  </div>
                 </div>
-
                 <button
                   onClick={navigateToFindMyShade}
-                  className="flex-shrink-0 px-6 py-3 bg-[#F05A7E] hover:bg-[#F05A7E] text-white text-xs font-bold rounded-full transition-all flex items-center gap-2 shadow-[0_4px_12px_rgba(240,90,126,0.25)] hover:scale-102 active:scale-95 cursor-pointer"
+                  className="px-6 py-3 bg-white text-[#F05A7E] text-xs font-bold uppercase tracking-wider rounded-full hover:bg-[#FCE8ED] transition-colors cursor-pointer shrink-0"
                 >
-                  <Sparkles className="w-4 h-4" />
-                  <span>Find My Shade</span>
+                  Find My Shade
                 </button>
               </div>
             </div>

@@ -1535,6 +1535,46 @@ export interface CMSShadeUndertoneProfile {
 
 /** Homepage "Shade Intelligence" teaser section — distinct from CMSShadeJourney,
  * which powers the separate /find-my-shade page's step-by-step journey. */
+// [Glamik CMS] 2026-10-03 — Find Your Perfect Match: look-types + undertone×look
+// matrix (extends CMSShadeFinderTeaser; all new fields optional for back-compat).
+/** One "looking for" option (Lip Shade / Sindoor / Complete Look / Occasion). */
+export interface CMSShadeLookType {
+  id: string;
+  name: string;
+  description?: string;
+  iconUrl?: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface CMSShadeMatchSwatch {
+  color: string;
+  name?: string;
+}
+
+/** One cell of the undertone × look-type personalization matrix. Any empty
+ * field falls back to the undertone profile's own value on the frontend. */
+export interface CMSShadeMatchConfig {
+  undertoneId: string;
+  lookTypeId: string;
+  matchTitle?: string;
+  matchDescription?: string;
+  primaryLabel?: string;
+  primary?: string;
+  secondaryLabel?: string;
+  secondary?: string;
+  beforeImage?: string;
+  afterImage?: string;
+  beforeLabel?: string;
+  afterLabel?: string;
+  /** Title under the before/after visual, e.g. "Warm & Golden Spectrum". */
+  visualTitle?: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+  swatches?: CMSShadeMatchSwatch[];
+  isActive: boolean;
+}
+
 export interface CMSShadeFinderTeaser {
   badgeText: string;
   heading: string;
@@ -1542,6 +1582,14 @@ export interface CMSShadeFinderTeaser {
   description: string;
   ctaText: string;
   profiles: CMSShadeUndertoneProfile[];
+  /** Highlighted part of the heading, e.g. "Perfect Match". Optional (back-compat). */
+  highlight?: string;
+  /** Label above the look-type selector, e.g. "Choose what you're looking for:". */
+  chooseLabel?: string;
+  /** The four "looking for" options. Optional for back-compat. */
+  lookTypes?: CMSShadeLookType[];
+  /** undertone × look-type configurations (the 16-cell matrix). */
+  configs?: CMSShadeMatchConfig[];
 }
 
 export interface CMSBenefitsSection {
@@ -1605,6 +1653,122 @@ export interface CMSFindMyShadeHero {
   captionText: string;
 }
 
+// [Glamik CMS] 2026-10-03 — Personalized Beauty section types (homepage).
+/** One of the two preview cards (Recommended Lip Shade / Ceremonial Pairing)
+ * shown for a selected undertone in the homepage Personalized Beauty section.
+ * Media can be a still image or a muted autoplay video — the frontend renders
+ * the correct element from mediaType. */
+export interface CMSPersonalizedBeautyCard {
+  title: string;
+  description: string;
+  mediaType: 'image' | 'video';
+  /** Cloudinary URL for the image or video. */
+  mediaUrl: string;
+  /** Poster frame for video (optional); ignored for images. */
+  posterUrl?: string;
+  /** Optional corner tag, e.g. "HERITAGE". */
+  badge?: string;
+  ctaLabel: string;
+  ctaUrl: string;
+}
+
+/** A selectable undertone. Its two content cards are embedded (not a separate
+ * joined collection) because the UI always shows exactly these two per
+ * undertone — one row, no join logic, lazier to edit and render. */
+export interface CMSPersonalizedUndertone {
+  id: string;
+  name: string;
+  description: string;
+  thumbnailUrl: string;
+  /** Swatch/accent color for the selected state, e.g. "#C9972B". */
+  accentColor: string;
+  /** Short note shown in the Match Preview header, e.g. "Best for balanced neutral undertones". */
+  tag?: string;
+  sortOrder: number;
+  isActive: boolean;
+  lipShade: CMSPersonalizedBeautyCard;
+  pairing: CMSPersonalizedBeautyCard;
+}
+
+/** Homepage "Personalized Beauty" section — fully admin-editable copy plus the
+ * undertone selector and its per-undertone preview cards. */
+export interface CMSPersonalizedBeauty {
+  badgeText: string;
+  heading: string;
+  /** Italic/accent word in the heading, e.g. "Beauty". */
+  headingHighlight: string;
+  description: string;
+  stepNumber: string;
+  stepLabel: string;
+  selectHeading: string;
+  selectSubtext: string;
+  aiCtaLabel: string;
+  aiCtaUrl: string;
+  matchPreviewLabel: string;
+  formulationHeading: string;
+  lipShadeLabel: string;
+  pairingLabel: string;
+  quizPrompt: string;
+  quizCtaLabel: string;
+  quizCtaUrl: string;
+  undertones: CMSPersonalizedUndertone[];
+}
+
+// [Glamik CMS] 2026-10-03 — Shop mega-menu types (header dropdown).
+/** One link row inside a Shop mega-menu column (e.g. "Matte Liquid Lipsticks"). */
+export interface CMSShopMegaMenuItem {
+  id: string;
+  name: string;
+  subtitle?: string;
+  /** Where the item navigates, e.g. "/shop/makeup" or "#find-my-shade". */
+  url: string;
+  /** Small product swatch/thumbnail; falls back to a placeholder when empty. */
+  imageUrl?: string;
+  altText?: string;
+  /** Optional pill shown next to the item, e.g. "Bestseller". */
+  badge?: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+/** A column in the Shop mega-menu (e.g. "Lips & Makeup"). */
+export interface CMSShopMegaMenuColumn {
+  id: string;
+  title: string;
+  /** Uploaded icon image shown in the circular badge; falls back to a default. */
+  iconUrl?: string;
+  badge?: string;
+  badgeEnabled: boolean;
+  viewAllLabel: string;
+  viewAllUrl: string;
+  isActive: boolean;
+  sortOrder: number;
+  items: CMSShopMegaMenuItem[];
+}
+
+/** The promotional card on the right of the Shop mega-menu. Image or video. */
+export interface CMSShopPromoBanner {
+  label: string;
+  title: string;
+  description: string;
+  mediaType: 'image' | 'video';
+  mediaUrl: string;
+  posterUrl?: string;
+  primaryCtaLabel: string;
+  primaryCtaUrl: string;
+  secondaryCtaLabel: string;
+  secondaryCtaUrl: string;
+  badge?: string;
+  isActive: boolean;
+}
+
+/** Admin-managed Shop mega-menu (header dropdown). */
+export interface CMSShopMegaMenu {
+  enabled: boolean;
+  columns: CMSShopMegaMenuColumn[];
+  promo: CMSShopPromoBanner;
+}
+
 export interface CMSDatabaseSchema {
   users: CMSUser[];
   pages: CMSPage[];
@@ -1632,5 +1796,9 @@ export interface CMSDatabaseSchema {
   /** Admin-managed Virtual Try-On standard model presets — replaces the
    * static src/data/models.ts list as the source of truth once populated. */
   tryOnModels: TryOnModelPreset[];
+  /** Homepage Personalized Beauty section (undertone selector + preview cards). */
+  personalizedBeauty: CMSPersonalizedBeauty;
+  /** Header Shop mega-menu (columns, items, promo card). */
+  shopMegaMenu: CMSShopMegaMenu;
 }
 

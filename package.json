@@ -14,6 +14,7 @@
     "build": "npm run build --workspace @glamirk/frontend && npm run build --workspace @glamirk/admin && npm run build --workspace @glamirk/backend",
     "start": "npm run start --workspace @glamirk/backend",
     "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspace @glamirk/backend",
     "migrate": "npm run migrate --workspace @glamirk/backend",
     "seed": "npm run seed --workspace @glamirk/backend",
     "clean": "rimraf frontend/dist admin/dist backend/dist"

@@ -419,9 +419,11 @@ export type AccountSection =
   | 'wishlist'
   | 'rewards'
   | 'addresses'
+  | 'payments'
   | 'profile'
   | 'glam-profile'
   | 'shade-history'
+  | 'try-on-history'
   | 'reviews'
   | 'recently-viewed'
   | 'help'
@@ -434,9 +436,11 @@ export const ACCOUNT_SECTIONS: AccountSection[] = [
   'wishlist',
   'rewards',
   'addresses',
+  'payments',
   'profile',
   'glam-profile',
   'shade-history',
+  'try-on-history',
   'reviews',
   'recently-viewed',
   'help',
@@ -621,52 +625,264 @@ export interface Address {
   city: string;
   state: string;
   pinCode: string;
+  /** Default *shipping* address — what checkout preselects. At most one per
+   * customer, enforced by a partial unique index. */
   isDefault?: boolean;
+  /** Default *billing* address. Independent of isDefault: one address can be
+   * both, and when none is marked the billing address falls back to the
+   * shipping one. Also at most one per customer. */
+  isBillingDefault?: boolean;
 }
 
 export type PaymentMethodType = 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod' | 'online';
 
+// ==========================================
+// THE THREE LIFECYCLES
+//
+// An order carries three independent states, and conflating them is what
+// makes fulfilment systems lie to customers. A payment can fail without the
+// order ceasing to exist; a courier can mark an RTO on an order that is
+// otherwise perfectly fine; an order can be cancelled while its refund is
+// still in flight. Each gets its own vocabulary and its own column.
+// ==========================================
+
+/** Where the money is. Independent of fulfilment. */
+export type PaymentStatus =
+  /** Online order created, customer has not completed payment yet. */
+  | 'PENDING'
+  | 'PAID'
+  | 'FAILED'
+  /** Customer abandoned the gateway checkout deliberately. */
+  | 'CANCELLED'
+  /** Gateway order outlived its window without being paid. */
+  | 'EXPIRED'
+  | 'REFUNDED'
+  | 'PARTIALLY_REFUNDED'
+  /** Cash on Delivery: nothing is owed to us until the courier collects. */
+  | 'COD_PENDING';
+
+export const PAYMENT_STATUSES: PaymentStatus[] = [
+  'PENDING',
+  'PAID',
+  'FAILED',
+  'CANCELLED',
+  'EXPIRED',
+  'REFUNDED',
+  'PARTIALLY_REFUNDED',
+  'COD_PENDING',
+];
+
+/** Payment states from which no further money movement is expected. */
+export const TERMINAL_PAYMENT_STATUSES: PaymentStatus[] = ['FAILED', 'CANCELLED', 'EXPIRED', 'REFUNDED'];
+
+/** Where the parcel is. Mirrors the courier aggregator's own vocabulary so a
+ * webhook maps onto it without inventing intermediate states. */
+export type ShippingStatus =
+  | 'NOT_SHIPPED'
+  | 'PICKUP_SCHEDULED'
+  | 'AWB_ASSIGNED'
+  | 'PICKED_UP'
+  | 'IN_TRANSIT'
+  | 'OUT_FOR_DELIVERY'
+  | 'DELIVERED'
+  | 'FAILED_DELIVERY'
+  /** Return to origin — the courier is bringing it back to us. */
+  | 'RTO_INITIATED'
+  | 'RTO_DELIVERED'
+  | 'CANCELLED';
+
+export const SHIPPING_STATUSES: ShippingStatus[] = [
+  'NOT_SHIPPED',
+  'PICKUP_SCHEDULED',
+  'AWB_ASSIGNED',
+  'PICKED_UP',
+  'IN_TRANSIT',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED',
+  'FAILED_DELIVERY',
+  'RTO_INITIATED',
+  'RTO_DELIVERED',
+  'CANCELLED',
+];
+
 export interface PaymentDetails {
   method: PaymentMethodType;
-  status: 'COD_PENDING' | 'PAID';
+  status: PaymentStatus;
   upiId?: string;
   cardLast4?: string;
   cardNetwork?: string;
   bankName?: string;
   walletProvider?: string;
   paidAt?: string;
+  /** Gateway handles, for support and reconciliation. Never a card number —
+   * the gateway only ever returns a masked or tokenised instrument. */
+  gatewayOrderId?: string;
+  gatewayPaymentId?: string;
 }
 
 export type OrderStatus =
+  /** Online order awaiting payment. Nothing is reserved or fulfilled yet. */
+  | 'PENDING_PAYMENT'
+  /** Legacy: what every pre-gateway COD order was created as. Still valid and
+   * still rendered; equivalent to CONFIRMED for transition purposes. */
   | 'PLACED'
   | 'CONFIRMED'
+  | 'PROCESSING'
+  /** Legacy synonym of READY_TO_SHIP, kept for orders already in that state. */
   | 'PACKED'
+  | 'READY_TO_SHIP'
   | 'SHIPPED'
   | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
   | 'CANCELLED'
-  | 'RETURN_REQUESTED';
+  | 'RETURN_REQUESTED'
+  | 'RETURNED'
+  /** Returned to origin without being delivered. */
+  | 'RTO';
 
-// Single source of truth for the order lifecycle — imported by both the
-// server (which enforces it) and admin/customer order UIs (which need it
-// synchronously to decide what buttons to render, before any request).
-// Forward-only: CANCELLED is reachable as a side transition from any status
-// in CANCELLABLE_STATUSES, never from further along the sequence.
+/**
+ * The forward fulfilment ladder.
+ *
+ * PLACED and PACKED are deliberately absent: they are legacy spellings of
+ * CONFIRMED and READY_TO_SHIP, normalised through ORDER_STATUS_ALIASES below
+ * before any transition check. Keeping them out of the sequence means there is
+ * exactly one canonical ladder, while LEGACY_ORDER_STATUSES keeps the old
+ * values renderable and advanceable.
+ */
 export const ORDER_STATUS_SEQUENCE: OrderStatus[] = [
-  'PLACED',
+  'PENDING_PAYMENT',
   'CONFIRMED',
-  'PACKED',
+  'PROCESSING',
+  'READY_TO_SHIP',
   'SHIPPED',
   'OUT_FOR_DELIVERY',
   'DELIVERED',
 ];
 
-export const CANCELLABLE_ORDER_STATUSES: OrderStatus[] = ['PLACED', 'CONFIRMED', 'PACKED'];
+/** Statuses that exist only on rows written before the lifecycle split. */
+export const LEGACY_ORDER_STATUSES: OrderStatus[] = ['PLACED', 'PACKED'];
+
+/** Legacy spelling → its position on the canonical ladder. */
+export const ORDER_STATUS_ALIASES: Partial<Record<OrderStatus, OrderStatus>> = {
+  PLACED: 'CONFIRMED',
+  PACKED: 'READY_TO_SHIP',
+};
+
+/** Resolves a stored status to its canonical ladder equivalent. Safe to call
+ * on any status — non-legacy values pass through unchanged. */
+export function canonicalOrderStatus(status: OrderStatus): OrderStatus {
+  return ORDER_STATUS_ALIASES[status] || status;
+}
+
+/** Every value the status column may legally hold. */
+export const ORDER_STATUSES: OrderStatus[] = [
+  ...ORDER_STATUS_SEQUENCE,
+  ...LEGACY_ORDER_STATUSES,
+  'CANCELLED',
+  'RETURN_REQUESTED',
+  'RETURNED',
+  'RTO',
+];
+
+/**
+ * An order may still be cancelled while it is this far along.
+ *
+ * PENDING_PAYMENT is cancellable (the customer walked away from the gateway);
+ * SHIPPED is not — once a courier has it, the resolution is a return or an
+ * RTO, not a cancellation.
+ */
+export const CANCELLABLE_ORDER_STATUSES: OrderStatus[] = [
+  'PENDING_PAYMENT',
+  'PLACED',
+  'CONFIRMED',
+  'PROCESSING',
+  'PACKED',
+  'READY_TO_SHIP',
+];
+
+/**
+ * Order states that fulfilment has finished with.
+ *
+ * Used to stop a late courier scan dragging an order backwards — nothing
+ * should un-deliver a delivered order. DELIVERED belongs here for that
+ * purpose, but note it is NOT closed: see CLOSED_ORDER_STATUSES.
+ */
+export const TERMINAL_ORDER_STATUSES: OrderStatus[] = ['DELIVERED', 'CANCELLED', 'RETURNED', 'RTO'];
+
+/**
+ * Order states from which no transition of any kind is legal.
+ *
+ * Deliberately narrower than TERMINAL_ORDER_STATUSES: a DELIVERED order is
+ * done being fulfilled but can still have a return raised against it, so
+ * treating "fulfilment finished" as "nothing may ever happen again" would
+ * make returns impossible to start.
+ */
+export const CLOSED_ORDER_STATUSES: OrderStatus[] = ['CANCELLED', 'RETURNED', 'RTO'];
+
+/**
+ * Maps a courier shipping status onto the order status it implies.
+ *
+ * Only the states where fulfilment genuinely drives the order forward are
+ * listed; everything else leaves the order status alone. This is what lets a
+ * shipping webhook update the order without the two vocabularies having to
+ * know about each other anywhere else.
+ */
+export const SHIPPING_TO_ORDER_STATUS: Partial<Record<ShippingStatus, OrderStatus>> = {
+  PICKED_UP: 'SHIPPED',
+  IN_TRANSIT: 'SHIPPED',
+  OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
+  DELIVERED: 'DELIVERED',
+  RTO_INITIATED: 'RTO',
+  RTO_DELIVERED: 'RTO',
+};
+
+export interface PaymentRecordDetail {
+  id: string;
+  orderId: string;
+  provider: string;
+  providerOrderId?: string;
+  providerPaymentId?: string;
+  /** Rupees, not paise — converted at the edge so no UI ever divides by 100. */
+  amount: number;
+  currency: string;
+  status: PaymentStatus;
+  method?: string;
+  errorCode?: string;
+  errorDescription?: string;
+  refundedAmount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ShipmentDetail {
+  id: string;
+  orderId: string;
+  provider: string;
+  providerOrderId?: string;
+  providerShipmentId?: string;
+  awbCode?: string;
+  courierName?: string;
+  trackingUrl?: string;
+  labelUrl?: string;
+  manifestUrl?: string;
+  status: ShippingStatus;
+  freightCharge?: number;
+  appliedWeight?: number;
+  isCod: boolean;
+  pickupScheduledAt?: string;
+  deliveredAt?: string;
+  attemptCount: number;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface CustomerUser {
   id: string;
   name: string;
-  email: string;
+  // Optional: an account created through mobile + OTP has no email address
+  // until the customer adds one in their profile.
+  email?: string;
   phone?: string;
   createdAt: string;
   // Carried on the session so the navbar and bottom nav can render the
@@ -725,6 +941,24 @@ export interface Order {
   timeline: OrderTimelineEvent[];
   giftPackaging?: boolean;
   giftMessage?: string;
+  /** Furthest-along return state across this order's return requests, or
+   * absent if nothing was returned. The order's own `status` stops at
+   * RETURN_REQUESTED, so this is what distinguishes "return raised" from
+   * "money actually back". */
+  refundStatus?: ReturnStatus;
+
+  // --- The other two lifecycles (see PaymentStatus / ShippingStatus) ---
+  /** Authoritative payment state. `payment.status` carries the same value for
+   * the existing callers that read the nested object. */
+  paymentStatus: PaymentStatus;
+  shippingStatus: ShippingStatus;
+  /** Rupees actually collected and actually sent back. */
+  amountPaid: number;
+  amountRefunded: number;
+  cancelledAt?: string;
+  cancellationReason?: string;
+  /** Present once a shipment exists with the courier aggregator. */
+  shipment?: ShipmentDetail;
 }
 
 // Admin-configurable copy shown to shoppers for this promotion's lifecycle
@@ -806,8 +1040,30 @@ export interface Review {
   isVerifiedPurchase: boolean;
   skinTone?: string;
   undertone?: string;
+  /** Legacy single image. Reviews written before multi-media support still
+   * carry their photo here; the API surfaces it as the first `media` entry so
+   * renderers only ever need to read `media`. */
   photoUrl?: string;
+  media?: ReviewMedia[];
 }
+
+export type ReviewMediaType = 'image' | 'video';
+
+export interface ReviewMedia {
+  type: ReviewMediaType;
+  url: string;
+  /** Cloudinary public_id, kept so a removed item can actually be deleted
+   * from storage rather than just unlinked. Absent on legacy photoUrl rows,
+   * whose public_id was never recorded. */
+  publicId?: string;
+}
+
+/** Caps enforced on the server — exported so the composer can disable the
+ * upload button at the same limit the API rejects at, instead of letting
+ * someone pick ten files and fail on the last one. */
+export const REVIEW_MEDIA_MAX_ITEMS = 5;
+export const REVIEW_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+export const REVIEW_VIDEO_MAX_BYTES = 25 * 1024 * 1024;
 
 export type ReturnStatus = 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'PICKUP_SCHEDULED' | 'REFUNDED';
 
@@ -853,11 +1109,23 @@ export interface CustomerProfile {
   phone?: string;
   avatarUrl?: string;
   dateOfBirth?: string;
+  gender?: Gender;
   emailVerified: boolean;
   phoneVerified: boolean;
   createdAt: string;
   deletionRequestedAt?: string;
 }
+
+/** 'prefer_not_to_say' is a stored value rather than an absence, so
+ * "declined to answer" stays distinguishable from "never asked". */
+export type Gender = 'female' | 'male' | 'other' | 'prefer_not_to_say';
+
+export const GENDER_OPTIONS: { value: Gender; label: string }[] = [
+  { value: 'female', label: 'Female' },
+  { value: 'male', label: 'Male' },
+  { value: 'other', label: 'Other' },
+  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+];
 
 export interface CustomerSession {
   id: string;
@@ -1054,7 +1322,91 @@ export interface AccountOverview {
   availableCoupons: number;
   unreadNotifications: number;
   pendingReviews: number;
+  recentlyViewedCount: number;
+  openSupportTickets: number;
+  /** Returns raised but not yet settled — the dashboard's "money on its way
+   * back to you" card. */
+  pendingRefunds: number;
 }
+
+// ==========================================
+// PAYMENTS & REFUNDS
+// ==========================================
+
+/**
+ * One payment event in the account's Payments section.
+ *
+ * Derived entirely from the customer's own orders — there is no separate
+ * payments table, because Glamirk has no payment gateway yet and every order
+ * is Cash on Delivery. This is a truthful view of what was actually charged
+ * and collected, not a stand-in for a provider's ledger.
+ */
+export interface PaymentRecord {
+  orderId: string;
+  orderNumber: string;
+  placedAt: string;
+  amount: number;
+  method: PaymentMethodType;
+  status: PaymentDetails['status'];
+  /** Masked identifier for the instrument, e.g. "•••• 4242" or a UPI handle.
+   * Never a full card number — only ever what was already stored masked. */
+  instrumentLabel?: string;
+  paidAt?: string;
+  orderStatus: OrderStatus;
+}
+
+/** Progress of money going back to the customer, derived from their return
+ * requests joined to the originating order. */
+export interface RefundRecord {
+  returnId: string;
+  orderId: string;
+  orderNumber: string;
+  productName: string;
+  productImage?: string;
+  /** The line amount being refunded, from the original order item. */
+  amount: number;
+  status: ReturnStatus;
+  requestedAt: string;
+  updatedAt: string;
+  /** How the money comes back. COD orders have no instrument to reverse to,
+   * so these are settled manually — stated plainly rather than implying an
+   * automatic reversal that isn't happening. */
+  method: PaymentMethodType;
+}
+
+export interface PaymentsSummary {
+  payments: PaymentRecord[];
+  refunds: RefundRecord[];
+  totalPaid: number;
+  totalRefunded: number;
+  /** Amount on COD orders not yet delivered — owed but not yet collected. */
+  pendingCod: number;
+}
+
+// ==========================================
+// VIRTUAL TRY-ON HISTORY
+// ==========================================
+
+/** A shade the customer has tried on. No captured frame is stored — see the
+ * note in migration 010. */
+export interface TryOnHistoryEntry {
+  id: string;
+  productId: string;
+  productName: string;
+  productImage?: string;
+  shadeId?: string;
+  shadeName?: string;
+  shadeHex?: string;
+  mode: TryOnMode;
+  triedAt: string;
+  /** False when the product has since been delisted — the entry still shows,
+   * but try-on/add-to-bag are disabled rather than erroring on click. */
+  isAvailable: boolean;
+}
+
+/** Mirrors the three ways the try-on modal can run: the live camera, a
+ * standard model preset, or a photo the customer uploaded. */
+export type TryOnMode = 'live' | 'model' | 'upload';
 
 /** A product the customer has actually received and may therefore review. */
 export interface ReviewableProduct {

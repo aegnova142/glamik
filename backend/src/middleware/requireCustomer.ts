@@ -8,7 +8,9 @@ import { touchSession } from '../auth/sessions';
  * user id from the client, which is what makes the ownership guarantees hold.
  */
 export interface AuthenticatedCustomerRequest extends Request {
-  customer?: { id: string; email: string; sessionId?: string };
+  // email is null for accounts created through mobile + OTP that haven't
+  // added one. Authorization never reads it; `id` is the identity.
+  customer?: { id: string; email: string | null; sessionId?: string };
 }
 
 export async function requireCustomer(req: AuthenticatedCustomerRequest, res: Response, next: NextFunction) {

@@ -22,6 +22,7 @@ import { Product, Shade, TryOnModelPreset, TryOnConfig } from '@glamirk/shared/t
 import { GLAMIRK_PRODUCTS } from '@glamirk/shared/data/products';
 import { TRY_ON_MODELS } from '@glamirk/shared/data/models';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
+import { useAccount } from '../../context/AccountContext';
 import { useFaceLandmarker } from '../../hooks/useFaceLandmarker';
 import { resolveTryOnConfig } from '../../utils/tryOnRenderer';
 import { TryOnCanvas, TryOnCanvasHandle } from './TryOnCanvas';
@@ -64,6 +65,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 }) => {
   // Active product & shades
   const { products: cmsProducts, tryOnModels: cmsTryOnModels } = useCMS();
+  const { recordTryOn } = useAccount();
   const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
   const currentProduct =
     catalogProducts.find((p) => p.id === (initialProductId || 'matte-liquid-lipstick-collection')) ||
@@ -196,6 +198,30 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
   };
 
   const currentShade = allShades[selectedShadeIndex] || allShades[0];
+
+  /**
+   * Records the shade being tried on to the customer's try-on history.
+   *
+   * Debounced rather than fired per selection: arrowing through twelve shades
+   * is one browsing gesture, not twelve try-ons, and recording each would
+   * both spam the API and fill the history with shades the customer only
+   * passed over. Waiting for them to settle for a moment is what makes an
+   * entry mean "I tried this".
+   *
+   * Only runs for signed-in customers — recordTryOn is a no-op without a
+   * token — and never blocks or interrupts the try-on itself.
+   */
+  useEffect(() => {
+    if (!isOpen || !currentProduct) return;
+    const timer = setTimeout(() => {
+      recordTryOn({
+        productId: currentProduct.id,
+        shadeId: currentShade?.id,
+        mode: tryOnMode === 'CAMERA' ? 'live' : tryOnMode === 'UPLOAD' ? 'upload' : 'model',
+      }).catch(() => undefined);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [isOpen, currentProduct?.id, currentShade?.id, tryOnMode, recordTryOn]);
 
   // Keep the live-camera loop's refs current without restarting the loop
   // or re-rendering per frame — a shade/intensity change takes effect on

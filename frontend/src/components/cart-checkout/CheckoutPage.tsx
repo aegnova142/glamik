@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CartItem, Address, Order, Coupon, PaymentMethodType } from '@glamirk/shared/types';
 import { getCurrentPrice } from '@glamirk/shared/utils/productVariant';
 import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE } from '@glamirk/shared/data/commerce';
@@ -22,14 +22,59 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { ProductImage } from '../product/ProductImage';
 
-// No payment gateway is integrated yet, so UPI/Card/Net Banking/Wallet stay
-// disabled and hidden — Cash on Delivery is the only method a shopper can
-// pick. Flip this on (and the gateway's real charge call still needs wiring
-// server-side) once one is integrated; the UI/state for the other methods
-// below is kept intact rather than deleted so that's a one-line change.
-const ONLINE_PAYMENTS_ENABLED = false;
+/**
+ * Whether online payment is offered is decided by the server, not by this
+ * bundle.
+ *
+ * Razorpay is integrated, but it only goes live when PAYMENTS_LIVE_MODE is on
+ * with real credentials — so the storefront asks rather than assuming. Until
+ * then this resolves to false and the checkout is Cash on Delivery only,
+ * exactly as before.
+ *
+ * Reading it from the server rather than a build-time constant means going
+ * live is a server-side switch that needs no frontend redeploy.
+ */
+interface PaymentConfig {
+  onlinePaymentsEnabled: boolean;
+  provider: string | null;
+  keyId: string | null;
+  isMock: boolean;
+}
 
-type SelectablePaymentMethod = Exclude<PaymentMethodType, 'online'>;
+const RAZORPAY_SCRIPT_SRC = 'https://checkout.razorpay.com/v1/checkout.js';
+
+/** Loads Razorpay's checkout script once, on demand. Not bundled: it must be
+ * served from Razorpay's own domain for PCI reasons, and loading it eagerly
+ * would cost every visitor a third-party request they mostly never need. */
+function loadRazorpayScript(): Promise<boolean> {
+  if (typeof window === 'undefined') return Promise.resolve(false);
+  if ((window as any).Razorpay) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const existing = document.querySelector(`script[src="${RAZORPAY_SCRIPT_SRC}"]`);
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = RAZORPAY_SCRIPT_SRC;
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
+/**
+ * Every method the UI can hold.
+ *
+ * Previously this excluded 'online', because 'online' had no meaning when the
+ * customer picked a specific instrument here. With the gateway collecting the
+ * instrument, 'online' is exactly what the customer now picks — and the
+ * individual upi/card/netbanking/wallet values remain in the type only
+ * because the retired forms below still reference them.
+ */
+type SelectablePaymentMethod = PaymentMethodType;
 
 interface CheckoutDetails {
   customerName: string;
@@ -54,10 +99,35 @@ interface CheckoutPageProps {
   onPlaceOrderSuccess: (order: Order, whatsappUrl?: string) => void;
   onBackToCart: () => void;
   onOpenProduct: (productId: string) => void;
-  onCheckout: (
-    shippingAddress: Address,
-    details: CheckoutDetails
-  ) => Promise<{ success: boolean; order?: Order; whatsappUrl?: string; error?: string }>;
+  onCheckout: (shippingAddress: Address, details: CheckoutDetails) => Promise<CheckoutResult>;
+  /** Confirms a completed gateway payment with the server, which re-verifies
+   * the signature and the amount before trusting it. */
+  onVerifyPayment: (input: {
+    orderId: string;
+    razorpayOrderId: string;
+    razorpayPaymentId: string;
+    razorpaySignature: string;
+  }) => Promise<{ success: boolean; order?: Order; error?: string }>;
+  /** Tells the server the customer walked away, so the stock reservation is
+   * released now rather than at the expiry sweep. */
+  onCancelPayment: (orderId: string) => Promise<void>;
+}
+
+export interface CheckoutResult {
+  success: boolean;
+  order?: Order;
+  whatsappUrl?: string;
+  error?: string;
+  /** Present only for an online order: what the browser needs to open the
+   * gateway's hosted payment sheet. */
+  payment?: {
+    provider: string;
+    gatewayOrderId: string;
+    keyId: string | null;
+    amountMinor: number;
+    currency: string;
+    isMock: boolean;
+  };
 }
 
 type CheckoutStep = 'details' | 'payment' | 'review';
@@ -70,6 +140,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   onPlaceOrderSuccess,
   onBackToCart,
   onCheckout,
+  onVerifyPayment,
+  onCancelPayment,
 }) => {
   const { customerUser } = useCustomerAuth();
   const [currentStep, setCurrentStep] = useState<CheckoutStep>('details');
@@ -96,11 +168,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     isDefault: false,
   });
 
-  // Payment Method State — UPI/Card/Net Banking/Wallet stay wired up but
-  // unreachable while ONLINE_PAYMENTS_ENABLED is false (see top of file);
-  // no real gateway is called and no full card number leaves this form
-  // (only last 4 digits are sent to the server for display purposes).
+  // Payment method. 'cod' is always available; 'online' appears only when the
+  // server says the gateway is live. The old per-method instrument fields
+  // (UPI id, card number, bank, wallet) are gone: Razorpay's hosted checkout
+  // collects those, so they never exist in this form or in any request.
   const [paymentMethod, setPaymentMethod] = useState<SelectablePaymentMethod>('cod');
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
   const [upiId, setUpiId] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [cardName, setCardName] = useState('');
@@ -112,6 +185,38 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   // Processing & Error State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Which payment methods this deployment can actually take. Fetched rather
+  // than hardcoded so switching the gateway on is a server-side change. A
+  // failed fetch leaves it null, which keeps checkout Cash-on-Delivery only —
+  // the safe direction to fail in.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/customer/payments/config')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setPaymentConfig(data);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onlinePaymentsEnabled = paymentConfig?.onlinePaymentsEnabled === true;
+
+  /**
+   * The old per-instrument forms (UPI id, card number, net banking, wallet)
+   * are retired, not removed.
+   *
+   * Razorpay's hosted checkout now collects the instrument, which is the only
+   * arrangement where a card number never reaches Glamirk at all. These forms
+   * are left in place behind a constant `false` rather than deleted, so the
+   * markup and validation are still there if a future gateway ever needs a
+   * self-hosted form again — and so this change is reviewable as "turned off"
+   * rather than "a thousand lines vanished".
+   */
+  const COLLECT_INSTRUMENT_IN_APP = false;
   const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
 
   const validatePayment = () => {
@@ -162,6 +267,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
   const paymentMethodLabel: Record<SelectablePaymentMethod, string> = {
     cod: 'Cash on Delivery',
+    online: 'Pay Online',
     upi: 'UPI',
     card: 'Card',
     netbanking: 'Net Banking',
@@ -169,6 +275,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   };
   const paymentMethodDetail: Record<SelectablePaymentMethod, string> = {
     cod: 'Pay when your order is delivered',
+    // The specific instrument is chosen on the gateway's sheet, so it is not
+    // known at this point in the flow and is not guessed at here.
+    online: 'UPI, card, net banking or wallet — on the secure payment window',
     upi: upiId ? `UPI ID: ${upiId}` : 'UPI',
     card: cardNumber ? `Card ending ${cardNumber.replace(/\D/g, '').slice(-4)}` : 'Card',
     netbanking: bankName || 'Net Banking',
@@ -253,32 +362,39 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       email: customerEmail || activeAddress.email,
     };
 
+    // The instrument is no longer collected here. An online order is handed to
+    // the gateway's own hosted checkout below, which is the only arrangement
+    // in which a card number never touches Glamirk's servers at all.
     const result = await onCheckout(addressForOrder, {
       customerName,
       customerPhone,
       customerEmail,
       paymentMethod,
       couponCode: isCouponEligible ? appliedCoupon?.code : undefined,
-      upiId: paymentMethod === 'upi' ? upiId.trim() : undefined,
-      cardNumber: paymentMethod === 'card' ? cardNumber.replace(/\D/g, '') : undefined,
-      bankName: paymentMethod === 'netbanking' ? bankName : undefined,
-      walletProvider: paymentMethod === 'wallet' ? walletProvider : undefined,
     });
-    setIsSubmitting(false);
 
     if (!result.success || !result.order) {
+      setIsSubmitting(false);
       setErrorMessage(result.error || 'We couldn’t place your order. Your bag contents remain safe and unchanged.');
       return;
     }
 
-    // Cosmetic dispatch details the server doesn't track (courier assignment
-    // happens after packing, not at order time) — trackingNumber/courierPartner
-    // stay a display placeholder until real fulfillment status feeds this in.
-    const enrichedOrder: Order = {
-      ...result.order,
-      trackingNumber: `BLUEDART-${Math.floor(10000000 + Math.random() * 90000000)}`,
-      courierPartner: 'Blue Dart Apex Premier Air',
-    };
+    // An online order is created as PENDING_PAYMENT and is not a confirmed
+    // order until the gateway says so. Opening the payment sheet is the next
+    // step, not the confirmation page.
+    if (result.payment) {
+      const paid = await runGatewayCheckout(result.order, result.payment);
+      setIsSubmitting(false);
+      if (!paid.success) {
+        setErrorMessage(paid.error || 'Your payment was not completed. The order is on hold and nothing has been charged.');
+        return;
+      }
+      // The verified order from the server, not the pending one we started with.
+      onPlaceOrderSuccess(paid.order || result.order, result.whatsappUrl);
+      return;
+    }
+
+    setIsSubmitting(false);
 
     // The admin is already notified automatically (email + in-app
     // notification, fired server-side in the checkout handler) — no tab is
@@ -286,7 +402,80 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     // confirmation page's own "Send via WhatsApp" button for whoever wants
     // to forward it manually, since WhatsApp itself requires a human tap to
     // actually send (no Business API is wired up for silent sending).
-    onPlaceOrderSuccess(enrichedOrder, result.whatsappUrl);
+    //
+    // The order is passed through exactly as the server returned it. It used
+    // to be decorated here with an invented "BLUEDART-..." tracking number and
+    // courier name, which was always a placeholder and is now actively wrong:
+    // real AWBs come from the courier after the shipment is booked, and
+    // overwriting them with a fabricated one would show the customer a
+    // tracking number that tracks nothing.
+    onPlaceOrderSuccess(result.order, result.whatsappUrl);
+  };
+
+  /**
+   * Opens the gateway's payment sheet and confirms the result with the server.
+   *
+   * The browser handshake is the fast path only — the server also receives a
+   * webhook for the same payment and will confirm the order independently, so
+   * a customer who closes this tab mid-payment still gets their order. That is
+   * why a dismissed sheet reports "not completed" rather than "failed": the
+   * payment may yet land.
+   */
+  const runGatewayCheckout = async (
+    pendingOrder: Order,
+    handoff: NonNullable<CheckoutResult['payment']>
+  ): Promise<{ success: boolean; order?: Order; error?: string }> => {
+    const scriptReady = await loadRazorpayScript();
+    if (!scriptReady || !(window as any).Razorpay) {
+      return { success: false, error: 'We could not load the payment window. Please check your connection and try again.' };
+    }
+
+    return new Promise((resolve) => {
+      const razorpay = new (window as any).Razorpay({
+        key: handoff.keyId,
+        order_id: handoff.gatewayOrderId,
+        // Amount and currency are display-only here; the gateway enforces what
+        // the order was actually created for, so tampering with these in the
+        // browser changes nothing that matters.
+        amount: handoff.amountMinor,
+        currency: handoff.currency,
+        name: 'Glamirk Beauty',
+        description: `Order ${pendingOrder.orderNumber}`,
+        prefill: { name: customerName, email: customerEmail, contact: customerPhone },
+        theme: { color: '#C9972B' },
+        handler: async (response: any) => {
+          const verified = await onVerifyPayment({
+            orderId: pendingOrder.id,
+            razorpayOrderId: response.razorpay_order_id,
+            razorpayPaymentId: response.razorpay_payment_id,
+            razorpaySignature: response.razorpay_signature,
+          });
+          resolve(
+            verified.success
+              ? { success: true, order: verified.order }
+              : { success: false, error: verified.error }
+          );
+        },
+        modal: {
+          ondismiss: () => {
+            // Releases the stock reservation immediately rather than waiting
+            // for the server's expiry sweep. Advisory only — if the payment
+            // actually went through, the server refuses to cancel it.
+            void onCancelPayment(pendingOrder.id);
+            resolve({ success: false, error: 'Payment was cancelled. Your bag has been kept.' });
+          },
+        },
+      });
+
+      razorpay.on('payment.failed', (event: any) => {
+        resolve({
+          success: false,
+          error: event?.error?.description || 'Your payment was declined. Please try another method.',
+        });
+      });
+
+      razorpay.open();
+    });
   };
 
   return (
@@ -700,21 +889,20 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </p>
                 </div>
 
-                {/* Method Tiles — only Cash on Delivery is shown until a real
-                    payment gateway is integrated (ONLINE_PAYMENTS_ENABLED at
-                    the top of this file); the other tiles stay defined here
-                    so re-enabling them later is a one-line flag flip. */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                {/* Method tiles. "Pay Online" appears only when the server
+                    reports the gateway as live; otherwise this is Cash on
+                    Delivery only, exactly as before. The individual
+                    UPI/Card/Net Banking/Wallet tiles are retired: Razorpay's
+                    own sheet presents those choices, so offering them here
+                    too would ask the customer the same question twice. */}
+                <div className="grid grid-cols-2 gap-3">
                   {(
                     [
-                      { id: 'upi', label: 'UPI', icon: Smartphone },
-                      { id: 'card', label: 'Card', icon: CreditCard },
-                      { id: 'netbanking', label: 'Net Banking', icon: Landmark },
-                      { id: 'wallet', label: 'Wallet', icon: Wallet },
+                      { id: 'online', label: 'Pay Online', icon: CreditCard },
                       { id: 'cod', label: 'Cash on Delivery', icon: Banknote },
                     ] as { id: SelectablePaymentMethod; label: string; icon: typeof Banknote }[]
                   )
-                    .filter(({ id }) => ONLINE_PAYMENTS_ENABLED || id === 'cod')
+                    .filter(({ id }) => id === 'cod' || (id === 'online' && onlinePaymentsEnabled))
                     .map(({ id, label, icon: Icon }) => (
                     <button
                       key={id}
@@ -737,25 +925,34 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   ))}
                 </div>
 
-                {!ONLINE_PAYMENTS_ENABLED && (
+                {!onlinePaymentsEnabled && (
                   <div className="p-3 bg-[#FAF9F6] border border-[#E8D5A8] text-[10.5px] text-[#6B6B6B] flex items-center gap-2">
                     <ShieldCheck className="w-3.5 h-3.5 text-[#C9972B] flex-shrink-0" />
-                    <span>Online payments (UPI, Card, Net Banking, Wallet) are coming soon. For now, all orders are Cash on Delivery.</span>
+                    <span>Online payments are coming soon. For now, all orders are Cash on Delivery.</span>
                   </div>
                 )}
 
-                {/* Method-specific input forms — unreachable while
-                    ONLINE_PAYMENTS_ENABLED is false, since the tiles above
-                    only offer 'cod' in that state. Kept intact for when a
-                    real gateway is integrated. */}
-                {ONLINE_PAYMENTS_ENABLED && paymentMethod !== 'cod' && (
+                {onlinePaymentsEnabled && paymentMethod === 'online' && (
+                  <div className="p-3 bg-[#FAF9F6] border border-[#E8D5A8] text-[10.5px] text-[#6B6B6B] flex items-center gap-2">
+                    <Lock className="w-3.5 h-3.5 text-[#C9972B] flex-shrink-0" />
+                    <span>
+                      You'll choose UPI, card, net banking or a wallet on the secure payment window. Your card details are
+                      handled by the payment provider and never reach Glamirk.
+                    </span>
+                  </div>
+                )}
+
+                {/* Retired per-instrument forms. Unreachable
+                    (COLLECT_INSTRUMENT_IN_APP is false) but kept intact — see
+                    the note beside that constant. */}
+                {COLLECT_INSTRUMENT_IN_APP && paymentMethod !== 'cod' && (
                   <div className="p-3 bg-[#FCE8ED] border border-[#E8D5A8] text-[10.5px] text-[#6B6B6B] flex items-center gap-2">
                     <ShieldCheck className="w-3.5 h-3.5 text-[#C9972B] flex-shrink-0" />
                     <span>DEMO PAYMENT — this is a simulated transaction. No real gateway is called and your full card number is never stored.</span>
                   </div>
                 )}
 
-                {ONLINE_PAYMENTS_ENABLED && paymentMethod === 'upi' && (
+                {COLLECT_INSTRUMENT_IN_APP && paymentMethod === 'upi' && (
                   <div>
                     <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
                       UPI ID *
@@ -773,7 +970,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </div>
                 )}
 
-                {ONLINE_PAYMENTS_ENABLED && paymentMethod === 'card' && (
+                {COLLECT_INSTRUMENT_IN_APP && paymentMethod === 'card' && (
                   <div className="space-y-4">
                     <div>
                       <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
@@ -848,7 +1045,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </div>
                 )}
 
-                {ONLINE_PAYMENTS_ENABLED && paymentMethod === 'netbanking' && (
+                {COLLECT_INSTRUMENT_IN_APP && paymentMethod === 'netbanking' && (
                   <div>
                     <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
                       SELECT YOUR BANK *
@@ -869,7 +1066,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </div>
                 )}
 
-                {ONLINE_PAYMENTS_ENABLED && paymentMethod === 'wallet' && (
+                {COLLECT_INSTRUMENT_IN_APP && paymentMethod === 'wallet' && (
                   <div>
                     <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
                       SELECT WALLET PROVIDER *

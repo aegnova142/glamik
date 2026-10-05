@@ -17,15 +17,29 @@ import {
   CustomerProfile,
   CustomerSession,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  Gender,
+  GENDER_OPTIONS,
   GlamProfile,
   NOTIFICATION_TOPIC_META,
   NotificationChannel,
   NotificationPreferences,
   NotificationTopic,
+  OrderStatus,
+  PaymentMethodType,
+  PaymentRecord,
+  PaymentsSummary,
   Product,
+  RefundRecord,
+  ReturnStatus,
+  REVIEW_IMAGE_MAX_BYTES,
+  REVIEW_MEDIA_MAX_ITEMS,
+  REVIEW_VIDEO_MAX_BYTES,
+  ReviewMedia,
   ShadeHistoryEntry,
   SupportTicket,
   SUPPORT_TICKET_TOPICS,
+  TryOnHistoryEntry,
+  TryOnMode,
 } from '@glamirk/shared/types';
 
 // ==========================================
@@ -55,6 +69,22 @@ const avatarUpload = multer({
   },
 });
 
+// Review media: photos and short clips attached to a written review. Larger
+// ceiling than an avatar because a video is allowed, and the per-type limit
+// is enforced below once the real type is known.
+const reviewMediaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: REVIEW_VIDEO_MAX_BYTES },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime', 'video/webm'];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Review media must be a JPEG, PNG or WebP image, or an MP4, MOV or WebM video.'));
+    }
+  },
+});
+
 /** Magic-byte check. mimetype and filename both come from the client and can
  * say anything; this reads what the bytes actually are before the file is
  * ever stored or served back. */
@@ -64,6 +94,56 @@ function isRealImageBuffer(buffer: Buffer): boolean {
   const png = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
   const webp = buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
   return jpeg || png || webp;
+}
+
+/** Same idea as isRealImageBuffer, for the video formats reviews accept.
+ * MP4/MOV share the ISO base-media container ('ftyp' at offset 4); WebM is a
+ * Matroska EBML stream. */
+function isRealVideoBuffer(buffer: Buffer): boolean {
+  if (buffer.length < 12) return false;
+  const isoBmff = buffer.subarray(4, 8).toString('ascii') === 'ftyp';
+  const webm = buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+  return isoBmff || webm;
+}
+
+function uploadReviewMediaToCloudinary(
+  buffer: Buffer,
+  kind: 'image' | 'video'
+): Promise<{ url: string; publicId: string }> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    // Videos are transcoded server-side by Cloudinary, so they get a longer
+    // ceiling than the 30s an avatar needs.
+    const timeoutMs = kind === 'video' ? 120000 : 30000;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(`Cloudinary upload timed out after ${timeoutMs / 1000}s`));
+    }, timeoutMs);
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'glamirk-beauty/reviews',
+        // Pinned to the type the bytes were actually verified as — never
+        // 'auto', which would let an unexpected format land as a raw asset.
+        resource_type: kind,
+        // No fixed public_id: unlike an avatar (one per customer, overwritten)
+        // a review can carry several items and they must not clobber each
+        // other. Cloudinary assigns a unique id.
+        transformation:
+          kind === 'image'
+            ? [{ width: 1280, height: 1280, crop: 'limit', quality: 'auto', fetch_format: 'auto' }]
+            : [{ width: 720, height: 1280, crop: 'limit', quality: 'auto' }],
+      },
+      (err, result) => {
+        if (settled) return;
+        clearTimeout(timer);
+        settled = true;
+        if (err || !result) return reject(err || new Error('Cloudinary upload failed'));
+        resolve({ url: result.secure_url, publicId: result.public_id });
+      }
+    );
+    stream.end(buffer);
+  });
 }
 
 function uploadAvatarToCloudinary(buffer: Buffer, userId: string): Promise<{ url: string; publicId: string }> {
@@ -123,6 +203,7 @@ function mapProfileRow(row: any): CustomerProfile {
     phone: row.phone || undefined,
     avatarUrl: row.avatar_url || undefined,
     dateOfBirth: formatDateOnly(row.date_of_birth),
+    gender: row.gender || undefined,
     emailVerified: !!row.email_verified,
     phoneVerified: !!row.phone_verified,
     createdAt: new Date(row.created_at).toISOString(),
@@ -146,7 +227,7 @@ router.get('/account/profile', requireCustomer, async (req: AuthenticatedCustome
 });
 
 router.put('/account/profile', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
-  const { firstName, lastName, phone, dateOfBirth } = req.body || {};
+  const { firstName, lastName, phone, dateOfBirth, gender } = req.body || {};
 
   const first = String(firstName || '').trim();
   const last = String(lastName || '').trim();
@@ -180,6 +261,17 @@ router.put('/account/profile', requireCustomer, async (req: AuthenticatedCustome
     dob = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : parsed.toISOString().slice(0, 10);
   }
 
+  // Validated against the same list the column's CHECK constraint allows, so
+  // a bad value is a 400 rather than a 500 from the database. Empty clears it.
+  let normalizedGender: Gender | null = null;
+  if (gender) {
+    const candidate = String(gender).trim();
+    if (!GENDER_OPTIONS.some((o) => o.value === candidate)) {
+      return res.status(400).json({ error: 'Please choose a valid option for gender.' });
+    }
+    normalizedGender = candidate as Gender;
+  }
+
   // Changing the number invalidates any previous verification of it.
   const currentRes = await pool.query('SELECT phone, phone_verified FROM customers WHERE id = $1', [req.customer!.id]);
   const phoneChanged = (currentRes.rows[0]?.phone || null) !== normalizedPhone;
@@ -190,9 +282,10 @@ router.put('/account/profile', requireCustomer, async (req: AuthenticatedCustome
 
   await pool.query(
     `UPDATE customers SET first_name = $1, last_name = $2, name = $3, phone = $4, date_of_birth = $5,
-       phone_verified = CASE WHEN $6 THEN false ELSE phone_verified END
-     WHERE id = $7`,
-    [first, last || null, fullName, normalizedPhone, dob, phoneChanged, req.customer!.id]
+       gender = $6,
+       phone_verified = CASE WHEN $7 THEN false ELSE phone_verified END
+     WHERE id = $8`,
+    [first, last || null, fullName, normalizedPhone, dob, normalizedGender, phoneChanged, req.customer!.id]
   );
 
   res.json({ profile: await loadProfile(req.customer!.id) });
@@ -778,6 +871,24 @@ router.delete('/account/recently-viewed', requireCustomer, async (req: Authentic
   res.json({ success: true });
 });
 
+// Removing one product rather than the whole history. Scoped by user_id as
+// well as product_id, so the id in the URL can only ever delete the caller's
+// own row — there is nothing to enumerate here.
+router.delete(
+  '/account/recently-viewed/:productId',
+  requireCustomer,
+  async (req: AuthenticatedCustomerRequest, res: Response) => {
+    await pool.query('DELETE FROM recently_viewed WHERE user_id = $1 AND product_id = $2', [
+      req.customer!.id,
+      req.params.productId,
+    ]);
+    // Deliberately not a 404 when the row is already gone: the end state the
+    // caller asked for is the end state they have, and a double-click on
+    // "remove" shouldn't surface an error.
+    res.json({ success: true });
+  }
+);
+
 // ==========================================
 // REWARDS & COUPONS
 // ==========================================
@@ -797,7 +908,17 @@ router.get('/account/coupons', requireCustomer, async (req: AuthenticatedCustome
 router.get('/account/overview', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
   const userId = req.customer!.id;
 
-  const [ordersRes, wishlistRes, notificationsRes, reviewableRes, points, availableCoupons] = await Promise.all([
+  const [
+    ordersRes,
+    wishlistRes,
+    notificationsRes,
+    reviewableRes,
+    recentlyViewedRes,
+    ticketsRes,
+    refundsRes,
+    points,
+    availableCoupons,
+  ] = await Promise.all([
     pool.query(
       `SELECT
          COUNT(*)::int AS total,
@@ -816,6 +937,10 @@ router.get('/account/overview', requireCustomer, async (req: AuthenticatedCustom
        WHERE o.user_id = $1 AND o.status = 'DELIVERED' AND r.id IS NULL`,
       [userId]
     ),
+    pool.query('SELECT COUNT(*)::int AS n FROM recently_viewed WHERE user_id = $1', [userId]),
+    pool.query("SELECT COUNT(*)::int AS n FROM support_tickets WHERE user_id = $1 AND status <> 'CLOSED'", [userId]),
+    // A return is "pending" until the money has actually gone back.
+    pool.query("SELECT COUNT(*)::int AS n FROM return_requests WHERE customer_id = $1 AND status <> 'REFUNDED'", [userId]),
     getRewardPoints(userId),
     countAvailableCoupons(userId),
   ]);
@@ -828,6 +953,9 @@ router.get('/account/overview', requireCustomer, async (req: AuthenticatedCustom
     availableCoupons,
     unreadNotifications: notificationsRes.rows[0]?.n || 0,
     pendingReviews: reviewableRes.rows[0]?.n || 0,
+    recentlyViewedCount: recentlyViewedRes.rows[0]?.n || 0,
+    openSupportTickets: ticketsRes.rows[0]?.n || 0,
+    pendingRefunds: refundsRes.rows[0]?.n || 0,
   };
 
   res.json({ overview });
@@ -1078,5 +1206,266 @@ router.post(
     res.json({ ticket: mapTicketRow(created.rows[0]) });
   }
 );
+
+// ==========================================
+// REVIEW MEDIA
+// ==========================================
+
+/**
+ * Uploads one photo or clip for a review and returns its URL.
+ *
+ * Deliberately decoupled from writing the review itself: the composer uploads
+ * as the customer picks files and then submits the resulting URLs with the
+ * review text, so a slow video upload doesn't hold the whole form hostage and
+ * a failed upload doesn't lose what they typed.
+ *
+ * Rate-limited because this is an authenticated write to paid storage.
+ */
+router.post(
+  '/account/reviews/media',
+  requireCustomer,
+  rateLimit({ scope: 'review-media', windowMs: 60 * 60 * 1000, max: 40 }),
+  reviewMediaUpload.single('file'),
+  async (req: AuthenticatedCustomerRequest, res: Response) => {
+    if (!req.file) return res.status(400).json({ error: 'No file was uploaded.' });
+
+    const declaredVideo = req.file.mimetype.startsWith('video/');
+
+    // What the bytes actually are decides how it is stored — not the
+    // mimetype, which the client controls. A file claiming to be an image
+    // while carrying video bytes (or neither) is rejected outright.
+    const kind: 'image' | 'video' | null = isRealImageBuffer(req.file.buffer)
+      ? 'image'
+      : isRealVideoBuffer(req.file.buffer)
+      ? 'video'
+      : null;
+
+    if (!kind) {
+      return res.status(400).json({ error: 'That file is not a readable image or video.' });
+    }
+    if (declaredVideo !== (kind === 'video')) {
+      return res.status(400).json({ error: 'That file does not match the type it claims to be.' });
+    }
+
+    // multer's limit is the video ceiling (the larger of the two), so images
+    // are re-checked against their own smaller limit now the type is known.
+    const maxBytes = kind === 'video' ? REVIEW_VIDEO_MAX_BYTES : REVIEW_IMAGE_MAX_BYTES;
+    if (req.file.size > maxBytes) {
+      return res.status(400).json({
+        error: `${kind === 'video' ? 'Videos' : 'Photos'} must be under ${Math.round(maxBytes / (1024 * 1024))}MB.`,
+      });
+    }
+
+    let uploaded: { url: string; publicId: string };
+    try {
+      uploaded = await uploadReviewMediaToCloudinary(req.file.buffer, kind);
+    } catch (err) {
+      console.error('Review media upload failed:', err);
+      return res.status(502).json({ error: 'Could not upload that file right now. Please try again.' });
+    }
+
+    const media: ReviewMedia = { type: kind, url: uploaded.url, publicId: uploaded.publicId };
+    res.json({ media });
+  }
+);
+
+// ==========================================
+// PAYMENTS & REFUNDS
+//
+// A read-only view over the customer's own orders and return requests.
+//
+// There is deliberately no saved-payment-method or wallet endpoint here.
+// Razorpay is integrated for taking payments, but Glamirk does not vault
+// instruments: the gateway's hosted checkout holds the card/UPI handle and we
+// never receive a reusable token. There is likewise no store-credit ledger to
+// report a balance from. Inventing either would mean showing a customer a
+// number that no system is actually keeping, so this stays a truthful view of
+// payments and refunds that genuinely happened. Saved instruments belong here
+// if and when Razorpay tokenisation is enabled on the account.
+// ==========================================
+
+/** The masked instrument shown next to a payment. payment_details is written
+ * by checkout and already stores only a card's last four digits — this never
+ * has full card data available to leak, and does not go looking for any. */
+function instrumentLabel(method: PaymentMethodType, details: any): string | undefined {
+  if (!details || typeof details !== 'object') return undefined;
+  switch (method) {
+    case 'card':
+      return details.cardLast4 ? `•••• ${String(details.cardLast4).slice(-4)}` : undefined;
+    case 'upi':
+      return details.upiId || undefined;
+    case 'netbanking':
+      return details.bankName || undefined;
+    case 'wallet':
+      return details.walletProvider || undefined;
+    default:
+      return undefined;
+  }
+}
+
+router.get('/account/payments', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const userId = req.customer!.id;
+
+  const [ordersRes, refundsRes] = await Promise.all([
+    pool.query(
+      `SELECT id, order_number, created_at, total, payment_method, payment_status, payment_details, status
+       FROM orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`,
+      [userId]
+    ),
+    // The refund amount is the actual line total from the original order, not
+    // a guess: a return of 2 units should report what those 2 units cost.
+    // Joined through order_items on (order_id, product_id), which is how the
+    // return was recorded in the first place.
+    pool.query(
+      `SELECT r.id, r.order_id, r.product_id, r.product_name, r.product_image, r.status,
+              r.created_at, r.updated_at,
+              o.order_number, o.payment_method,
+              COALESCE(oi.price * oi.quantity, 0) AS amount
+       FROM return_requests r
+       JOIN orders o ON o.id = r.order_id
+       LEFT JOIN order_items oi ON oi.order_id = r.order_id AND oi.product_id = r.product_id
+       WHERE r.customer_id = $1
+       ORDER BY r.created_at DESC LIMIT 100`,
+      [userId]
+    ),
+  ]);
+
+  const payments: PaymentRecord[] = ordersRes.rows.map((row) => {
+    const method = (row.payment_method || 'cod') as PaymentMethodType;
+    const details = row.payment_details || {};
+    return {
+      orderId: row.id,
+      orderNumber: row.order_number,
+      placedAt: new Date(row.created_at).toISOString(),
+      amount: Number(row.total) || 0,
+      method,
+      status: row.payment_status === 'PAID' ? 'PAID' : 'COD_PENDING',
+      instrumentLabel: instrumentLabel(method, details),
+      paidAt: details.paidAt ? new Date(details.paidAt).toISOString() : undefined,
+      orderStatus: row.status as OrderStatus,
+    };
+  });
+
+  const refunds: RefundRecord[] = refundsRes.rows.map((row) => ({
+    returnId: row.id,
+    orderId: row.order_id,
+    orderNumber: row.order_number,
+    productName: row.product_name,
+    productImage: row.product_image || undefined,
+    amount: Number(row.amount) || 0,
+    status: row.status as ReturnStatus,
+    requestedAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
+    method: (row.payment_method || 'cod') as PaymentMethodType,
+  }));
+
+  // Only money actually collected counts as paid. A COD order that hasn't
+  // been delivered yet is owed, not received, so it is reported separately
+  // instead of being folded into a total that would overstate what the
+  // customer has spent.
+  const totalPaid = payments.filter((p) => p.status === 'PAID').reduce((sum, p) => sum + p.amount, 0);
+  const pendingCod = payments
+    .filter((p) => p.status === 'COD_PENDING' && p.orderStatus !== 'CANCELLED' && p.orderStatus !== 'DELIVERED')
+    .reduce((sum, p) => sum + p.amount, 0);
+  const totalRefunded = refunds.filter((r) => r.status === 'REFUNDED').reduce((sum, r) => sum + r.amount, 0);
+
+  const summary: PaymentsSummary = { payments, refunds, totalPaid, totalRefunded, pendingCod };
+  res.json({ payments: summary });
+});
+
+// ==========================================
+// VIRTUAL TRY-ON HISTORY
+// ==========================================
+
+const TRY_ON_HISTORY_LIMIT = 40;
+const TRY_ON_MODES: TryOnMode[] = ['live', 'model', 'upload'];
+
+router.get('/account/try-on-history', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const db = await loadDatabase();
+  const result = await pool.query(
+    `SELECT * FROM try_on_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+    [req.customer!.id, TRY_ON_HISTORY_LIMIT]
+  );
+
+  // Unlike recently-viewed (where a delisted product is simply dropped), a
+  // delisted product is kept here and flagged unavailable: the entry is a
+  // record of something the customer did, and silently erasing it would make
+  // their own history look wrong. The UI disables the actions instead.
+  const entries: TryOnHistoryEntry[] = result.rows.map((row) => {
+    const product = db.products.find((p: Product) => p.id === row.product_id);
+    // Prefer the shade's own swatch over the generic product shot — the entry
+    // is about the shade that was tried, so a lipstick tried in three shades
+    // shouldn't render as the same picture three times. Same resolution order
+    // checkout uses for order items.
+    const shade = row.shade_id ? (product?.shades || []).find((s) => s.id === row.shade_id) : undefined;
+    const shadeImage = shade?.images?.find((img) => img.isPrimary)?.url || shade?.images?.[0]?.url;
+    return {
+      id: row.id,
+      productId: row.product_id,
+      productName: product?.name || row.product_name,
+      productImage: shadeImage || product?.images?.primary || undefined,
+      shadeId: row.shade_id || undefined,
+      shadeName: row.shade_name || undefined,
+      shadeHex: row.shade_hex || undefined,
+      mode: (TRY_ON_MODES.includes(row.mode) ? row.mode : 'model') as TryOnMode,
+      triedAt: new Date(row.created_at).toISOString(),
+      isAvailable: !!product,
+    };
+  });
+
+  res.json({ entries });
+});
+
+router.post('/account/try-on-history', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const { productId, shadeId, mode } = req.body || {};
+  if (!productId) return res.status(400).json({ error: 'A product id is required.' });
+
+  // The product and shade are resolved from the catalogue rather than trusted
+  // from the request: a client cannot write an arbitrary product name, shade
+  // name or hex into its own history and have it render back as if real.
+  const db = await loadDatabase();
+  const product = db.products.find((p: Product) => p.id === String(productId));
+  if (!product) return res.status(404).json({ error: 'Product not found.' });
+
+  const shade = shadeId ? (product.shades || []).find((s) => s.id === String(shadeId)) : undefined;
+  if (shadeId && !shade) return res.status(404).json({ error: 'Shade not found for this product.' });
+
+  const cleanMode: TryOnMode = TRY_ON_MODES.includes(mode) ? mode : 'model';
+  const id = 'try-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+
+  // Re-trying a shade refreshes the existing row instead of adding another,
+  // which is what makes the list read as a set of shades tried rather than an
+  // event log. Targets the COALESCE index from migration 010 so a product
+  // tried without a shade dedupes too.
+  await pool.query(
+    `INSERT INTO try_on_history (id, user_id, product_id, product_name, shade_id, shade_name, shade_hex, mode)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (user_id, product_id, COALESCE(shade_id, '')) DO UPDATE SET
+       created_at = now(), mode = EXCLUDED.mode, product_name = EXCLUDED.product_name,
+       shade_name = EXCLUDED.shade_name, shade_hex = EXCLUDED.shade_hex`,
+    [id, req.customer!.id, product.id, product.name, shade?.id || null, shade?.name || null, shade?.hex || null, cleanMode]
+  );
+
+  // Bounded per customer, same as recently_viewed.
+  await pool.query(
+    `DELETE FROM try_on_history
+     WHERE user_id = $1 AND id NOT IN (
+       SELECT id FROM try_on_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
+     )`,
+    [req.customer!.id, TRY_ON_HISTORY_LIMIT]
+  );
+
+  res.json({ success: true });
+});
+
+router.delete('/account/try-on-history/:id', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  await pool.query('DELETE FROM try_on_history WHERE id = $1 AND user_id = $2', [req.params.id, req.customer!.id]);
+  res.json({ success: true });
+});
+
+router.delete('/account/try-on-history', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  await pool.query('DELETE FROM try_on_history WHERE user_id = $1', [req.customer!.id]);
+  res.json({ success: true });
+});
 
 export default router;

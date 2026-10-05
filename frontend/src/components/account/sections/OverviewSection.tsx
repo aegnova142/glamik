@@ -14,6 +14,8 @@ import {
   Bell,
   Sparkles,
   Bot,
+  Camera,
+  CreditCard,
   Star,
   Eye,
   Settings,
@@ -51,11 +53,18 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
   const stats = overview.data;
   const recentOrders = orders.slice(0, 3);
 
+  // Eight cards rather than four: the dashboard is meant to answer "what is
+  // waiting for me" at a glance, and notifications, refunds and open tickets
+  // are exactly the things a customer comes here to check on.
   const summary = [
     { label: 'Total Orders', value: stats?.totalOrders, section: 'orders' as AccountSection, icon: Package },
     { label: 'Wishlist', value: stats?.wishlistCount, section: 'wishlist' as AccountSection, icon: Heart },
     { label: 'Glam Rewards', value: stats?.rewardPoints, suffix: 'pts', section: 'rewards' as AccountSection, icon: Award },
     { label: 'Available Coupons', value: stats?.availableCoupons, section: 'rewards' as AccountSection, icon: Ticket },
+    { label: 'Unread Alerts', value: stats?.unreadNotifications, section: 'notifications' as AccountSection, icon: Bell },
+    { label: 'Refunds in Progress', value: stats?.pendingRefunds, section: 'payments' as AccountSection, icon: CreditCard },
+    { label: 'Recently Viewed', value: stats?.recentlyViewedCount, section: 'recently-viewed' as AccountSection, icon: Eye },
+    { label: 'Open Tickets', value: stats?.openSupportTickets, section: 'help' as AccountSection, icon: Headphones },
   ];
 
   const quickActions = [
@@ -68,12 +77,14 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
   const manageLinks = [
     { id: 'profile' as AccountSection, label: 'My Profile', icon: User },
     { id: 'addresses' as AccountSection, label: 'Saved Addresses', icon: MapPin },
+    { id: 'payments' as AccountSection, label: 'Payments & Refunds', icon: CreditCard },
     { id: 'notifications' as AccountSection, label: 'Notification Preferences', icon: Bell },
-    { id: 'glam-profile' as AccountSection, label: 'My Glam Profile', icon: Sparkles },
+    { id: 'glam-profile' as AccountSection, label: 'My Beauty Profile', icon: Sparkles },
     { id: 'shade-history' as AccountSection, label: 'Shade AI History', icon: Bot },
+    { id: 'try-on-history' as AccountSection, label: 'Virtual Try-On History', icon: Camera },
     { id: 'reviews' as AccountSection, label: 'My Reviews', icon: Star },
     { id: 'recently-viewed' as AccountSection, label: 'Recently Viewed', icon: Eye },
-    { id: 'settings' as AccountSection, label: 'Account Settings', icon: Settings },
+    { id: 'settings' as AccountSection, label: 'Security & Settings', icon: Settings },
   ];
 
   return (

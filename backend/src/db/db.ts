@@ -1,5 +1,12 @@
+import fs from 'fs';
 import { Pool } from 'pg';
 import { env } from '../config/env';
+import { PATHS } from '../config/paths';
+import {
+  classifyDatabaseTarget,
+  buildAutoMigrationRefusal,
+  type DatabaseTarget,
+} from '../config/databaseTarget';
 import { runMigrations } from './migrate';
 import bcrypt from 'bcryptjs';
 import {
@@ -101,24 +108,90 @@ let schemaReady: Promise<void> | null = null;
  * Guarantees the schema is present before any query runs.
  *
  * The SQL that used to live here inline now lives in database/migrations as
- * numbered, forward-only files; this applies any that have not run yet. The
- * contract is unchanged — callers await it and nothing is applied by hand —
- * but the schema now has a recorded history instead of being one string that
- * silently reshaped itself on every boot.
+ * numbered, forward-only files.
  *
- * Memoised so the concurrent callers below (loadDatabase / saveDatabase)
- * share a single run rather than racing each other.
+ * IN PRODUCTION THIS NO LONGER APPLIES THEM.
+ *
+ * It used to, and that turned out to be a live hazard: this function is called
+ * on every server boot and from several CLI entry points, all of which read
+ * DATABASE_URL from the repo-root .env — which points at production. Starting a
+ * local dev server, or running any script that touched the database, applied
+ * whatever migration files happened to be sitting in that developer's working
+ * tree. Migrations reached production that way with no review, no deploy step
+ * and nobody intending it; migration 012 arrived on production exactly like
+ * this, before it had been validated against production data.
+ *
+ * Production now verifies rather than applies: if migrations are outstanding it
+ * says so and fails fast, so the deploy is fixed rather than the schema being
+ * silently reshaped under a running application.
+ *
+ * Outside production the old behaviour is kept, because a fresh clone or a
+ * throwaway test database should just work without a separate setup step.
+ *
+ * Apply migrations deliberately, through the deployment process:
+ *
+ *     npm run migrate
+ *
+ * Memoised so concurrent callers share a single run rather than racing.
  */
 export function ensureSchema(): Promise<void> {
   if (!schemaReady) {
-    schemaReady = runMigrations(pool).then(() => undefined);
-    // A failed migration must not stay cached as "done", or every later
-    // caller would resolve happily against a schema that was never applied.
+    // Decided by the TARGET, not by NODE_ENV.
+    //
+    // NODE_ENV was the wrong signal: the case that actually went wrong twice
+    // was NODE_ENV=development on a laptop whose .env pointed at production.
+    // A dev-mode process has no business auto-migrating a production database
+    // just because it considers itself development.
+    const target = classifyDatabaseTarget(connectionString);
+    schemaReady = target.allowsAutoMigration
+      ? runMigrations(pool).then(() => undefined)
+      : assertSchemaUpToDate(target);
+
+    // A failure must not stay cached as "done", or every later caller would
+    // resolve happily against a schema that was never applied or checked.
     schemaReady.catch(() => {
       schemaReady = null;
     });
   }
   return schemaReady;
+}
+
+/**
+ * Production check: are there migration files that have not been applied?
+ *
+ * Read-only — it compares the files on disk against the schema_migrations
+ * table and never writes. Throwing is deliberate: an application running
+ * against a schema older than its code will fail in confusing ways later
+ * (missing columns, missing tables), and failing at boot with an actionable
+ * message is far easier to diagnose than a 500 from one unlucky endpoint.
+ */
+async function assertSchemaUpToDate(target: DatabaseTarget): Promise<void> {
+  // The table itself may not exist on a brand-new database, which is a
+  // legitimate "nothing has ever been applied" rather than an error.
+  const tableExists = await pool.query(
+    `SELECT 1 FROM information_schema.tables WHERE table_name = 'schema_migrations'`
+  );
+
+  const applied = new Set<string>();
+  if (tableExists.rows.length > 0) {
+    const rows = await pool.query<{ version: string }>('SELECT version FROM schema_migrations');
+    for (const row of rows.rows) applied.add(row.version);
+  }
+
+  const files = fs.existsSync(PATHS.migrations)
+    ? fs.readdirSync(PATHS.migrations).filter((f) => f.endsWith('.sql')).sort()
+    : [];
+  const pending = files.filter((f) => !applied.has(f));
+
+  if (pending.length > 0) {
+    throw new Error(buildAutoMigrationRefusal(target, pending));
+  }
+
+  // Host only, never the connection string — a password in a log is a leaked
+  // password, and logs outlive the process that wrote them.
+  console.log(
+    `[db] schema up to date (${applied.size} migration(s) applied) — ${target.host}, auto-migration disabled (${target.reason})`
+  );
 }
 
 export { pool };
@@ -127,10 +200,64 @@ export { pool };
 // reading/decrementing the same product's stock (cachedDb is shared across
 // requests in this single Node process).
 let stockLockChain: Promise<any> = Promise.resolve();
+
+/**
+ * Arbitrary but fixed key identifying the stock critical section. Postgres
+ * advisory locks are namespaced by a single bigint, so this just has to be a
+ * constant nothing else in the system uses.
+ */
+const STOCK_ADVISORY_LOCK_KEY = 8421507;
+
+/**
+ * Serialises the stock read-modify-write critical section.
+ *
+ * Two layers, because they guard different failure modes:
+ *
+ *   1. The in-process promise chain. Stock lives in the cms_state JSONB
+ *      document, cached by reference and shared across every request in this
+ *      process — two concurrent checkouts reading the same cached array and
+ *      both writing back would lose one of the decrements regardless of what
+ *      the database does.
+ *
+ *   2. A Postgres session-level advisory lock. The chain above only orders
+ *      work *within one process*, and ecosystem.config.cjs pins the app to a
+ *      single pm2 fork precisely because of that. This second layer removes
+ *      the silent dependency on that setting: if the app is ever clustered,
+ *      run on two hosts, or has a one-off script run against the same
+ *      database, the advisory lock still serialises them. Without it, the
+ *      first person to add `instances: 2` reintroduces overselling with no
+ *      error to warn them.
+ *
+ * Uses a dedicated client (not pool.query) because an advisory lock is held by
+ * the *session*: acquiring and releasing on two different pooled connections
+ * would release a lock this caller never held.
+ */
 export function withStockLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = stockLockChain.then(fn, fn);
+  const run = stockLockChain.then(
+    () => withAdvisoryLock(fn),
+    () => withAdvisoryLock(fn)
+  );
   stockLockChain = run.catch(() => undefined);
   return run;
+}
+
+async function withAdvisoryLock<T>(fn: () => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('SELECT pg_advisory_lock($1)', [STOCK_ADVISORY_LOCK_KEY]);
+    try {
+      return await fn();
+    } finally {
+      // Released in a finally so a throw inside the critical section cannot
+      // strand the lock and wedge every subsequent checkout. Releasing is
+      // best-effort: if the connection itself died, the lock is already gone
+      // with the session, and surfacing that error here would mask whatever
+      // actually failed inside fn().
+      await client.query('SELECT pg_advisory_unlock($1)', [STOCK_ADVISORY_LOCK_KEY]).catch(() => undefined);
+    }
+  } finally {
+    client.release();
+  }
 }
 
 // User with hashed password storage (internal)
@@ -1023,6 +1150,18 @@ export function getInitialDatabase(): InternalCMSDatabaseSchema {
   };
 }
 
+/**
+ * Drops the in-process cache so the next loadDatabase() re-reads from
+ * Postgres.
+ *
+ * Exists for the data-loss regression tests, which need to exercise the read
+ * path repeatedly against deliberately malformed stored documents. Nothing in
+ * the running application calls it — saveDatabase keeps the cache in sync.
+ */
+export function __resetCmsCacheForTests(): void {
+  cachedDb = null;
+}
+
 export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
   // Serve from the in-process cache once loaded — saveDatabase() keeps it in
   // sync on every admin save/delete, so reads never hit Postgres on the hot
@@ -1034,13 +1173,51 @@ export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
 
   await ensureSchema();
 
+  // ------------------------------------------------------------------
+  // Read the stored document.
+  //
+  // This is deliberately its own try/catch, separate from the normalisation
+  // below, and it RE-THROWS.
+  //
+  // The two used to share one catch that fell through to
+  // `saveDatabase(getInitialDatabase())`. That meant a failed *read* produced
+  // a destructive *write*: a transient Neon connection reset — which the
+  // comment at the top of server.ts notes is common — would replace the whole
+  // catalogue, every price, offer, COD rule and page of CMS copy with seed
+  // data. Recovery was a point-in-time restore.
+  //
+  // Failing the request is always the right answer here. An error surfaces,
+  // gets retried, and nothing is lost; silently reseeding loses everything
+  // and looks like success.
+  // ------------------------------------------------------------------
+  let storedRow: { data: InternalCMSDatabaseSchema } | undefined;
   try {
     const result = await pool.query('SELECT data FROM cms_state WHERE id = $1', [STATE_ROW_ID]);
-    if (result.rows.length > 0) {
-      cachedDb = result.rows[0].data as InternalCMSDatabaseSchema;
+    storedRow = result.rows[0];
+  } catch (err) {
+    console.error('[db] could not read cms_state — refusing to reseed over existing data:', err);
+    throw err;
+  }
+
+  if (storedRow) {
+    // A stored document is normalised in place. Any failure here is a bug in
+    // the normalisation, not a reason to discard the customer's data, so this
+    // also re-throws rather than falling through to a reseed.
+    try {
+      cachedDb = storedRow.data as InternalCMSDatabaseSchema;
 
       // Ensure footer and legalPolicies have robust structure if upgrading
       const initial = getInitialDatabase();
+
+      // Defensive rather than assumed. `globalSettings` in particular was read
+      // through unguarded (`!cachedDb.globalSettings.codRules`), so a document
+      // without it threw a TypeError — and under the old shared catch, that
+      // TypeError silently reseeded the entire CMS.
+      if (!cachedDb || typeof cachedDb !== 'object') {
+        throw new Error('cms_state.data is not an object');
+      }
+      if (!cachedDb.globalSettings) cachedDb.globalSettings = initial.globalSettings;
+      if (!Array.isArray(cachedDb.products)) cachedDb.products = initial.products;
       if (!cachedDb?.footer || !cachedDb.footer.columns || cachedDb.footer.columns.length === 0) {
         cachedDb!.footer = initial.footer;
       } else {
@@ -1122,17 +1299,78 @@ export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
           : p
       );
       return cachedDb!;
+    } catch (err) {
+      console.error('[db] cms_state failed to normalise — refusing to reseed over existing data:', err);
+      cachedDb = null;
+      throw err;
     }
-  } catch (err) {
-    console.error('Error reading CMS database from Postgres, reinitializing:', err);
   }
 
+  // ------------------------------------------------------------------
+  // No row at all: a genuinely empty database (first boot, or a fresh local
+  // clone). This is the ONLY path that may seed, and it is reached only when
+  // the SELECT succeeded and returned nothing — never because something went
+  // wrong while reading or processing an existing document.
+  // ------------------------------------------------------------------
+  console.log('[db] no cms_state row found — seeding initial content for a fresh database');
   const initial = getInitialDatabase();
-  await saveDatabase(initial);
-  return initial;
+  await seedInitialDatabase(initial);
+  return cachedDb || initial;
+}
+
+/**
+ * Writes the seed document, but only if no row exists.
+ *
+ * ON CONFLICT DO NOTHING rather than the usual upsert: this is the one write
+ * that carries whole-catalogue blast radius, so it is made structurally
+ * incapable of overwriting. If two processes boot against the same empty
+ * database, one seeds and the other reads what was seeded — neither clobbers.
+ */
+async function seedInitialDatabase(initial: InternalCMSDatabaseSchema): Promise<void> {
+  await ensureSchema();
+  const inserted = await pool.query(
+    `INSERT INTO cms_state (id, data, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (id) DO NOTHING
+     RETURNING id`,
+    [STATE_ROW_ID, JSON.stringify(initial)]
+  );
+
+  if (inserted.rows.length > 0) {
+    cachedDb = initial;
+    return;
+  }
+
+  // Another process seeded first. Read back what it wrote rather than assuming
+  // ours is authoritative.
+  const existing = await pool.query('SELECT data FROM cms_state WHERE id = $1', [STATE_ROW_ID]);
+  cachedDb = (existing.rows[0]?.data as InternalCMSDatabaseSchema) || initial;
 }
 
 export async function saveDatabase(data: InternalCMSDatabaseSchema): Promise<void> {
+  // Last line of defence against a whole-catalogue overwrite.
+  //
+  // Every legitimate caller is saving an edit to a document it just loaded, so
+  // it always has products. A call carrying an empty catalogue means something
+  // upstream lost the data — and writing that would replace the real one. The
+  // seed path does not come through here (it uses seedInitialDatabase, which
+  // can only insert), so there is no legitimate empty-catalogue write.
+  if (!data || !Array.isArray(data.products)) {
+    throw new Error('Refusing to save a CMS document with no products array — this would destroy the catalogue.');
+  }
+  if (data.products.length === 0) {
+    const existing = await pool.query(
+      `SELECT jsonb_array_length(COALESCE(data->'products', '[]'::jsonb)) AS n FROM cms_state WHERE id = $1`,
+      [STATE_ROW_ID]
+    );
+    const storedCount = Number(existing.rows[0]?.n) || 0;
+    if (storedCount > 0) {
+      throw new Error(
+        `Refusing to overwrite ${storedCount} stored product(s) with an empty catalogue. ` +
+          'Delete products individually if that is genuinely intended.'
+      );
+    }
+  }
+
   cachedDb = data;
   await ensureSchema();
   try {

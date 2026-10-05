@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { AccountSection, Address, Order, Product, Review, Shade } from '@glamirk/shared/types';
+import { AccountSection, Address, Order, Product, Review, ReviewMedia, Shade } from '@glamirk/shared/types';
 import { useAccount } from '../../context/AccountContext';
 import { useCommerce } from '../../context/CommerceContext';
 import { AccountLayout } from './AccountLayout';
@@ -17,6 +17,8 @@ import { AddressesSection } from './sections/AddressesSection';
 import { ProfileSection } from './sections/ProfileSection';
 import { GlamProfileSection } from './sections/GlamProfileSection';
 import { ShadeHistorySection } from './sections/ShadeHistorySection';
+import { TryOnHistorySection } from './sections/TryOnHistorySection';
+import { PaymentsSection } from './sections/PaymentsSection';
 import { RewardsSection } from './sections/RewardsSection';
 import { ReviewsSection } from './sections/ReviewsSection';
 import { RecentlyViewedSection } from './sections/RecentlyViewedSection';
@@ -55,7 +57,13 @@ export interface AccountPageProps {
   onSetDefaultAddress: (addressId: string) => Promise<void> | void;
 
   onCancelOrder: (orderId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
-  onSubmitReview: (productId: string, rating: number, title: string, comment: string) => Promise<{ success: boolean; error?: string }>;
+  onSubmitReview: (
+    productId: string,
+    rating: number,
+    title: string,
+    comment: string,
+    media?: ReviewMedia[]
+  ) => Promise<{ success: boolean; error?: string }>;
   onSubmitReturn: (orderId: string, productId: string, reason: string, comment?: string) => Promise<{ success: boolean; error?: string }>;
 
   showToast: (message: string) => void;
@@ -96,6 +104,8 @@ export const AccountPage: React.FC<AccountPageProps> = (props) => {
     rewards: overview.data?.availableCoupons,
     reviews: overview.data?.pendingReviews,
     notifications: unreadNotificationCount,
+    payments: overview.data?.pendingRefunds,
+    help: overview.data?.openSupportTickets,
   };
 
   // Nested order screens keep "My Orders" highlighted in the sidebar and swap
@@ -214,6 +224,20 @@ export const AccountPage: React.FC<AccountPageProps> = (props) => {
             showToast={props.showToast}
           />
         );
+
+      case 'try-on-history':
+        return (
+          <TryOnHistorySection
+            allProducts={props.allProducts}
+            onOpenTryOn={props.onOpenTryOn}
+            onSelectProduct={props.onSelectProduct}
+            onAddToBag={props.onAddToBag}
+            showToast={props.showToast}
+          />
+        );
+
+      case 'payments':
+        return <PaymentsSection onOpenOrder={props.onOpenOrder} onExploreShop={props.onExploreShop} />;
 
       case 'reviews':
         return (

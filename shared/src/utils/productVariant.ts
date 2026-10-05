@@ -116,3 +116,83 @@ export function isVariantInStock(product: Product, shade: Shade | undefined): bo
   if (shade?.stock !== undefined) return shade.stock > 0;
   return product.inStock !== false && product.stock > 0;
 }
+
+/** One independently buyable combination, with the stock number that actually
+ * gates it after the fallback chain has been applied. */
+export interface StockUnit {
+  variantId?: string;
+  sizeLabel?: string;
+  stock: number;
+}
+
+/**
+ * Every combination a customer can actually put in their bag, with its gating
+ * stock.
+ *
+ * This is the authoritative definition of "what is the sellable unit", and it
+ * resolves exactly the way getCurrentStock does — most specific level that
+ * defines a number, falling back outward. A product with shades is sold as
+ * shades; a shade with sizes is sold as sizes; a product with neither is sold
+ * as itself.
+ *
+ * Inactive shades and sizes are excluded: they cannot be selected, so their
+ * stock cannot be bought and must not make a product look available.
+ */
+export function enumerateStockUnits(product: Product): StockUnit[] {
+  const shades = (product.shades || []).filter((s) => s.isActive !== false);
+
+  if (shades.length > 0) {
+    const units: StockUnit[] = [];
+    for (const shade of shades) {
+      const sizes = (shade.sizes || []).filter((s) => s.isActive !== false);
+      if (sizes.length > 0) {
+        for (const size of sizes) {
+          units.push({
+            variantId: shade.id,
+            sizeLabel: size.label,
+            stock: size.stock ?? shade.stock ?? product.stock,
+          });
+        }
+      } else {
+        units.push({ variantId: shade.id, stock: shade.stock ?? product.stock });
+      }
+    }
+    return units;
+  }
+
+  const productSizes = getActiveSizeOptions(product, undefined).filter((s) => s.isActive !== false);
+  if (productSizes.length > 0) {
+    return productSizes.map((size) => ({ sizeLabel: size.label, stock: size.stock ?? product.stock }));
+  }
+
+  return [{ stock: product.stock }];
+}
+
+/**
+ * Does any sellable unit of this product have stock?
+ *
+ * Quantity only — the admin's inStock switch is deliberately not consulted, so
+ * this can be used to *derive* that flag without circularity.
+ *
+ * This exists because `product.stock > 0` is the wrong question for a product
+ * whose shades carry their own stock. The product-level number behaves as a
+ * shared pool that also drains, so it can reach zero while every shade still
+ * has units on the shelf — and the old derivation then marked the whole
+ * product out of stock, hiding it from the shop and refusing the entire
+ * basket at checkout. The shade is what gates the sale, so the shade is what
+ * decides availability.
+ */
+export function hasSellableStock(product: Product): boolean {
+  return enumerateStockUnits(product).some((unit) => unit.stock > 0);
+}
+
+/**
+ * Can a customer buy anything from this product right now?
+ *
+ * Both conditions must hold: an admin has not switched it off, and something
+ * is actually in stock. `inStock` is treated as the admin's intent here; the
+ * quantity question is answered by hasSellableStock above.
+ */
+export function isProductSellable(product: Product): boolean {
+  return product.inStock !== false && hasSellableStock(product);
+}

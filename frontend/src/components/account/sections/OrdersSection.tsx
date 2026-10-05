@@ -5,8 +5,9 @@
 
 import React, { useMemo, useState } from 'react';
 import { Package, Truck, RotateCcw, FileDown, Headphones, Star, XCircle, Eye, RefreshCw } from 'lucide-react';
-import { Order, OrderItem, Product, Shade } from '@glamirk/shared/types';
+import { Order, OrderItem, Product, ReviewMedia, Shade } from '@glamirk/shared/types';
 import { useAccount } from '../../../context/AccountContext';
+import { useCommerce } from '../../../context/CommerceContext';
 import {
   AccountButton,
   AccountEmpty,
@@ -32,7 +33,13 @@ interface OrdersSectionProps {
   onAddToBag: (product: Product, shade?: Shade, size?: string, quantity?: number) => void;
   onCancelOrder: (orderId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   onSubmitReturn: (orderId: string, productId: string, reason: string, comment?: string) => Promise<{ success: boolean; error?: string }>;
-  onSubmitReview: (productId: string, rating: number, title: string, comment: string) => Promise<{ success: boolean; error?: string }>;
+  onSubmitReview: (
+    productId: string,
+    rating: number,
+    title: string,
+    comment: string,
+    media?: ReviewMedia[]
+  ) => Promise<{ success: boolean; error?: string }>;
   showToast: (message: string) => void;
 }
 
@@ -51,11 +58,13 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   showToast,
 }) => {
   const { openInvoice } = useAccount();
+  const { reorder } = useCommerce();
   const [filter, setFilter] = useState<OrderFilterId>('ALL');
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
   const [returnTarget, setReturnTarget] = useState<Order | null>(null);
   const [reviewTarget, setReviewTarget] = useState<{ order: Order; item: OrderItem } | null>(null);
   const [invoiceBusyId, setInvoiceBusyId] = useState<string | null>(null);
+  const [reorderBusyId, setReorderBusyId] = useState<string | null>(null);
 
   const filtered = useMemo(() => orders.filter((order) => matchesOrderFilter(order, filter)), [orders, filter]);
 
@@ -84,6 +93,32 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
     const res = await openInvoice(order.id, order.orderNumber);
     setInvoiceBusyId(null);
     if (!res.success) showToast(res.error || 'Could not generate this invoice.');
+  };
+
+  const handleReorder = async (order: Order) => {
+    setReorderBusyId(order.id);
+    const res = await reorder(order.id);
+    setReorderBusyId(null);
+
+    if (!res.success) {
+      showToast(res.error || 'Could not add these items to your bag.');
+      return;
+    }
+
+    const missing = res.unavailable || [];
+    if (res.addedCount === 0) {
+      showToast('Nothing from this order is available to buy right now.');
+    } else if (missing.length > 0) {
+      // Naming the first missing item is more use than a bare count — it
+      // tells them what to go looking for.
+      showToast(
+        missing.length === 1
+          ? `Added to bag — ${missing[0].productName} is ${missing[0].reason}.`
+          : `Added to bag — ${missing.length} items are unavailable.`
+      );
+    } else {
+      showToast(`${res.addedCount} ${res.addedCount === 1 ? 'item' : 'items'} added to your bag`);
+    }
   };
 
   if (isLoading && orders.length === 0) {
@@ -209,6 +244,14 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                 <AccountButton variant="ghost" loading={invoiceBusyId === order.id} onClick={() => handleInvoice(order)}>
                   <FileDown className="w-3.5 h-3.5" />
                   Invoice
+                </AccountButton>
+                <AccountButton
+                  variant="ghost"
+                  loading={reorderBusyId === order.id}
+                  onClick={() => handleReorder(order)}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Reorder
                 </AccountButton>
                 <AccountButton variant="ghost" onClick={() => onOpenHelp(order.id)}>
                   <Headphones className="w-3.5 h-3.5" />

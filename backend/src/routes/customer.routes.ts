@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import type { PoolClient } from 'pg';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
@@ -7,7 +8,41 @@ import { requireCustomer, AuthenticatedCustomerRequest } from '../middleware/req
 import { rateLimit } from '../middleware/rateLimit';
 import { signCustomerToken, bumpTokenVersion } from '../auth/tokens';
 import { createSession, deleteSession, deleteAllSessions } from '../auth/sessions';
+import { clientIp } from '../utils/request';
+// Sellability is resolved by the shared helpers so the storefront, the admin
+// and this server all answer "can this be bought" identically. (The
+// price/stock resolvers further down this file are local duplicates that
+// predate the shared module; they are left alone here rather than
+// refactored as part of an inventory fix.)
+import { hasSellableStock, isProductSellable } from '@glamirk/shared/utils/productVariant';
+import {
+  normalizePhone,
+  maskPhone,
+  legacyPhoneSuffix,
+  DEFAULT_COUNTRY_CODE,
+  SUPPORTED_COUNTRY_CODES,
+} from '../utils/phone';
+import { issueOtp, verifyOtp, otpPolicy } from '../services/otp.service';
+import { channelConfigured, OtpChannel } from '../services/messaging.service';
 import { grantSignupBonus, grantReviewPoints, recordCouponRedemption } from '../services/rewards.service';
+import { resolveAvailableStock } from '../services/inventory.service';
+import {
+  getPaymentGateway,
+  onlinePaymentsAvailable,
+  publishableKeyId,
+  verifyPaymentSignature,
+  toMinorUnits,
+  fromMinorUnits,
+} from '../services/payment.service';
+import {
+  markOrderPaid,
+  markOrderPaymentFailed,
+  restoreOrderStock,
+  createShipmentForOrder,
+  cancelShipmentForOrder,
+  refundOrderPayment,
+  shipmentsEnabled,
+} from '../services/fulfillment.service';
 import {
   Product,
   Shade,
@@ -18,16 +53,42 @@ import {
   CODRules,
   DEFAULT_PROMO_NOTIFICATION_MESSAGES,
   applyPromoMessageTemplate,
+  ReviewMedia,
+  REVIEW_MEDIA_MAX_ITEMS,
+  OrderStatus,
 } from '@glamirk/shared/types';
+
+/**
+ * What the browser needs to open the gateway's hosted checkout.
+ *
+ * Carries the publishable key id and the gateway's own order handle — never
+ * the key secret, and never an amount the client could alter and have
+ * honoured: the gateway enforces the amount it was given at order creation.
+ */
+interface CheckoutPaymentHandoff {
+  provider: string;
+  gatewayOrderId: string;
+  keyId: string | null;
+  amountMinor: number;
+  currency: string;
+  /** True when the mock adapter is in force, so a dev build can skip the real
+   * Razorpay script instead of failing to load it. */
+  isMock: boolean;
+}
 import {
   CANCELLABLE_STATUSES,
   buildOrderFromRow,
   buildOrdersFromRows,
   insertOrderStatusHistory,
   mapReturnRequestRow,
-  restockOrderItems,
 } from '../services/orders.service';
-import { isVerifiedPurchase, mapReviewRow, recomputeProductRating } from '../services/reviews.service';
+import {
+  isVerifiedPurchase,
+  mapReviewRow,
+  recomputeProductRating,
+  destroyReviewMedia,
+  orphanedReviewMedia,
+} from '../services/reviews.service';
 import { mapNotificationRow, notifyOrderStatusChange, notifyAdminNewOrder } from '../services/notifications.service';
 import { sendOrderStatusEmail, sendAdminNewOrderEmail } from '../services/email.service';
 
@@ -80,7 +141,8 @@ function toSessionUser(row: any) {
   return {
     id: row.id,
     name: row.name,
-    email: row.email,
+    // Absent on mobile + OTP accounts that haven't added one.
+    email: row.email || undefined,
     phone: row.phone || undefined,
     createdAt: row.created_at,
     avatarUrl: row.avatar_url || undefined,
@@ -348,6 +410,267 @@ router.post('/auth/google', async (req: Request, res: Response) => {
   res.json({ token, user: toSessionUser(row) });
 });
 
+// ==========================================
+// MOBILE + OTP SIGN-IN
+//
+// The primary way customers sign in. Two steps, both stateless from the
+// client's point of view: request a code for a number, then present that
+// number and the code back. Nothing about validity is decided on the client —
+// see services/otp.service.ts, which owns expiry, single-use, the attempt cap
+// and the throttles.
+//
+// This shares the customer session machinery with every other sign-in path
+// above (signCustomerToken + createSession), so an OTP session is the same
+// kind of session as a password one and revocation works identically. It has
+// no bearing whatsoever on admin authentication, which lives in
+// admin.routes.ts against a different user store and a different role claim.
+// ==========================================
+
+/** Digits in the code. Mirrored to the client so the OTP boxes and the
+ * server agree without either hard-coding it twice. */
+const OTP_LENGTH = 6;
+
+// Per-IP burst guards, sitting in front of the fine-grained per-number limits
+// in the OTP service. Two layers on purpose: the per-number quota stops one
+// number being hammered, and these stop one machine walking through many
+// numbers.
+//
+// Configurable rather than literals because the right ceiling depends on the
+// deployment — a store behind a corporate proxy or a mobile carrier NAT sees
+// far more legitimate traffic from a single address than one behind a CDN.
+// Generous by default: the per-number quota is the real defence here, and an
+// IP limit tight enough to matter on its own would also lock out a shared
+// office or a college hostel.
+const IP_BURST_WINDOW_MS = Number(process.env.OTP_IP_BURST_WINDOW_MINUTES || 15) * 60 * 1000;
+
+const otpRequestLimiter = rateLimit({
+  scope: 'customer-otp-request',
+  windowMs: IP_BURST_WINDOW_MS,
+  max: Number(process.env.OTP_REQUEST_BURST_PER_IP || 30),
+  message: 'Too many OTP requests. Please wait a few minutes and try again.',
+});
+const otpVerifyLimiter = rateLimit({
+  scope: 'customer-otp-verify',
+  windowMs: IP_BURST_WINDOW_MS,
+  max: Number(process.env.OTP_VERIFY_BURST_PER_IP || 50),
+  message: 'Too many verification attempts. Please wait a few minutes and try again.',
+});
+
+/** Lets the sign-in screen offer only channels that can actually deliver,
+ * rather than showing WhatsApp and failing after the customer picks it. */
+router.get('/auth/otp/channels', async (_req: Request, res: Response) => {
+  res.json({
+    sms: channelConfigured('sms'),
+    whatsapp: channelConfigured('whatsapp'),
+    countryCodes: SUPPORTED_COUNTRY_CODES,
+    otpLength: OTP_LENGTH,
+    expiresInSeconds: otpPolicy.expirySeconds,
+    resendCooldownSeconds: otpPolicy.resendCooldownSeconds,
+  });
+});
+
+router.post('/auth/otp/request', otpRequestLimiter, async (req: Request, res: Response) => {
+  const { phone, countryCode, method } = req.body || {};
+
+  const normalized = normalizePhone(phone, countryCode || DEFAULT_COUNTRY_CODE);
+  if (!normalized) {
+    return res.status(400).json({ error: 'Please enter a valid mobile number.' });
+  }
+
+  // SMS is the default and anything unrecognised falls back to it — WhatsApp
+  // is only used when the customer explicitly asked for it.
+  const deliveryMethod: OtpChannel = method === 'whatsapp' ? 'whatsapp' : 'sms';
+
+  const result = await issueOtp({
+    phoneE164: normalized.e164,
+    method: deliveryMethod,
+    ip: clientIp(req),
+  });
+
+  if (result.status !== 'sent') {
+    switch (result.status) {
+      case 'cooldown':
+        res.setHeader('Retry-After', String(result.retryAfterSeconds));
+        return res.status(429).json({
+          error: `Please wait ${result.retryAfterSeconds} second${result.retryAfterSeconds === 1 ? '' : 's'} before requesting another OTP.`,
+          retryAfterSeconds: result.retryAfterSeconds,
+        });
+      case 'daily_quota':
+        res.setHeader('Retry-After', String(result.retryAfterSeconds));
+        // Says what happened and nothing about how it is counted, which
+        // number it applies to, or whether that number has an account.
+        return res.status(429).json({
+          error: 'Daily OTP limit reached. Please try again later.',
+          retryAfterSeconds: result.retryAfterSeconds,
+          dailyLimitReached: true,
+        });
+      case 'ip_quota':
+        res.setHeader('Retry-After', String(result.retryAfterSeconds));
+        return res.status(429).json({
+          error: 'Too many OTP requests from this device. Please try again in a little while.',
+          retryAfterSeconds: result.retryAfterSeconds,
+        });
+      case 'channel_unconfigured':
+      case 'delivery_failed':
+        // Never reported as a success, and never silently re-routed to the
+        // other channel — the customer is told which one failed and chooses.
+        return res.status(503).json({
+          error:
+            deliveryMethod === 'whatsapp'
+              ? "We couldn't send the OTP on WhatsApp. Please try again or choose SMS."
+              : "We couldn't send the OTP right now. Please try again.",
+          method: deliveryMethod,
+          channelAvailable: result.status !== 'channel_unconfigured',
+        });
+    }
+  }
+
+  // Deliberately no indication of whether this number has an account: the
+  // response is byte-for-byte the same shape for sign-up and sign-in, and the
+  // status code is the same too, so this endpoint cannot be used to test
+  // which numbers are registered.
+  res.json({
+    success: true,
+    challengeId: result.challengeId,
+    method: deliveryMethod,
+    maskedPhone: maskPhone(normalized.e164),
+    // Absolute instants, so the client's countdown survives a page refresh
+    // and can never drift away from what the backend will enforce.
+    expiresAt: result.expiresAt.toISOString(),
+    resendAvailableAt: result.resendAvailableAt.toISOString(),
+    otpLength: OTP_LENGTH,
+  });
+});
+
+/**
+ * Finds the account a verified number belongs to.
+ *
+ * Two lookups, because phone_e164 only exists from migration 008 onward:
+ * the canonical column first, then the last-10-digits match against the
+ * free-text `phone` column that the password login has always used. The
+ * second is what keeps a customer who registered before this feature — with
+ * their orders, cart, wishlist and addresses — signing into the account they
+ * already have instead of getting a fresh empty one.
+ */
+async function findCustomerByVerifiedPhone(e164: string): Promise<any | null> {
+  const exact = await pool.query('SELECT * FROM customers WHERE phone_e164 = $1 AND deleted_at IS NULL', [e164]);
+  if (exact.rows[0]) return exact.rows[0];
+
+  const legacy = await pool.query(
+    `SELECT * FROM customers
+      WHERE deleted_at IS NULL
+        AND phone_e164 IS NULL
+        AND phone IS NOT NULL
+        AND right(regexp_replace(phone, '\\D', '', 'g'), 10) = $1
+      ORDER BY created_at ASC`,
+    [legacyPhoneSuffix(e164)]
+  );
+  // The password login refuses when two accounts share a number, because a
+  // password alone can't say which person is at the keyboard. Here the OTP
+  // has already proved control of the number, so refusing would only lock out
+  // someone who demonstrably owns it — the oldest account wins, and the
+  // choice is at least deterministic rather than whichever row sorted first.
+  return legacy.rows[0] || null;
+}
+
+router.post('/auth/otp/verify', otpVerifyLimiter, async (req: Request, res: Response) => {
+  const { challengeId, code } = req.body || {};
+
+  if (!challengeId) {
+    return res.status(400).json({ error: 'This sign-in attempt has expired. Please request a new OTP.', mustResend: true });
+  }
+  if (!code) {
+    return res.status(400).json({ error: 'Please enter the OTP.' });
+  }
+
+  // Only the challenge and the typed code are accepted. The phone number and
+  // the delivery channel come back out of verifyOtp, read from the stored
+  // row — a client cannot nominate which account it is signing into, nor
+  // claim a channel it never received on.
+  const verification = await verifyOtp(String(challengeId), code);
+  if (verification.status !== 'verified') {
+    switch (verification.status) {
+      case 'expired':
+        return res.status(400).json({ error: 'This OTP has expired. Please request a new OTP.', expired: true });
+      case 'too_many_attempts':
+        return res
+          .status(429)
+          .json({ error: 'Too many incorrect attempts. Please request a new OTP.', mustResend: true });
+      case 'no_active_code':
+        return res
+          .status(400)
+          .json({ error: 'This OTP is no longer valid. Please request a new OTP.', mustResend: true });
+      case 'incorrect':
+        return res.status(401).json({
+          error: 'Incorrect OTP. Please try again.',
+          attemptsRemaining: verification.attemptsRemaining,
+        });
+    }
+  }
+
+  // Everything below keys off the number stored with the challenge, which is
+  // the one the code was actually delivered to.
+  const verifiedE164 = verification.phoneE164;
+  const parsedVerified = normalizePhone(verifiedE164);
+  // Display form for the free-text `phone` column the profile screen shows.
+  const displayPhone = parsedVerified
+    ? `${parsedVerified.countryCode} ${parsedVerified.national}`
+    : verifiedE164;
+
+  let row = await findCustomerByVerifiedPhone(verifiedE164);
+  const isNewAccount = !row;
+
+  if (row) {
+    // Pin the canonical number to the row the first time this account signs
+    // in by OTP, so later sign-ins take the indexed exact-match path. Guarded
+    // on IS NULL and tolerant of the unique index rejecting it: if another
+    // row claimed the number in between, the sign-in still succeeds against
+    // the account we already resolved.
+    if (!row.phone_e164) {
+      try {
+        await pool.query('UPDATE customers SET phone_e164 = $1 WHERE id = $2 AND phone_e164 IS NULL', [
+          verifiedE164,
+          row.id,
+        ]);
+      } catch (err) {
+        console.error('Could not claim phone_e164 for existing customer:', (err as Error).message);
+      }
+    }
+    // The number has just been proved, and `phone` may be empty on an account
+    // that registered by email alone.
+    await pool.query(
+      'UPDATE customers SET phone_verified = true, phone = COALESCE(phone, $1) WHERE id = $2',
+      [displayPhone, row.id]
+    );
+  } else {
+    const id = 'cust-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    // password_hash is NOT NULL and this account has no password — the same
+    // random, never-shared hash the Google sign-up path uses satisfies it
+    // without creating a credential anyone could guess.
+    const passwordHash = bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), bcrypt.genSaltSync(10));
+    // No name is collected during OTP sign-in; the customer sets a real one
+    // in their profile. email stays NULL rather than being faked, so order
+    // mail is never addressed to an invented address.
+    const placeholderName = 'Glamirk Customer';
+
+    await pool.query(
+      `INSERT INTO customers (id, name, first_name, phone, phone_e164, phone_verified, password_hash)
+       VALUES ($1, $2, $3, $4, $5, true, $6)`,
+      [id, placeholderName, placeholderName, displayPhone, verifiedE164, passwordHash]
+    );
+    await grantSignupBonus(id);
+    const created = await pool.query('SELECT * FROM customers WHERE id = $1', [id]);
+    row = created.rows[0];
+  }
+
+  const fresh = await pool.query('SELECT * FROM customers WHERE id = $1', [row.id]);
+  row = fresh.rows[0];
+
+  const sessionId = await createSession(row.id, req);
+  const token = signCustomerToken(row.id, row.email, Number(row.token_version) || 0, sessionId);
+  res.json({ token, user: toSessionUser(row), isNewAccount });
+});
+
 router.get('/auth/me', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
   const result = await pool.query('SELECT * FROM customers WHERE id = $1', [req.customer!.id]);
   const row = result.rows[0];
@@ -374,6 +697,7 @@ function mapAddressRow(row: any) {
     state: row.state,
     pinCode: row.pin_code,
     isDefault: row.is_default,
+    isBillingDefault: row.is_billing_default,
   };
 }
 
@@ -433,6 +757,7 @@ function validateAddressPayload(body: any): { ok: boolean; error?: string; value
       state,
       pinCode,
       isDefault: !!body?.isDefault,
+      isBillingDefault: !!body?.isBillingDefault,
     },
   };
 }
@@ -447,10 +772,30 @@ router.get('/addresses', requireCustomer, async (req: AuthenticatedCustomerReque
   res.json({ addresses: result.rows.map(mapAddressRow) });
 });
 
-// Only one address can be marked default at a time — clears every other
-// address's flag for this customer before the caller sets the new one.
-async function clearOtherDefaultAddresses(userId: string, keepId?: string): Promise<void> {
-  await pool.query('UPDATE customer_addresses SET is_default = false WHERE user_id = $1 AND id IS DISTINCT FROM $2', [userId, keepId || null]);
+/**
+ * Clears the other default flags for this customer so a new default can be
+ * set, on a caller-supplied client.
+ *
+ * Takes a client rather than using the pool directly because migration 010
+ * added partial unique indexes enforcing one default of each kind per
+ * customer. Clearing and setting through two separate pool connections could
+ * interleave with a concurrent save and hit that constraint; both statements
+ * now run inside one transaction in the handlers below, which is also what
+ * stops the two-defaults state the migration had to repair in the first
+ * place.
+ */
+async function clearOtherDefaultAddresses(
+  client: PoolClient,
+  userId: string,
+  column: 'is_default' | 'is_billing_default',
+  keepId?: string
+): Promise<void> {
+  // Column name is not interpolated from user input — it is one of the two
+  // literals in the parameter type above.
+  await client.query(
+    `UPDATE customer_addresses SET ${column} = false WHERE user_id = $1 AND id IS DISTINCT FROM $2`,
+    [userId, keepId || null]
+  );
 }
 
 router.post('/addresses', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
@@ -466,15 +811,31 @@ router.post('/addresses', requireCustomer, async (req: AuthenticatedCustomerRequ
   // they didn't tick the box — otherwise checkout has nothing preselected.
   const isFirst = (countRes.rows[0]?.n || 0) === 0;
   const makeDefault = a.isDefault || isFirst;
+  // The first address saved becomes the billing default too, for the same
+  // reason it becomes the shipping default: checkout needs something
+  // preselected rather than an empty billing field.
+  const makeBillingDefault = a.isBillingDefault || isFirst;
 
   const id = 'addr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-  if (makeDefault) await clearOtherDefaultAddresses(req.customer!.id);
-  await pool.query(
-    `INSERT INTO customer_addresses
-      (id, user_id, name, type, phone, email, address_line1, address_line2, area, landmark, city, state, pin_code, is_default)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-    [id, req.customer!.id, a.name, a.type, a.phone, a.email, a.addressLine1, a.addressLine2, a.area, a.landmark, a.city, a.state, a.pinCode, makeDefault]
-  );
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (makeDefault) await clearOtherDefaultAddresses(client, req.customer!.id, 'is_default');
+    if (makeBillingDefault) await clearOtherDefaultAddresses(client, req.customer!.id, 'is_billing_default');
+    await client.query(
+      `INSERT INTO customer_addresses
+        (id, user_id, name, type, phone, email, address_line1, address_line2, area, landmark, city, state, pin_code, is_default, is_billing_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      [id, req.customer!.id, a.name, a.type, a.phone, a.email, a.addressLine1, a.addressLine2, a.area, a.landmark, a.city, a.state, a.pinCode, makeDefault, makeBillingDefault]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
 
   const result = await pool.query('SELECT * FROM customer_addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at ASC', [req.customer!.id]);
   res.json({ addresses: result.rows.map(mapAddressRow), newAddressId: id });
@@ -493,14 +854,28 @@ router.put('/addresses/:id', requireCustomer, async (req: AuthenticatedCustomerR
     return res.status(404).json({ error: 'Address not found.' });
   }
 
-  if (a.isDefault) await clearOtherDefaultAddresses(req.customer!.id, req.params.id);
-  await pool.query(
-    `UPDATE customer_addresses SET
-      name = $1, type = $2, phone = $3, email = $4, address_line1 = $5, address_line2 = $6,
-      area = $7, landmark = $8, city = $9, state = $10, pin_code = $11, is_default = $12
-     WHERE id = $13 AND user_id = $14`,
-    [a.name, a.type, a.phone, a.email, a.addressLine1, a.addressLine2, a.area, a.landmark, a.city, a.state, a.pinCode, a.isDefault, req.params.id, req.customer!.id]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (a.isDefault) await clearOtherDefaultAddresses(client, req.customer!.id, 'is_default', req.params.id);
+    if (a.isBillingDefault) {
+      await clearOtherDefaultAddresses(client, req.customer!.id, 'is_billing_default', req.params.id);
+    }
+    await client.query(
+      `UPDATE customer_addresses SET
+        name = $1, type = $2, phone = $3, email = $4, address_line1 = $5, address_line2 = $6,
+        area = $7, landmark = $8, city = $9, state = $10, pin_code = $11, is_default = $12,
+        is_billing_default = $13
+       WHERE id = $14 AND user_id = $15`,
+      [a.name, a.type, a.phone, a.email, a.addressLine1, a.addressLine2, a.area, a.landmark, a.city, a.state, a.pinCode, a.isDefault, a.isBillingDefault, req.params.id, req.customer!.id]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
 
   const result = await pool.query('SELECT * FROM customer_addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at ASC', [req.customer!.id]);
   res.json({ addresses: result.rows.map(mapAddressRow) });
@@ -633,7 +1008,9 @@ router.post('/wishlist/toggle/:productId', requireCustomer, async (req: Authenti
 function mapCartRow(row: any, db: Awaited<ReturnType<typeof loadDatabase>>): ServerCartItem {
   const product = findProduct(db.products, row.product_id);
   const shade = product ? findShade(product, row.variant_id) : undefined;
-  const unavailable = !product || product.inStock === false;
+  // Sellability is a question about the units a customer can actually pick,
+  // not about the product-level pool.
+  const unavailable = !product || !isProductSellable(product);
   const unitPrice = product ? getCurrentPrice(product, shade, row.selected_size) : 0;
   return {
     id: row.id,
@@ -685,7 +1062,9 @@ router.post('/cart/items', requireCustomer, async (req: AuthenticatedCustomerReq
   const db = await loadDatabase();
   const product = findProduct(db.products, productId);
   if (!product) return res.status(404).json({ error: 'Product not found.' });
-  if (product.inStock === false) return res.status(400).json({ error: `${product.name} is currently out of stock.` });
+  if (!isProductSellable(product)) {
+    return res.status(400).json({ error: `${product.name} is currently out of stock.` });
+  }
 
   const normalizedVariantId = variantId || null;
   if (requiresVariant(product) && !normalizedVariantId) {
@@ -703,7 +1082,10 @@ router.post('/cart/items', requireCustomer, async (req: AuthenticatedCustomerReq
   if (normalizedSize && !isValidSize(product, selectedShade, normalizedSize)) {
     return res.status(400).json({ error: 'Selected size is not available for this product.' });
   }
-  const currentStock = getCurrentStock(product, selectedShade, normalizedSize);
+  const currentStock = await resolveAvailableStock(
+    { productId: product.id, variantId: normalizedVariantId, sizeLabel: normalizedSize },
+    getCurrentStock(product, selectedShade, normalizedSize)
+  );
 
   const existing = await pool.query(
     'SELECT id, quantity FROM cart_items WHERE user_id = $1 AND product_id = $2 AND variant_id IS NOT DISTINCT FROM $3 AND selected_size IS NOT DISTINCT FROM $4',
@@ -954,12 +1336,19 @@ function computeCouponDiscount(
 const PAYMENT_METHODS = ['cod', 'upi', 'card', 'netbanking', 'wallet'] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
-// Glamirk has no payment gateway wired up yet — every order is Cash on
-// Delivery. The 'upi'/'card'/'netbanking'/'wallet' branches of
-// buildPaymentDetails() below stay in place (unreachable while this is
-// false) purely so the order model doesn't need reshaping the day a real
-// gateway is integrated. Flip this only alongside actually wiring one in.
-const ONLINE_PAYMENTS_ENABLED = false;
+/**
+ * Whether a shopper may choose anything other than Cash on Delivery.
+ *
+ * Now answered by the payment service rather than a constant: it is true only
+ * when PAYMENTS_LIVE_MODE is on *and* real Razorpay credentials are present
+ * (or, outside production, when PAYMENTS_MOCK_CHECKOUT opts in to the mock).
+ * A production deploy that is missing either one keeps serving the exact
+ * COD-only checkout that exists today rather than offering a payment option
+ * that would settle nothing.
+ */
+function onlinePaymentsEnabled(): boolean {
+  return onlinePaymentsAvailable();
+}
 
 // The frontend already only ever offers COD, but a request can be sent by
 // anything — never trust a client-supplied payment method or an
@@ -1025,53 +1414,23 @@ router.get('/cod-eligibility', async (req: Request, res: Response) => {
   res.json({ pincode, serviceable });
 });
 
-// Validates + simulates the payment gateway for one checkout attempt. Runs
-// BEFORE the stock lock is acquired — it doesn't touch stock or the cart, so
-// there's no reason to serialize every other concurrent checkout in the
-// store behind its ~1s artificial delay (or behind a real SMTP round-trip,
-// for the notification emails sent after checkout completes). This is a
-// demo simulation only: no real gateway is called, and only a card's last 4
-// digits are ever kept.
-async function buildPaymentDetails(
-  paymentMethod: PaymentMethod,
-  fields: { upiId?: string; cardNumber?: string; bankName?: string; walletProvider?: string }
-): Promise<{ error: string; status: number } | PaymentDetails> {
-  const paymentDetails: PaymentDetails = { method: paymentMethod, status: 'COD_PENDING' };
-  if (paymentMethod === 'cod') return paymentDetails;
-
-  if (paymentMethod === 'upi') {
-    if (!/^[\w.\-]{2,}@[a-zA-Z]{2,}$/.test(String(fields.upiId || ''))) {
-      return { error: 'Please enter a valid UPI ID (e.g. name@bank).', status: 400 };
-    }
-    paymentDetails.upiId = fields.upiId;
-  } else if (paymentMethod === 'card') {
-    const digits = String(fields.cardNumber || '').replace(/\D/g, '');
-    if (digits.length < 13 || digits.length > 19) {
-      return { error: 'Please enter a valid card number.', status: 400 };
-    }
-    paymentDetails.cardLast4 = digits.slice(-4);
-    paymentDetails.cardNetwork = digits.startsWith('4') ? 'Visa' : digits.startsWith('5') ? 'Mastercard' : digits.startsWith('6') ? 'RuPay' : 'Card';
-  } else if (paymentMethod === 'netbanking') {
-    if (!String(fields.bankName || '').trim()) {
-      return { error: 'Please select your bank.', status: 400 };
-    }
-    paymentDetails.bankName = fields.bankName;
-  } else if (paymentMethod === 'wallet') {
-    if (!String(fields.walletProvider || '').trim()) {
-      return { error: 'Please select a wallet provider.', status: 400 };
-    }
-    paymentDetails.walletProvider = fields.walletProvider;
-  }
-
-  // Simulated processing delay + occasional simulated decline, purely for
-  // demo realism — this never touches a real payment network.
-  await new Promise((resolve) => setTimeout(resolve, 900 + Math.random() * 500));
-  if (Math.random() < 0.1) {
-    return { error: 'Payment declined by your bank/provider. Please try again or choose a different method.', status: 402 };
-  }
-  paymentDetails.status = 'PAID';
-  paymentDetails.paidAt = new Date().toISOString();
-  return paymentDetails;
+/**
+ * The payment block recorded on a newly created order.
+ *
+ * No card details are ever accepted here any more. Under Razorpay the
+ * instrument is entered on the gateway's own hosted checkout and never
+ * touches this server — which is both the only PCI-sane arrangement and the
+ * reason the old upiId/cardNumber/bankName request fields are no longer read.
+ * They are still accepted in the request body and ignored, so an older
+ * frontend build cannot break by sending them.
+ */
+function buildInitialPaymentDetails(paymentMethod: PaymentMethod): PaymentDetails {
+  return {
+    method: paymentMethod,
+    // COD owes nothing until the courier collects; an online order is pending
+    // until the gateway says otherwise. Neither is ever 'PAID' at creation.
+    status: paymentMethod === 'cod' ? 'COD_PENDING' : 'PENDING',
+  };
 }
 
 router.post('/coupons/validate', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
@@ -1103,9 +1462,12 @@ router.post('/coupons/validate', requireCustomer, async (req: AuthenticatedCusto
 });
 
 router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  // upiId/cardNumber/bankName/walletProvider may still arrive from an older
+  // frontend build. They are deliberately not destructured or read: the
+  // instrument is now collected on the gateway's own hosted checkout and must
+  // never touch this server.
   const {
     shippingAddress, idempotencyKey, customerName, customerPhone, customerEmail, couponCode,
-    upiId, cardNumber, bankName, walletProvider,
   } = req.body || {};
   const paymentMethod: (typeof PAYMENT_METHODS)[number] = req.body?.paymentMethod || 'cod';
   const userId = req.customer!.id;
@@ -1117,10 +1479,11 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
   if (!PAYMENT_METHODS.includes(paymentMethod)) {
     return res.status(400).json({ error: 'Please select a valid payment method.' });
   }
-  // The frontend only ever sends 'cod' — but never trust that from the
-  // server side. Reject anything else outright while no gateway is wired up,
-  // rather than letting a direct API call through to the payment simulator.
-  if (paymentMethod !== 'cod' && !ONLINE_PAYMENTS_ENABLED) {
+  // Never trust a client-supplied payment method. A direct API call asking for
+  // an online method while the gateway is not configured is refused here
+  // rather than being allowed to create an order that can never be paid.
+  const isOnline = paymentMethod !== 'cod';
+  if (isOnline && !onlinePaymentsEnabled()) {
     return res.status(400).json({ error: 'Only Cash on Delivery is available at this time.' });
   }
 
@@ -1136,15 +1499,7 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
       }
     }
 
-    // Payment validation + the simulated gateway delay run BEFORE the stock
-    // lock is acquired — neither touches stock or the cart, so there's no
-    // reason to serialize every other concurrent checkout in the store
-    // behind this ~1s artificial wait.
-    const paymentResult = await buildPaymentDetails(paymentMethod, { upiId, cardNumber, bankName, walletProvider });
-    if ('error' in paymentResult) {
-      return res.status(paymentResult.status).json({ error: paymentResult.error });
-    }
-    const paymentDetails = paymentResult;
+    const paymentDetails = buildInitialPaymentDetails(paymentMethod);
 
     const result = await withStockLock(async () => {
       // Re-check idempotency now that we hold the lock — guards the rare
@@ -1174,11 +1529,17 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
       // Re-verify every line against the live product catalog (never trust cached client state).
       for (const row of cartRes.rows) {
         const product = findProduct(db.products, row.product_id);
-        if (!product || product.inStock === false) {
+        if (!product || !isProductSellable(product)) {
           return { error: `${product?.name || 'An item'} in your bag is no longer available.`, status: 409 };
         }
         const shade = findShade(product, row.variant_id);
-        const currentStock = getCurrentStock(product, shade, row.selected_size);
+        // Reads from SQL inventory when it is authoritative, otherwise from
+        // the JSONB document — same check either way, so the flag cannot make
+        // checkout validate against one system while deducting from another.
+        const currentStock = await resolveAvailableStock(
+          { productId: row.product_id, variantId: row.variant_id, sizeLabel: row.selected_size },
+          getCurrentStock(product, shade, row.selected_size)
+        );
         if (row.quantity > currentStock) {
           return {
             error: `Only ${currentStock} of ${product.name} are currently available. Please update the quantity in your bag.`,
@@ -1262,13 +1623,16 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
           const entry = nextSizePricing[row.selected_size];
           nextSizePricing = { ...nextSizePricing, [row.selected_size]: { ...entry, stock: Math.max(0, entry.stock! - row.quantity) } };
         }
-        db.products[idx] = {
+        const nextProduct = {
           ...db.products[idx],
           stock: nextStock,
-          inStock: nextStock > 0,
           shades: nextShades,
           sizePricing: nextSizePricing,
         };
+        // Availability comes from every sellable unit, not the product pool
+        // alone — see hasSellableStock. A shaded product whose pool drains
+        // must stay buyable while its shades have stock.
+        db.products[idx] = { ...nextProduct, inStock: hasSellableStock(nextProduct) };
       }
 
       // Persist the stock deduction. loadDatabase() hands back the shared
@@ -1282,15 +1646,29 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
       const orderId = 'ord-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
       const orderNumber = 'GLM' + Date.now().toString().slice(-8);
 
+      // An online order starts at PENDING_PAYMENT and only advances once the
+      // gateway confirms. COD keeps the exact status it has always been
+      // created with, so nothing about the existing COD flow changes.
+      const initialStatus: OrderStatus = isOnline ? 'PENDING_PAYMENT' : 'PLACED';
+
       await pool.query(
         `INSERT INTO orders
-          (id, user_id, order_number, status, subtotal, discount, shipping, total, shipping_address, idempotency_key, customer_name, customer_phone, customer_email, coupon_code, payment_method, payment_status, payment_details)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+          (id, user_id, order_number, status, subtotal, discount, shipping, total, shipping_address, idempotency_key, customer_name, customer_phone, customer_email, coupon_code, payment_method, payment_status, payment_details, shipping_status, stock_committed)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
         [
-          orderId, userId, orderNumber, 'PLACED', subtotal, discount, shipping, total,
+          orderId, userId, orderNumber, initialStatus, subtotal, discount, shipping, total,
           shippingAddress ? JSON.stringify(shippingAddress) : null, idempotencyKey || null,
           resolvedName, resolvedPhone, resolvedEmail, appliedCouponCode, paymentMethod, paymentDetails.status,
           JSON.stringify(paymentDetails),
+          'NOT_SHIPPED',
+          // Stock was deducted a few lines above, for both payment methods.
+          //
+          // Reserving at order creation rather than at payment confirmation is
+          // deliberate: it is the only way two shoppers racing for the last
+          // unit cannot both reach a successful payment. The cost is that an
+          // abandoned online checkout holds stock until its payment window
+          // lapses, which expirePendingPaymentOrders() below reclaims.
+          true,
         ]
       );
 
@@ -1310,12 +1688,64 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
 
       await pool.query('DELETE FROM cart_items WHERE user_id = $1 AND saved = false', [userId]);
 
+      // The gateway order is created server-side from the server's own total.
+      // The browser is told which gateway order to pay and how much, but it
+      // cannot influence either — a tampered amount in the request body was
+      // never read, and the gateway will reject a payment whose amount does
+      // not match the order it was created against.
+      let checkoutPayment: CheckoutPaymentHandoff | undefined;
+      if (isOnline) {
+        const gateway = getPaymentGateway();
+        const amountMinor = toMinorUnits(total);
+        const created = await gateway.createOrder({
+          amountMinor,
+          currency: 'INR',
+          receipt: orderNumber,
+          notes: { orderId, orderNumber, userId },
+        });
+
+        if (!created.ok || !created.order) {
+          // The order row and its stock reservation already exist, so they are
+          // released here rather than left stranded: the customer never got a
+          // payment screen, so there is nothing to reconcile later.
+          return {
+            error: 'We could not start the payment. Please try again in a moment.',
+            status: 502,
+            releaseOrderId: orderId,
+          };
+        }
+
+        const paymentRowId = 'pay-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+        await pool.query(
+          `INSERT INTO payments (id, order_id, user_id, provider, provider_order_id, amount_minor, currency, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDING')`,
+          [paymentRowId, orderId, userId, gateway.name, created.order.id, amountMinor, 'INR']
+        );
+
+        await pool.query(
+          `UPDATE orders SET payment_details = jsonb_set(payment_details, '{gatewayOrderId}', to_jsonb($2::text))
+           WHERE id = $1`,
+          [orderId, created.order.id]
+        );
+        paymentDetails.gatewayOrderId = created.order.id;
+
+        checkoutPayment = {
+          provider: gateway.name,
+          gatewayOrderId: created.order.id,
+          keyId: publishableKeyId(),
+          amountMinor,
+          currency: 'INR',
+          isMock: gateway.isMock,
+        };
+      }
+
       const createdAt = new Date().toISOString();
+      const timelineNote = isOnline ? 'Awaiting payment confirmation' : placedNote;
       const order: Order = {
         id: orderId,
         orderNumber,
         createdAt,
-        status: 'PLACED',
+        status: initialStatus,
         items: orderItems,
         subtotal,
         discount,
@@ -1324,9 +1754,13 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
         total,
         deliveryAddress: shippingAddress,
         payment: paymentDetails,
+        paymentStatus: paymentDetails.status,
+        shippingStatus: 'NOT_SHIPPED',
+        amountPaid: 0,
+        amountRefunded: 0,
         estimatedDelivery: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
         timeline: [
-          { status: 'PLACED', timestamp: createdAt, note: placedNote, completed: true },
+          { status: initialStatus, timestamp: createdAt, note: timelineNote, completed: true },
         ],
       };
 
@@ -1347,10 +1781,26 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
         createdAt: new Date(createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
       });
 
-      return { order, whatsappUrl };
+      return { order, whatsappUrl, checkoutPayment };
     });
 
     if ('error' in result) {
+      // The gateway refused to open a payment after the order row and its
+      // stock reservation were already written. Both are released here so a
+      // failed "start payment" never silently holds inventory.
+      if (result.releaseOrderId) {
+        await restoreOrderStock(result.releaseOrderId).catch((err) =>
+          console.error('Failed to release stock for abandoned order:', err)
+        );
+        await pool
+          .query(
+            `UPDATE orders SET status = 'CANCELLED', payment_status = 'FAILED', cancelled_at = now(),
+                    cancellation_reason = 'Payment could not be started'
+             WHERE id = $1`,
+            [result.releaseOrderId]
+          )
+          .catch(() => undefined);
+      }
       return res.status(result.status || 400).json({ error: result.error });
     }
     if ('alreadyProcessed' in result) {
@@ -1365,31 +1815,251 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
     // committed at this point, so a notification/email hiccup must never
     // turn into a false "Checkout failed" response for an order that
     // actually succeeded.
+    //
+    // An online order that has not been paid yet gets only its status-history
+    // row: telling a customer "your order is confirmed" before the gateway
+    // has taken their money would be a lie, and alerting the store to an
+    // order that may never be paid is noise.
+    const createdStatus = result.order.status;
+    const isAwaitingPayment = createdStatus === 'PENDING_PAYMENT';
     try {
       const db = await loadDatabase();
       await Promise.all([
-        insertOrderStatusHistory(result.order.id, 'PLACED', placedNote),
-        notifyOrderStatusChange(userId, result.order.id, result.order.orderNumber, 'PLACED'),
-        notifyAdminNewOrder(result.order.id, result.order.orderNumber, resolvedName, result.order.total),
-        sendOrderStatusEmail({
-          toEmail: resolvedEmail,
-          customerName: resolvedName,
-          orderId: result.order.id,
-          orderNumber: result.order.orderNumber,
-          status: 'PLACED',
-          total: result.order.total,
-        }),
-        sendAdminNewOrderEmail({ toEmail: db.globalSettings?.contactEmail, orderNumber: result.order.orderNumber, customerName: resolvedName, total: result.order.total }),
+        insertOrderStatusHistory(result.order.id, createdStatus, isAwaitingPayment ? 'Awaiting payment confirmation' : placedNote),
+        ...(isAwaitingPayment
+          ? []
+          : [
+              notifyOrderStatusChange(userId, result.order.id, result.order.orderNumber, createdStatus),
+              notifyAdminNewOrder(result.order.id, result.order.orderNumber, resolvedName, result.order.total),
+              sendOrderStatusEmail({
+                toEmail: resolvedEmail,
+                customerName: resolvedName,
+                orderId: result.order.id,
+                orderNumber: result.order.orderNumber,
+                status: createdStatus,
+                total: result.order.total,
+              }),
+              sendAdminNewOrderEmail({
+                toEmail: db.globalSettings?.contactEmail,
+                orderNumber: result.order.orderNumber,
+                customerName: resolvedName,
+                total: result.order.total,
+              }),
+            ]),
       ]);
     } catch (sideEffectErr) {
       console.error('Order placed successfully, but a post-order notification/email step failed:', sideEffectErr);
     }
 
-    res.json({ order: result.order, whatsappUrl: result.whatsappUrl });
+    // A COD order is final the moment it is placed, so its shipment can be
+    // booked immediately. Deliberately not awaited: a courier outage must not
+    // fail a checkout that has already succeeded, and the retry path in
+    // createShipmentForOrder picks up anything that did not stick.
+    if (!isAwaitingPayment && shipmentsEnabled()) {
+      void createShipmentForOrder(result.order.id).catch((err) =>
+        console.error('Shipment creation failed for new order:', err)
+      );
+    }
+
+    res.json({ order: result.order, whatsappUrl: result.whatsappUrl, payment: result.checkoutPayment });
   } catch (err) {
     console.error('Checkout failed:', err);
     res.status(500).json({ error: 'Checkout failed. Please try again.' });
   }
+});
+
+// ==========================================
+// PAYMENT CONFIRMATION
+// ==========================================
+
+/**
+ * What payment methods this deployment can actually take.
+ *
+ * Public (a shopper reaches checkout before any of this matters) and
+ * deliberately thin: it returns the publishable key id, which Razorpay's own
+ * browser checkout requires and which is public by design, and nothing else.
+ * The key secret and webhook secret are never exposed here or anywhere else.
+ *
+ * The storefront reads this instead of hardcoding a flag, so switching
+ * PAYMENTS_LIVE_MODE on is a server-side change that needs no redeploy of the
+ * frontend bundle.
+ */
+router.get('/payments/config', async (_req: Request, res: Response) => {
+  const available = onlinePaymentsEnabled();
+  res.json({
+    onlinePaymentsEnabled: available,
+    provider: available ? getPaymentGateway().name : null,
+    keyId: available ? publishableKeyId() : null,
+    isMock: available ? getPaymentGateway().isMock : false,
+  });
+});
+
+/**
+ * Confirms an online payment from the browser handshake.
+ *
+ * This is the fast path — the webhook is the authoritative one and will arrive
+ * independently, but a customer should not stare at a spinner waiting for it.
+ * Both routes converge on markOrderPaid(), which is idempotent, so whichever
+ * lands first wins and the other is a no-op.
+ *
+ * Nothing here is taken on trust:
+ *
+ *   * The order must belong to the authenticated customer.
+ *   * The signature must verify against the key secret, which proves the
+ *     gateway produced this (order_id, payment_id) pair.
+ *   * The amount is read back from the gateway, not from the request, and is
+ *     checked against what the order actually costs — a verified signature for
+ *     a ₹1 payment must not settle a ₹5,000 order.
+ */
+router.post('/payments/verify', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body || {};
+  if (!orderId || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+    return res.status(400).json({ error: 'Incomplete payment confirmation.' });
+  }
+
+  const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1 AND user_id = $2', [orderId, req.customer!.id]);
+  const order = orderRes.rows[0];
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+  // Already settled by the webhook that beat us here. Reported as success —
+  // the customer's payment did go through, which is what they are asking.
+  if (order.payment_status === 'PAID') {
+    const db = await loadDatabase();
+    return res.json({ success: true, order: await buildOrderFromRow(order, db), alreadyConfirmed: true });
+  }
+
+  const paymentRes = await pool.query(
+    'SELECT * FROM payments WHERE order_id = $1 AND provider_order_id = $2',
+    [orderId, razorpayOrderId]
+  );
+  const paymentRow = paymentRes.rows[0];
+  if (!paymentRow) {
+    return res.status(400).json({ error: 'This payment does not belong to that order.' });
+  }
+
+  if (!verifyPaymentSignature({
+    gatewayOrderId: String(razorpayOrderId),
+    gatewayPaymentId: String(razorpayPaymentId),
+    signature: String(razorpaySignature),
+  })) {
+    // A bad signature is either a bug or an attempt to mark an order paid for
+    // free. Logged with the order reference but never with the secret or the
+    // signature itself.
+    console.warn(`[payments] signature verification failed for order ${orderId}`);
+    await pool.query(
+      `UPDATE payments SET status = 'FAILED', error_code = 'SIGNATURE_MISMATCH',
+              error_description = 'Signature verification failed', updated_at = now()
+       WHERE id = $1`,
+      [paymentRow.id]
+    );
+    return res.status(400).json({ error: 'We could not verify this payment. Please contact support.' });
+  }
+
+  // Signature proves authenticity; the gateway lookup proves the payment was
+  // actually captured and for how much. A signature alone does not mean money
+  // moved — it only means these two ids were issued together.
+  const gateway = getPaymentGateway();
+  const fetched = await gateway.fetchPayment(String(razorpayPaymentId));
+  if (!fetched.ok || !fetched.payment) {
+    return res.status(502).json({ error: 'We could not reach the payment gateway. Your order will update automatically once confirmed.' });
+  }
+
+  const payment = fetched.payment;
+  if (payment.status !== 'PAID') {
+    await recordPaymentAttempt({ paymentRowId: paymentRow.id, payment, signature: String(razorpaySignature) });
+    await markOrderPaymentFailed({ orderId, status: 'FAILED', reason: payment.errorDescription || 'Payment not captured' });
+    return res.status(402).json({ error: payment.errorDescription || 'Your payment was not completed.' });
+  }
+
+  if (Number(payment.amountMinor) !== Number(paymentRow.amount_minor)) {
+    console.error(
+      `[payments] amount mismatch on order ${orderId}: gateway ${payment.amountMinor}, expected ${paymentRow.amount_minor}`
+    );
+    await recordPaymentAttempt({ paymentRowId: paymentRow.id, payment, signature: String(razorpaySignature) });
+    return res.status(400).json({ error: 'The amount paid does not match this order. Please contact support.' });
+  }
+
+  await recordPaymentAttempt({ paymentRowId: paymentRow.id, payment, signature: String(razorpaySignature) });
+  await markOrderPaid({
+    orderId,
+    amountPaid: fromMinorUnits(payment.amountMinor),
+    gatewayPaymentId: payment.id,
+    method: payment.method,
+  });
+
+  const db = await loadDatabase();
+  const updated = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+  res.json({ success: true, order: await buildOrderFromRow(updated.rows[0], db) });
+});
+
+/** Writes the gateway's verdict onto the ledger row. Shared by the verify
+ * route and the webhook so both record an attempt identically. */
+async function recordPaymentAttempt(input: {
+  paymentRowId: string;
+  payment: { id: string; status: string; method?: string; errorCode?: string; errorDescription?: string; raw?: unknown };
+  signature?: string;
+}): Promise<void> {
+  await pool.query(
+    `UPDATE payments SET provider_payment_id = $2, status = $3, method = $4,
+            error_code = $5, error_description = $6, gateway_response = $7::jsonb,
+            provider_signature = COALESCE($8, provider_signature), updated_at = now()
+     WHERE id = $1`,
+    [
+      input.paymentRowId,
+      input.payment.id,
+      input.payment.status,
+      input.payment.method || null,
+      input.payment.errorCode || null,
+      input.payment.errorDescription || null,
+      JSON.stringify(input.payment.raw || {}),
+      input.signature || null,
+    ]
+  );
+}
+
+/**
+ * Lets the confirmation screen poll while a webhook settles.
+ *
+ * Needed because a customer can close the gateway tab before the browser
+ * handshake fires — their money is taken and only the webhook knows. Scoped to
+ * the authenticated customer's own orders.
+ */
+router.get('/payments/:orderId/status', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const result = await pool.query(
+    'SELECT status, payment_status, amount_paid FROM orders WHERE id = $1 AND user_id = $2',
+    [req.params.orderId, req.customer!.id]
+  );
+  const row = result.rows[0];
+  if (!row) return res.status(404).json({ error: 'Order not found.' });
+  res.json({
+    orderStatus: row.status,
+    paymentStatus: row.payment_status,
+    amountPaid: Number(row.amount_paid) || 0,
+  });
+});
+
+/**
+ * Records that the customer abandoned the gateway checkout.
+ *
+ * Advisory only — it never marks an order paid or unpaid on the customer's
+ * say-so. All it does is release a reservation early instead of waiting for
+ * the expiry sweep, and it refuses to act if the gateway has meanwhile
+ * confirmed the payment.
+ */
+router.post('/payments/:orderId/cancel', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const result = await pool.query(
+    `SELECT id, payment_status FROM orders WHERE id = $1 AND user_id = $2 AND status = 'PENDING_PAYMENT'`,
+    [req.params.orderId, req.customer!.id]
+  );
+  const row = result.rows[0];
+  if (!row) return res.status(404).json({ error: 'No pending payment found for that order.' });
+  if (row.payment_status === 'PAID') {
+    return res.status(409).json({ error: 'This payment has already been completed.' });
+  }
+
+  await markOrderPaymentFailed({ orderId: row.id, status: 'CANCELLED', reason: 'Payment cancelled by customer' });
+  await restoreOrderStock(row.id);
+  res.json({ success: true });
 });
 
 // ==========================================
@@ -1423,24 +2093,40 @@ router.post('/orders/:id/cancel', requireCustomer, async (req: AuthenticatedCust
     return res.status(400).json({ error: `This order can no longer be cancelled (current status: ${row.status}).` });
   }
 
-  // The status check above reads a snapshot taken before the lock is
-  // acquired, so it can't be trusted alone — two concurrent cancel attempts
-  // (a double-click, or a customer and admin cancelling at once) would both
-  // pass it and both restock. The conditional UPDATE re-verifies the status
-  // hasn't changed while serialized inside the lock; only the request that
-  // actually flips it restocks, so stock is credited exactly once.
-  const wasCancelled = await withStockLock(async () => {
-    const updateRes = await pool.query(
-      'UPDATE orders SET status = $1 WHERE id = $2 AND status = $3 RETURNING id',
-      ['CANCELLED', row.id, row.status]
-    );
-    if (updateRes.rows.length === 0) return false;
-    await restockOrderItems(row.id);
-    return true;
-  });
-  if (!wasCancelled) {
+  // The status check above reads a snapshot taken before the UPDATE, so it
+  // can't be trusted alone — two concurrent cancel attempts (a double-click,
+  // or a customer and admin cancelling at once) would both pass it. The
+  // conditional UPDATE re-verifies the status hasn't changed; only the request
+  // that actually flips it proceeds.
+  const updateRes = await pool.query(
+    `UPDATE orders SET status = 'CANCELLED', cancelled_at = now(), cancellation_reason = $3
+     WHERE id = $1 AND status = $2 RETURNING id`,
+    [row.id, row.status, reason ? String(reason).slice(0, 500) : 'Cancelled by customer']
+  );
+  if (updateRes.rows.length === 0) {
     return res.status(409).json({ error: 'This order was already updated. Please refresh and try again.' });
   }
+
+  // Restocking now goes through restoreOrderStock rather than calling
+  // restockOrderItems directly: it carries the stock_restored guard, so an
+  // order cancelled here and then refunded by a webhook is credited back
+  // exactly once rather than twice.
+  await restoreOrderStock(row.id);
+
+  // A prepaid order that is cancelled owes the customer their money back.
+  // Attempted immediately but never allowed to fail the cancellation — the
+  // order is already cancelled, and a gateway hiccup must not leave the
+  // customer with an uncancelled order *and* no refund.
+  if (row.payment_status === 'PAID' && Number(row.amount_paid) > 0) {
+    void refundOrderPayment(row.id, Number(row.amount_paid), 'Order cancelled by customer').catch((err) =>
+      console.error(`Refund failed for cancelled order ${row.id}:`, err)
+    );
+  }
+
+  // Likewise the courier booking, if one was already made.
+  void cancelShipmentForOrder(row.id).catch((err) =>
+    console.error(`Could not cancel shipment for order ${row.id}:`, err)
+  );
 
   // Independent writes/sends — none read each other's result, so they run
   // concurrently instead of serializing behind an SMTP round-trip.
@@ -1463,6 +2149,100 @@ router.post('/orders/:id/cancel', requireCustomer, async (req: AuthenticatedCust
   res.json({ order });
 });
 
+/**
+ * Reorder — puts everything from a past order back in the bag.
+ *
+ * Partial success is the normal case, not an edge case: months later some
+ * items will be delisted, out of stock, or missing the exact shade. Rather
+ * than failing the whole request or silently adding a subset, this adds
+ * whatever is still buyable and names what it couldn't, so the customer finds
+ * out from the response instead of from a short bag.
+ *
+ * Quantities are clamped to current stock for the same reason — adding 5 of
+ * something with 2 left would only fail later at checkout.
+ */
+router.post('/orders/:id/reorder', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const orderRes = await pool.query('SELECT id FROM orders WHERE id = $1 AND user_id = $2', [
+    req.params.id,
+    req.customer!.id,
+  ]);
+  if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Order not found.' });
+
+  const itemsRes = await pool.query(
+    'SELECT product_id, variant_id, selected_size, quantity, product_name FROM order_items WHERE order_id = $1',
+    [req.params.id]
+  );
+
+  const db = await loadDatabase();
+  const added: string[] = [];
+  const unavailable: { productName: string; reason: string }[] = [];
+
+  for (const item of itemsRes.rows) {
+    const product = findProduct(db.products, item.product_id);
+    const name = product?.name || item.product_name;
+
+    if (!product) {
+      unavailable.push({ productName: name, reason: 'no longer available' });
+      continue;
+    }
+    if (!isProductSellable(product)) {
+      unavailable.push({ productName: name, reason: 'out of stock' });
+      continue;
+    }
+
+    // A shade that has since been retired can't be silently swapped for a
+    // different one — that would put something in the bag the customer never
+    // chose.
+    const shade = item.variant_id ? findShade(product, item.variant_id) : undefined;
+    if (item.variant_id && !shade) {
+      unavailable.push({ productName: name, reason: 'that shade is no longer sold' });
+      continue;
+    }
+
+    const size = item.selected_size || null;
+    if (size && !isValidSize(product, shade, size)) {
+      unavailable.push({ productName: name, reason: 'that size is no longer sold' });
+      continue;
+    }
+
+    const stock = getCurrentStock(product, shade, size);
+    if (stock < 1) {
+      unavailable.push({ productName: name, reason: 'out of stock' });
+      continue;
+    }
+
+    const existing = await pool.query(
+      'SELECT id, quantity FROM cart_items WHERE user_id = $1 AND product_id = $2 AND variant_id IS NOT DISTINCT FROM $3 AND selected_size IS NOT DISTINCT FROM $4',
+      [req.customer!.id, product.id, item.variant_id || null, size]
+    );
+
+    const desired = Math.max(1, Number(item.quantity) || 1);
+    if (existing.rows.length > 0) {
+      const row = existing.rows[0];
+      const newQty = Math.min(row.quantity + desired, stock);
+      await pool.query('UPDATE cart_items SET quantity = $1, saved = false, updated_at = now() WHERE id = $2', [
+        newQty,
+        row.id,
+      ]);
+    } else {
+      const id = 'cart-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      await pool.query(
+        'INSERT INTO cart_items (id, user_id, product_id, variant_id, selected_size, quantity) VALUES ($1, $2, $3, $4, $5, $6)',
+        [id, req.customer!.id, product.id, item.variant_id || null, size, Math.min(desired, stock)]
+      );
+    }
+    added.push(name);
+  }
+
+  const items = await hydrateCart(req.customer!.id);
+  res.json({
+    items,
+    subtotal: items.reduce((sum, i) => sum + i.lineTotal, 0),
+    addedCount: added.length,
+    unavailable,
+  });
+});
+
 // ==========================================
 // REVIEWS — one review per (product, customer); resubmitting edits it in
 // place rather than creating a duplicate.
@@ -1475,11 +2255,60 @@ router.get('/reviews', requireCustomer, async (req: AuthenticatedCustomerRequest
   res.json({ reviews });
 });
 
+/**
+ * Accepts the media list a review was submitted with.
+ *
+ * The URLs arrive from the client, so they are not taken on trust: each one
+ * must be an HTTPS Cloudinary URL inside this store's own review folder.
+ * Without that check a crafted request could point a review's "photo" at any
+ * address on the internet, and the storefront would render it to every
+ * shopper on that product page.
+ */
+function sanitizeReviewMedia(input: unknown): ReviewMedia[] | { error: string } {
+  if (input === undefined || input === null) return [];
+  if (!Array.isArray(input)) return { error: 'Review media must be a list.' };
+  if (input.length > REVIEW_MEDIA_MAX_ITEMS) {
+    return { error: `You can attach up to ${REVIEW_MEDIA_MAX_ITEMS} photos or videos.` };
+  }
+
+  const cleaned: ReviewMedia[] = [];
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') return { error: 'Review media is malformed.' };
+    const { type, url, publicId } = raw as Record<string, unknown>;
+    if (type !== 'image' && type !== 'video') return { error: 'Review media is malformed.' };
+    if (typeof url !== 'string') return { error: 'Review media is malformed.' };
+
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return { error: 'Review media is malformed.' };
+    }
+    const isOwnCloudinaryAsset =
+      parsed.protocol === 'https:' &&
+      parsed.hostname === 'res.cloudinary.com' &&
+      parsed.pathname.includes('/glamirk-beauty/reviews/');
+    if (!isOwnCloudinaryAsset) {
+      return { error: 'Review media must be uploaded through Glamirk.' };
+    }
+
+    cleaned.push({
+      type,
+      url: parsed.toString(),
+      publicId: typeof publicId === 'string' ? publicId.slice(0, 300) : undefined,
+    });
+  }
+  return cleaned;
+}
+
 router.post('/reviews', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
   const { productId, rating, title, comment } = req.body || {};
   if (!productId || !rating || !String(comment || '').trim()) {
     return res.status(400).json({ error: 'A rating and a review comment are required.' });
   }
+
+  const media = sanitizeReviewMedia(req.body?.media);
+  if (!Array.isArray(media)) return res.status(400).json({ error: media.error });
 
   const db = await loadDatabase();
   const product = findProduct(db.products, productId);
@@ -1490,17 +2319,38 @@ router.post('/reviews', requireCustomer, async (req: AuthenticatedCustomerReques
   const customerName = custRes.rows[0]?.name || 'Glamirk Customer';
   const verified = await isVerifiedPurchase(req.customer!.id, productId);
 
+  // This endpoint doubles as the edit path (ON CONFLICT below), so any media
+  // the customer detached while editing has to be read before the overwrite —
+  // afterwards there is nothing left pointing at the orphaned assets.
+  const priorRes = await pool.query('SELECT media FROM reviews WHERE product_id = $1 AND customer_id = $2', [
+    productId,
+    req.customer!.id,
+  ]);
+  const priorMedia: ReviewMedia[] = Array.isArray(priorRes.rows[0]?.media) ? priorRes.rows[0].media : [];
+
   const id = 'rev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   await pool.query(
-    `INSERT INTO reviews (id, product_id, customer_id, customer_name, rating, title, comment, is_verified_purchase)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO reviews (id, product_id, customer_id, customer_name, rating, title, comment, is_verified_purchase, media)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
      ON CONFLICT (product_id, customer_id) DO UPDATE SET
        rating = EXCLUDED.rating, title = EXCLUDED.title, comment = EXCLUDED.comment,
-       is_verified_purchase = EXCLUDED.is_verified_purchase, created_at = now()`,
-    [id, productId, req.customer!.id, customerName, numericRating, title || null, String(comment).trim(), verified]
+       is_verified_purchase = EXCLUDED.is_verified_purchase, media = EXCLUDED.media, created_at = now()`,
+    [
+      id,
+      productId,
+      req.customer!.id,
+      customerName,
+      numericRating,
+      title || null,
+      String(comment).trim(),
+      verified,
+      JSON.stringify(media),
+    ]
   );
 
   await recomputeProductRating(productId);
+
+  await destroyReviewMedia(orphanedReviewMedia(priorMedia, media));
 
   // Points are only awarded for a review of something actually delivered, and
   // the ledger's unique (user, type, reference) constraint means editing the
@@ -1550,16 +2400,20 @@ router.get('/reviews/eligible', requireCustomer, async (req: AuthenticatedCustom
 });
 
 router.delete('/reviews/:id', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
-  const result = await pool.query('DELETE FROM reviews WHERE id = $1 AND customer_id = $2 RETURNING product_id', [
-    req.params.id,
-    req.customer!.id,
-  ]);
+  const result = await pool.query(
+    'DELETE FROM reviews WHERE id = $1 AND customer_id = $2 RETURNING product_id, media',
+    [req.params.id, req.customer!.id]
+  );
   if (result.rows.length === 0) {
     return res.status(404).json({ error: 'Review not found.' });
   }
   // The product's aggregate rating has to be rebuilt from what's left, or a
   // deleted 1-star would keep dragging the average down forever.
   await recomputeProductRating(result.rows[0].product_id);
+  // Deleting the row is what the customer asked for; dropping the photos it
+  // pointed at is the rest of honouring that, so they don't stay publicly
+  // fetchable after the review is gone.
+  await destroyReviewMedia(result.rows[0].media);
   res.json({ success: true });
 });
 

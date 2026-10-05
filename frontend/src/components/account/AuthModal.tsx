@@ -18,6 +18,7 @@ import {
   Check,
 } from 'lucide-react';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { MobileOtpSignIn } from './MobileOtpSignIn';
 import { isGoogleSignInConfigured, requestGoogleAccessToken } from '../../utils/googleAuth';
 import {
   COUNTRY_PHONE_RULES,
@@ -30,6 +31,33 @@ import {
   getPasswordRequirements,
   isPasswordValid,
 } from '@glamirk/shared/utils/formValidation';
+
+/**
+ * Email + password sign-in, registration and forgot-password.
+ *
+ * ON. Mobile + OTP is the primary and default way in, but this stays
+ * reachable from a link under the OTP form because of who needs it: an
+ * account with no mobile number on it — an old email-only registration, or a
+ * Google sign-up — has nothing to send a code to. Removing this form would
+ * lock those customers out of accounts that are already theirs, along with
+ * their orders, addresses and rewards.
+ *
+ * Turning it off hides the tabs, the password form, registration and
+ * forgot-password in one move. The backend endpoints (/auth/login,
+ * /auth/register, /auth/forgot-password, /auth/reset-password) are untouched
+ * either way — this is a UI switch, not a capability switch.
+ */
+const LEGACY_EMAIL_AUTH_ENABLED = true;
+
+/**
+ * "Continue with Google".
+ *
+ * OFF by product decision. Kept rather than deleted so re-enabling it is one
+ * line; /auth/google on the backend still works, and any customer who
+ * originally signed up through Google can still get in with the email +
+ * password form above (via forgot-password) or by adding their mobile number.
+ */
+const GOOGLE_SIGN_IN_ENABLED = false;
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -54,7 +82,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const { customerLogin, customerLoginWithGoogle, customerRegister, requestPasswordReset, resetPassword } = useCustomerAuth();
 
   // Customer Login State — real accounts, backed by Postgres via /api/customer/auth
-  const [customerFormMode, setCustomerFormMode] = useState<'login' | 'register' | 'forgot'>('login');
+  // 'otp' — mobile number + one-time code — is where everyone lands. The
+  // other three are reached from the tabs and the "use a password instead"
+  // link, and disappear entirely when LEGACY_EMAIL_AUTH_ENABLED is false.
+  const [customerFormMode, setCustomerFormMode] = useState<'otp' | 'login' | 'register' | 'forgot'>('otp');
   const [customerName, setCustomerName] = useState('');
   const [customerCountryCode, setCustomerCountryCode] = useState(DEFAULT_COUNTRY_CODE);
   const [customerPhone, setCustomerPhone] = useState('');
@@ -99,7 +130,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // a new password shouldn't be dropped onto the registration form.
   useEffect(() => {
     if (isOpen && initialMode && !initialResetToken) {
-      setCustomerFormMode(initialMode);
+      // Callers still ask for 'login'; that now means the OTP form, which is
+      // what signing in is. Nothing outside this component had to change.
+      setCustomerFormMode(initialMode === 'login' ? 'otp' : initialMode);
       setCustomerError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -283,7 +316,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
 
           <div className="p-6">
-            {customerFormMode === 'forgot' ? (
+            {LEGACY_EMAIL_AUTH_ENABLED && customerFormMode === 'forgot' ? (
               <div className="space-y-4">
                 {forgotStep === 'request' && (
                   <form onSubmit={handleRequestReset} className="space-y-4">
@@ -446,16 +479,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Login / Register mode selector */}
+                {/* Login / Register mode selector — only meaningful when
+                    there is more than one way in (see LEGACY_EMAIL_AUTH_ENABLED). */}
+                {LEGACY_EMAIL_AUTH_ENABLED && (
                 <div className="flex justify-center gap-4 text-xs pb-2 border-b border-[#E8D5A8]/10">
                   <button
                     type="button"
                     onClick={() => {
-                      setCustomerFormMode('login');
+                      setCustomerFormMode('otp');
                       setCustomerError(null);
                     }}
                     className={`font-semibold pb-1 border-b-2 transition-all cursor-pointer ${
-                      customerFormMode === 'login'
+                      // The password form lives under this same tab, so it
+                      // stays highlighted when the customer switches to it.
+                      customerFormMode === 'otp' || customerFormMode === 'login'
                         ? 'border-[#C9972B] text-[#C9972B]'
                         : 'border-transparent text-[#6B6B6B]'
                     }`}
@@ -477,7 +514,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     Create Account
                   </button>
                 </div>
+                )}
 
+                {!LEGACY_EMAIL_AUTH_ENABLED || customerFormMode === 'otp' ? (
+                  <MobileOtpSignIn
+                    remember={rememberMe}
+                    onToggleRemember={() => setRememberMe(!rememberMe)}
+                    // Omitted entirely when the legacy form is off, which is
+                    // what removes the "use a password instead" link.
+                    onUsePassword={
+                      LEGACY_EMAIL_AUTH_ENABLED
+                        ? () => {
+                            setCustomerFormMode('login');
+                            setCustomerError(null);
+                          }
+                        : undefined
+                    }
+                    onSuccess={() => {
+                      setCustomerSuccess(true);
+                      // The existing callback shape carries name/email/phone
+                      // for the legacy greeting; an OTP sign-in has none of
+                      // them to hand, and every consumer reads the signed-in
+                      // customer from CustomerAuthContext anyway.
+                      onCustomerLoginSuccess?.({ name: '', email: '', phone: '' });
+                      onClose();
+                    }}
+                  />
+                ) : (
+                  <>
                 {customerError && (
                   <div className="p-2.5 rounded bg-[#F05A7E]/20 text-[#F05A7E] border border-[#F05A7E]/30 text-xs">
                     {customerError}
@@ -694,7 +758,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     )}
                   </button>
                 </form>
+                  </>
+                )}
 
+                {LEGACY_EMAIL_AUTH_ENABLED && (
+                <>
+                {GOOGLE_SIGN_IN_ENABLED && (
+                <>
                 {/* OR divider */}
                 <div className="flex items-center gap-3">
                   <span className="flex-1 h-px bg-[#E8D5A8]/15" />
@@ -722,20 +792,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {googleError && (
                   <p className="text-[10.5px] text-center text-[#F05A7E]">{googleError}</p>
                 )}
+                </>
+                )}
 
                 <p className="text-center text-[11px] text-[#6B6B6B]">
-                  {customerFormMode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+                  {customerFormMode === 'register' ? 'Already have an account? ' : "Don't have an account? "}
                   <button
                     type="button"
                     onClick={() => {
-                      setCustomerFormMode(customerFormMode === 'login' ? 'register' : 'login');
+                      // Leaving registration returns to OTP, the default way in.
+                      setCustomerFormMode(customerFormMode === 'register' ? 'otp' : 'register');
                       setCustomerError(null);
                     }}
                     className="font-semibold text-[#C9972B] hover:underline cursor-pointer"
                   >
-                    {customerFormMode === 'login' ? 'Create Account' : 'Login'}
+                    {customerFormMode === 'register' ? 'Sign In' : 'Create Account'}
                   </button>
                 </p>
+                </>
+                )}
               </div>
             )}
           </div>

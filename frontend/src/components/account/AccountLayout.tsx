@@ -14,6 +14,8 @@ import {
   User,
   Sparkles,
   Bot,
+  Camera,
+  CreditCard,
   Star,
   Eye,
   Headphones,
@@ -35,21 +37,55 @@ export interface AccountNavItem {
   badge?: number;
 }
 
-export const ACCOUNT_NAV: { id: AccountSection; label: string; icon: React.ElementType }[] = [
+export interface AccountNavEntry {
+  id: AccountSection;
+  label: string;
+  icon: React.ElementType;
+  /** Sub-sections rendered beneath this one. A parent with children is still
+   * a real, navigable section in its own right — not just a folder. */
+  children?: { id: AccountSection; label: string; icon: React.ElementType }[];
+}
+
+export const ACCOUNT_NAV: AccountNavEntry[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'orders', label: 'My Orders', icon: Package },
   { id: 'wishlist', label: 'Wishlist', icon: Heart },
   { id: 'rewards', label: 'Coupons & Rewards', icon: Ticket },
   { id: 'addresses', label: 'Saved Addresses', icon: MapPin },
+  { id: 'payments', label: 'Payments & Refunds', icon: CreditCard },
   { id: 'profile', label: 'My Profile', icon: User },
-  { id: 'glam-profile', label: 'My Glam Profile', icon: Sparkles },
-  { id: 'shade-history', label: 'Shade AI History', icon: Bot },
+  // The three beauty screens are grouped rather than listed flat: they are
+  // one concern with three views, and at thirteen-plus top-level items the
+  // sidebar had stopped reading as a list of destinations.
+  {
+    id: 'glam-profile',
+    label: 'My Beauty Profile',
+    icon: Sparkles,
+    children: [
+      { id: 'glam-profile', label: 'My Shade', icon: Sparkles },
+      { id: 'shade-history', label: 'Shade History', icon: Bot },
+      { id: 'try-on-history', label: 'Virtual Try-On', icon: Camera },
+    ],
+  },
   { id: 'reviews', label: 'My Reviews', icon: Star },
   { id: 'recently-viewed', label: 'Recently Viewed', icon: Eye },
   { id: 'help', label: 'Help Center', icon: Headphones },
   { id: 'notifications', label: 'Notifications', icon: Bell },
-  { id: 'settings', label: 'Account Settings', icon: Settings },
+  { id: 'settings', label: 'Security & Settings', icon: Settings },
 ];
+
+/** Flat list of every reachable section, derived from the tree above so the
+ * two can't drift. */
+export const ACCOUNT_NAV_FLAT: { id: AccountSection; label: string; icon: React.ElementType }[] = ACCOUNT_NAV.flatMap(
+  (item) => (item.children ? item.children : [{ id: item.id, label: item.label, icon: item.icon }])
+);
+
+/** The sections nested under a given parent — used to decide whether a
+ * collapsed group should still render as active. */
+function groupContains(item: AccountNavEntry, section: AccountSection): boolean {
+  if (item.id === section) return true;
+  return (item.children || []).some((child) => child.id === section);
+}
 
 interface AccountLayoutProps {
   section: AccountSection;
@@ -78,7 +114,38 @@ export const AccountLayout: React.FC<AccountLayoutProps> = ({
   useClickOutside(mobileNavRef, () => setMobileNavOpen(false));
 
   const firstName = (customerUser?.name || '').trim().split(/\s+/)[0] || 'there';
-  const activeItem = ACCOUNT_NAV.find((item) => item.id === section);
+  const activeItem = ACCOUNT_NAV_FLAT.find((item) => item.id === section);
+
+  // A group starts open when the customer is already inside it, so landing on
+  // /account/try-on-history from a link doesn't show a collapsed sidebar with
+  // nothing highlighted.
+  const [openGroups, setOpenGroups] = React.useState<Set<AccountSection>>(
+    () => new Set(ACCOUNT_NAV.filter((item) => item.children && groupContains(item, section)).map((item) => item.id))
+  );
+
+  // Navigating into a group from outside it (e.g. the Overview card grid)
+  // has to expand it too — the initial state above only runs once.
+  React.useEffect(() => {
+    const parent = ACCOUNT_NAV.find((item) => item.children && groupContains(item, section));
+    if (parent) setOpenGroups((prev) => (prev.has(parent.id) ? prev : new Set(prev).add(parent.id)));
+  }, [section]);
+
+  const toggleGroup = (id: AccountSection) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  /** A group's badge is the sum of its children's, so a collapsed group still
+   * shows that something inside it needs attention. */
+  const groupBadge = (item: AccountNavEntry): number | undefined => {
+    if (!item.children) return badges[item.id];
+    const total = item.children.reduce((sum, child) => sum + (badges[child.id] || 0), 0);
+    return total > 0 ? total : undefined;
+  };
 
   const handleNavigate = (next: AccountSection) => {
     setMobileNavOpen(false);
@@ -149,8 +216,74 @@ export const AccountLayout: React.FC<AccountLayoutProps> = ({
               <ul className="py-2">
                 {ACCOUNT_NAV.map((item) => {
                   const Icon = item.icon;
+                  const badge = groupBadge(item);
+
+                  if (item.children) {
+                    const expanded = openGroups.has(item.id);
+                    const inGroup = groupContains(item, section);
+                    return (
+                      <li key={item.id}>
+                        <button
+                          onClick={() => toggleGroup(item.id)}
+                          aria-expanded={expanded}
+                          aria-controls={`account-group-${item.id}`}
+                          className={`w-full text-left px-5 py-2.5 text-[12.5px] flex items-center gap-3 transition-colors cursor-pointer border-l-2 ${
+                            inGroup
+                              ? 'border-[#C9972B] text-[#121212] font-semibold'
+                              : 'border-transparent text-[#6B6B6B] hover:text-[#121212] hover:bg-[#FAF9F6]'
+                          }`}
+                        >
+                          <Icon className={`w-4 h-4 shrink-0 ${inGroup ? 'text-[#C9972B]' : ''}`} />
+                          <span className="truncate flex-1">{item.label}</span>
+                          {badge !== undefined && badge > 0 && (
+                            <span className="shrink-0 min-w-[18px] h-[18px] px-1.5 bg-[#0B0B0B] text-[#E3B84B] text-[9.5px] font-bold rounded-full flex items-center justify-center">
+                              {badge > 99 ? '99+' : badge}
+                            </span>
+                          )}
+                          <ChevronDown
+                            className={`w-3.5 h-3.5 shrink-0 text-[#9C9689] transition-transform ${
+                              expanded ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </button>
+
+                        {expanded && (
+                          <ul id={`account-group-${item.id}`}>
+                            {item.children.map((child) => {
+                              const ChildIcon = child.icon;
+                              const childActive = child.id === section;
+                              const childBadge = badges[child.id];
+                              return (
+                                <li key={child.id}>
+                                  <button
+                                    onClick={() => handleNavigate(child.id)}
+                                    aria-current={childActive ? 'page' : undefined}
+                                    className={`w-full text-left pl-12 pr-5 py-2 text-[12px] flex items-center gap-2.5 transition-colors cursor-pointer border-l-2 ${
+                                      childActive
+                                        ? 'border-[#C9972B] bg-[#FAF9F6] text-[#121212] font-semibold'
+                                        : 'border-transparent text-[#6B6B6B] hover:text-[#121212] hover:bg-[#FAF9F6]'
+                                    }`}
+                                  >
+                                    <ChildIcon
+                                      className={`w-3.5 h-3.5 shrink-0 ${childActive ? 'text-[#C9972B]' : ''}`}
+                                    />
+                                    <span className="truncate flex-1">{child.label}</span>
+                                    {childBadge !== undefined && childBadge > 0 && (
+                                      <span className="shrink-0 min-w-[18px] h-[18px] px-1.5 bg-[#0B0B0B] text-[#E3B84B] text-[9.5px] font-bold rounded-full flex items-center justify-center">
+                                        {childBadge > 99 ? '99+' : childBadge}
+                                      </span>
+                                    )}
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  }
+
                   const isActive = item.id === section;
-                  const badge = badges[item.id];
                   return (
                     <li key={item.id}>
                       <button
@@ -214,27 +347,47 @@ export const AccountLayout: React.FC<AccountLayoutProps> = ({
                 id="account-mobile-section-list"
                 className="absolute z-30 left-0 right-0 mt-2 bg-white border border-[#E8D5A8] rounded-xl shadow-[0_18px_40px_rgba(11,11,11,0.12)] overflow-hidden max-h-[60vh] overflow-y-auto"
               >
+                {/* Flattened with a heading per group rather than made
+                    collapsible: this list is already inside a dropdown, and
+                    nesting a second layer of tapping to reach a shade history
+                    would be two taps too many on a phone. */}
                 {ACCOUNT_NAV.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = item.id === section;
-                  const badge = badges[item.id];
+                  const rows = item.children || [{ id: item.id, label: item.label, icon: item.icon }];
                   return (
-                    <li key={item.id}>
-                      <button
-                        onClick={() => handleNavigate(item.id)}
-                        className={`w-full text-left px-4 py-3 text-[13px] flex items-center gap-3 transition-colors cursor-pointer ${
-                          isActive ? 'bg-[#FAF9F6] text-[#121212] font-semibold' : 'text-[#6B6B6B]'
-                        }`}
-                      >
-                        <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#C9972B]' : ''}`} />
-                        <span className="flex-1 truncate">{item.label}</span>
-                        {badge !== undefined && badge > 0 && (
-                          <span className="min-w-[18px] h-[18px] px-1.5 bg-[#0B0B0B] text-[#E3B84B] text-[9.5px] font-bold rounded-full flex items-center justify-center">
-                            {badge > 99 ? '99+' : badge}
-                          </span>
-                        )}
-                      </button>
-                    </li>
+                    <React.Fragment key={item.id}>
+                      {item.children && (
+                        <li
+                          aria-hidden="true"
+                          className="px-4 pt-3 pb-1 text-[9.5px] font-semibold tracking-[0.2em] uppercase text-[#9C9689]"
+                        >
+                          {item.label}
+                        </li>
+                      )}
+                      {rows.map((row) => {
+                        const Icon = row.icon;
+                        const isActive = row.id === section;
+                        const badge = badges[row.id];
+                        return (
+                          <li key={row.id}>
+                            <button
+                              onClick={() => handleNavigate(row.id)}
+                              aria-current={isActive ? 'page' : undefined}
+                              className={`w-full text-left py-3 text-[13px] flex items-center gap-3 transition-colors cursor-pointer ${
+                                item.children ? 'pl-7 pr-4' : 'px-4'
+                              } ${isActive ? 'bg-[#FAF9F6] text-[#121212] font-semibold' : 'text-[#6B6B6B]'}`}
+                            >
+                              <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#C9972B]' : ''}`} />
+                              <span className="flex-1 truncate">{row.label}</span>
+                              {badge !== undefined && badge > 0 && (
+                                <span className="min-w-[18px] h-[18px] px-1.5 bg-[#0B0B0B] text-[#E3B84B] text-[9.5px] font-bold rounded-full flex items-center justify-center">
+                                  {badge > 99 ? '99+' : badge}
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </React.Fragment>
                   );
                 })}
                 <li className="border-t border-[#E8D5A8]">

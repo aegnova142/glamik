@@ -9,6 +9,7 @@ import { Product, Shade, FilterState, SortOption, CartItem } from '@glamirk/shar
 import { GLAMIRK_PRODUCTS } from '@glamirk/shared/data/products';
 import { SlidersHorizontal, Sparkles, X, LayoutGrid, List, ArrowUpDown, Check } from 'lucide-react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
+import { isProductSellable } from '@glamirk/shared/utils/productVariant';
 
 interface ShopPageProps {
   initialCategory?: string | null;
@@ -150,7 +151,9 @@ export const ShopPage: React.FC<ShopPageProps> = ({
         if (!matchesDiscount) return false;
       }
 
-      if (filters.inStockOnly && !product.inStock) return false;
+      // Same resolution as the product card, so the filter and the card can
+      // never disagree about whether something is buyable.
+      if (filters.inStockOnly && !isProductSellable(product)) return false;
 
       return true;
     });

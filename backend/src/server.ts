@@ -10,8 +10,19 @@ import { createServer as createViteServer, type HmrOptions, type UserConfig } fr
 import apiRouter from './routes/admin.routes';
 import commerceRouter from './routes/customer.routes';
 import accountRouter, { processScheduledAccountDeletions } from './routes/account.routes';
+import webhooksRouter, {
+  reconcileStuckWebhookEvents,
+  expirePendingPaymentOrders,
+} from './routes/webhooks.routes';
 import { ensureSchema } from './db/db';
 import { setupSocketIO } from './services/realtime.service';
+import { purgeExpiredOtpCodes } from './services/otp.service';
+import { registerShiprocketTracking } from './services/shiprocket.service';
+import {
+  releaseExpiredReservations,
+  sqlInventoryEnabled,
+  monitorInventoryConsistency,
+} from './services/inventory.service';
 
 // Express 4 does not forward a rejected promise from an async route handler
 // to error middleware — left unhandled, Node's default since v15 is to kill
@@ -87,6 +98,23 @@ async function startServer() {
 
   setupSocketIO(httpServer);
 
+  // Courier tracking is served through the provider registry in
+  // shipping.service.ts; registering Shiprocket here is the whole integration
+  // as far as the tracking UI is concerned. A no-op in production when live
+  // mode is off, which leaves the existing internal-status tracking in place.
+  registerShiprocketTracking();
+
+  // ------------------------------------------------------------------
+  // Webhooks are mounted BEFORE express.json() and parse their own raw body.
+  //
+  // Signature verification is an HMAC over the exact bytes the provider sent.
+  // Once express.json() has consumed the stream there is no way to recover
+  // them — re-serialising the parsed object changes key order and whitespace,
+  // and the HMAC would never match. Mounting here is what keeps verification
+  // possible at all, so this must stay above the parsers below.
+  // ------------------------------------------------------------------
+  app.use('/api', webhooksRouter);
+
   // Body parsing middlewares
   app.use(express.json({ limit: '20mb' }));
   app.use(express.urlencoded({ extended: true, limit: '20mb' }));
@@ -111,7 +139,65 @@ async function startServer() {
   );
   setInterval(() => {
     processScheduledAccountDeletions().catch((err) => console.error('Scheduled account deletion sweep failed:', err));
+    // Spent OTP rows are kept a day so the hourly quotas still see recent
+    // history; after that they're only clutter.
+    purgeExpiredOtpCodes().catch((err) => console.error('OTP cleanup failed:', err));
   }, 24 * 60 * 60 * 1000).unref?.();
+
+  // Payment and shipping reconciliation.
+  //
+  // Webhooks are the primary path; this is the safety net for the deliveries
+  // that never arrived or failed mid-processing. Runs every five minutes —
+  // frequent enough that a customer's paid order is never stuck for long,
+  // infrequent enough to be negligible load. Both sweeps are bounded (LIMIT
+  // 50/100 per run) so a backlog is worked through steadily rather than in one
+  // burst that would stall the event loop.
+  setInterval(() => {
+    reconcileStuckWebhookEvents()
+      .then(({ examined, recovered }) => {
+        if (recovered > 0) console.log(`[reconcile] replayed ${recovered}/${examined} stuck webhook events`);
+      })
+      .catch((err) => console.error('Webhook reconciliation failed:', err));
+    expirePendingPaymentOrders()
+      .then((count) => {
+        if (count > 0) console.log(`[reconcile] released ${count} expired pending-payment order(s)`);
+      })
+      .catch((err) => console.error('Pending-payment expiry sweep failed:', err));
+
+    // Stale inventory holds. Without this an abandoned checkout would keep the
+    // last unit of a product off sale indefinitely. A no-op while SQL
+    // inventory is switched off, since nothing creates reservations then.
+    if (sqlInventoryEnabled()) {
+      releaseExpiredReservations()
+        .then((count) => {
+          if (count > 0) console.log(`[inventory] released ${count} expired reservation(s)`);
+        })
+        .catch((err) => console.error('Reservation expiry sweep failed:', err));
+    }
+  }, 5 * 60 * 1000).unref?.();
+
+  // Continuous inventory consistency monitoring.
+  //
+  // The CLI (`npm run inventory:health`) answers "is it healthy right now"
+  // when someone asks; this is what notices at 3am that it stopped being
+  // healthy. It checks the same invariants through the same function, so the
+  // two can never drift apart in what they consider correct.
+  //
+  // Hourly rather than every five minutes: these are a handful of indexed
+  // aggregates, but a counter that has drifted stays drifted, so checking
+  // twelve times an hour would only produce twelve times the log noise.
+  // Diagnostic only — it never repairs, because every violation it can find is
+  // a bug in a write path and quietly correcting the symptom would hide it.
+  //
+  // A no-op while SQL inventory is switched off.
+  if (sqlInventoryEnabled()) {
+    monitorInventoryConsistency().catch((err) =>
+      console.error('Inventory consistency check failed at startup:', err)
+    );
+    setInterval(() => {
+      monitorInventoryConsistency().catch((err) => console.error('Inventory consistency check failed:', err));
+    }, 60 * 60 * 1000).unref?.();
+  }
 
   // Safety net: without this, an async route handler that throws (e.g. a
   // transient DB connection error) leaves its promise rejection unhandled by

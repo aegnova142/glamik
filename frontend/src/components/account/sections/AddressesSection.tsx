@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Plus, Pencil, Trash2, Star, X, Home, Briefcase, Building2 } from 'lucide-react';
+import { MapPin, Plus, Pencil, Trash2, Star, X, Home, Briefcase, Building2, Receipt } from 'lucide-react';
 import { Address, ADDRESS_TYPE_OPTIONS, AddressType } from '@glamirk/shared/types';
 import { AccountButton, AccountEmpty, AccountField, AccountFormMessage, AccountSectionHeader, inputClass } from '../AccountUI';
 import { useCustomerAuth } from '../../../context/CustomerAuthContext';
@@ -67,7 +67,10 @@ export const AddressesSection: React.FC<AddressesSectionProps> = ({
     city: '',
     state: '',
     pinCode: '',
+    // The very first address saved becomes both defaults, mirroring what the
+    // server does — otherwise checkout would have nothing preselected.
     isDefault: addresses.length === 0,
+    isBillingDefault: addresses.length === 0,
   });
 
   const [formOpen, setFormOpen] = useState(false);
@@ -245,15 +248,31 @@ export const AddressesSection: React.FC<AddressesSectionProps> = ({
                 </AccountField>
               </div>
 
-              <label className="flex items-center gap-2.5 cursor-pointer pt-1">
-                <input
-                  type="checkbox"
-                  checked={!!form.isDefault}
-                  onChange={(e) => set('isDefault', e.target.checked)}
-                  className="w-4 h-4 accent-[#C9972B] cursor-pointer"
-                />
-                <span className="text-[12.5px] text-[#121212]">Use this as my default delivery address</span>
-              </label>
+              {/* Two independent defaults: one address can be both, and most
+                  customers will leave them matched. Kept as separate opt-ins
+                  rather than a single "default" so a customer who bills to a
+                  different address can actually say so. */}
+              <div className="space-y-2.5 pt-1">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!form.isDefault}
+                    onChange={(e) => set('isDefault', e.target.checked)}
+                    className="w-4 h-4 accent-[#C9972B] cursor-pointer"
+                  />
+                  <span className="text-[12.5px] text-[#121212]">Use this as my default delivery address</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!form.isBillingDefault}
+                    onChange={(e) => set('isBillingDefault', e.target.checked)}
+                    className="w-4 h-4 accent-[#C9972B] cursor-pointer"
+                  />
+                  <span className="text-[12.5px] text-[#121212]">Use this as my default billing address</span>
+                </label>
+              </div>
 
               <AccountFormMessage tone="error" message={error} />
 
@@ -289,12 +308,20 @@ export const AddressesSection: React.FC<AddressesSectionProps> = ({
                     <Icon className="w-3 h-3 text-[#C9972B]" />
                     {address.type}
                   </span>
-                  {address.isDefault && (
-                    <span className="inline-flex items-center gap-1 text-[9.5px] font-bold tracking-[0.14em] uppercase text-[#C9972B]">
-                      <Star className="w-3 h-3 fill-[#C9972B]" />
-                      Default
-                    </span>
-                  )}
+                  <span className="flex items-center gap-2.5 shrink-0">
+                    {address.isDefault && (
+                      <span className="inline-flex items-center gap-1 text-[9.5px] font-bold tracking-[0.14em] uppercase text-[#C9972B]">
+                        <Star className="w-3 h-3 fill-[#C9972B]" />
+                        Delivery
+                      </span>
+                    )}
+                    {address.isBillingDefault && (
+                      <span className="inline-flex items-center gap-1 text-[9.5px] font-bold tracking-[0.14em] uppercase text-[#6B6B6B]">
+                        <Receipt className="w-3 h-3" />
+                        Billing
+                      </span>
+                    )}
+                  </span>
                 </div>
 
                 <address className="not-italic text-[13px] leading-relaxed flex-1">

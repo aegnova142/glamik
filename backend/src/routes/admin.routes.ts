@@ -32,6 +32,28 @@ import {
 } from '../services/notifications.service';
 import { sendOrderStatusEmail } from '../services/email.service';
 import { grantOrderPoints } from '../services/rewards.service';
+import {
+  createShipmentForOrder,
+  cancelShipmentForOrder,
+  ensureShipmentPickup,
+  generateShipmentManifest,
+  ensureShipmentInvoice,
+  recordTrackingEvents,
+  refundOrderPayment,
+  restoreOrderStock,
+  applyShippingStatus,
+  shipmentsEnabled,
+} from '../services/fulfillment.service';
+import { getShippingProvider } from '../services/shiprocket.service';
+import {
+  getProductInventory,
+  getInventoryTransactions,
+  getLowStockUnits,
+  adjustInventory,
+  ensureProductInventory,
+  sqlInventoryEnabled,
+} from '../services/inventory.service';
+import { env } from '../config/env';
 import { requireAdmin, AuthenticatedRequest } from '../middleware/requireAdmin';
 import {
   CMSAuditLog,
@@ -50,6 +72,9 @@ import {
   OrderStatus,
   Shade,
   TryOnModelPreset,
+  ORDER_STATUSES,
+  PAYMENT_STATUSES,
+  SHIPPING_STATUSES,
 } from '@glamirk/shared/types';
 
 const router = express.Router();
@@ -400,27 +425,79 @@ router.get('/admin/full-state', requireAdmin, async (req: AuthenticatedRequest, 
 });
 
 // --- Order management ---
+/**
+ * Admin order list, filterable across all three lifecycles.
+ *
+ * `status` keeps its original meaning (order status) so existing admin links
+ * still work; paymentStatus/shippingStatus/paymentMethod are new, independent
+ * filters. Every one of them is matched against a fixed allow-list rather than
+ * interpolated, and the values go in as bound parameters — a filter string is
+ * query input, not SQL.
+ *
+ * Each filter is backed by an index added in migration 011; without them every
+ * filtered page was a sequential scan of the whole orders table.
+ */
 router.get('/admin/orders', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
-  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
   const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
   const pageSize = Math.min(50, Math.max(1, parseInt(String(req.query.pageSize || '20'), 10) || 20));
   const offset = (page - 1) * pageSize;
 
-  const whereClause = status ? 'WHERE status = $1' : '';
-  const params = status ? [status] : [];
+  const conditions: string[] = [];
+  const params: any[] = [];
 
-  const countRes = await pool.query(`SELECT COUNT(*) FROM orders ${whereClause}`, params);
-  const total = parseInt(countRes.rows[0].count, 10);
+  const pick = (value: unknown, allowed: readonly string[]): string | null => {
+    const candidate = typeof value === 'string' ? value : '';
+    return allowed.includes(candidate) ? candidate : null;
+  };
 
-  const ordersRes = await pool.query(
-    `SELECT * FROM orders ${whereClause} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
-    [...params, pageSize, offset]
-  );
+  const status = pick(req.query.status, ORDER_STATUSES);
+  if (status) {
+    params.push(status);
+    conditions.push(`status = $${params.length}`);
+  }
+
+  const paymentStatus = pick(req.query.paymentStatus, PAYMENT_STATUSES);
+  if (paymentStatus) {
+    params.push(paymentStatus);
+    conditions.push(`payment_status = $${params.length}`);
+  }
+
+  const shippingStatus = pick(req.query.shippingStatus, SHIPPING_STATUSES);
+  if (shippingStatus) {
+    params.push(shippingStatus);
+    conditions.push(`shipping_status = $${params.length}`);
+  }
+
+  const paymentMethod = pick(req.query.paymentMethod, ['cod', 'upi', 'card', 'netbanking', 'wallet', 'online']);
+  if (paymentMethod) {
+    params.push(paymentMethod);
+    conditions.push(`payment_method = $${params.length}`);
+  }
+
+  // Free-text lookup for support: order number, customer name, phone or email.
+  const search = String(req.query.search || '').trim();
+  if (search) {
+    params.push(`%${search}%`);
+    const idx = params.length;
+    conditions.push(
+      `(order_number ILIKE $${idx} OR customer_name ILIKE $${idx} OR customer_phone ILIKE $${idx} OR customer_email ILIKE $${idx})`
+    );
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const [countRes, ordersRes] = await Promise.all([
+    pool.query(`SELECT COUNT(*) FROM orders ${whereClause}`, params),
+    pool.query(
+      `SELECT * FROM orders ${whereClause} ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, pageSize, offset]
+    ),
+  ]);
 
   const db = await loadDatabase();
   const orders = await buildOrdersFromRows(ordersRes.rows, db);
 
-  res.json({ orders, total, page, pageSize });
+  res.json({ orders, total: parseInt(countRes.rows[0].count, 10), page, pageSize });
 });
 
 router.get('/admin/orders/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
@@ -460,8 +537,10 @@ router.get('/admin/analytics/summary', requireAdmin, async (req: AuthenticatedRe
 // --- Order status lifecycle ---
 router.put('/admin/orders/:id/status', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   const { status, note } = req.body || {};
-  const allowedStatuses: OrderStatus[] = [...ORDER_STATUS_SEQUENCE, 'CANCELLED'];
-  if (!status || !allowedStatuses.includes(status)) {
+  // Every legal value, including the post-delivery outcomes and the legacy
+  // spellings an older order may still be sitting on. isValidStatusTransition
+  // below is what decides whether this *particular* move is allowed.
+  if (!status || !ORDER_STATUSES.includes(status)) {
     return res.status(400).json({ error: 'Invalid order status.' });
   }
 
@@ -477,18 +556,29 @@ router.put('/admin/orders/:id/status', requireAdmin, async (req: AuthenticatedRe
   // lock before restocking, so two concurrent status changes on the same
   // order (e.g. an admin double-click, or racing with the customer's own
   // cancel endpoint) can't both restock the same order.
-  const updateRes = await withStockLock(async () => {
-    const result = await pool.query(
-      'UPDATE orders SET status = $1 WHERE id = $2 AND status = $3 RETURNING id',
-      [status, row.id, row.status]
-    );
-    if (result.rows.length > 0 && status === 'CANCELLED') {
-      await restockOrderItems(row.id);
-    }
-    return result;
-  });
+  const updateRes = await pool.query(
+    `UPDATE orders SET status = $1,
+            cancelled_at = CASE WHEN $1 = 'CANCELLED' THEN now() ELSE cancelled_at END,
+            cancellation_reason = CASE WHEN $1 = 'CANCELLED' THEN COALESCE($4, 'Cancelled by store') ELSE cancellation_reason END
+     WHERE id = $2 AND status = $3 RETURNING id`,
+    [status, row.id, row.status, note || null]
+  );
   if (updateRes.rows.length === 0) {
     return res.status(409).json({ error: 'This order was already updated. Please refresh and try again.' });
+  }
+
+  // Restocking goes through restoreOrderStock, which carries the
+  // stock_restored guard — an order cancelled here and then refunded by a
+  // webhook is credited back exactly once, not twice.
+  if (status === 'CANCELLED' || status === 'RETURNED' || status === 'RTO') {
+    await restoreOrderStock(row.id);
+  }
+  if (status === 'CANCELLED') {
+    // Best-effort: the order is already cancelled, and a courier API hiccup
+    // must not undo that.
+    void cancelShipmentForOrder(row.id).catch((err) =>
+      console.error(`Could not cancel shipment for order ${row.id}:`, err)
+    );
   }
 
   // Independent writes/sends — none read each other's result, so they run
@@ -554,6 +644,302 @@ router.put('/admin/orders/:id/shipment', requireAdmin, async (req: Authenticated
   const db = await loadDatabase();
   const updatedRes = await pool.query('SELECT * FROM orders WHERE id = $1', [row.id]);
   res.json({ order: await buildOrderFromRow(updatedRes.rows[0], db) });
+});
+
+// --- Courier shipments ---
+
+/**
+ * Books (or retries booking) the courier shipment for an order.
+ *
+ * Safe to press twice: createShipmentForOrder claims the shipments row by
+ * unique index before calling the aggregator, so a double-click produces one
+ * shipment and one no-op rather than two AWBs for the same parcel. A partially
+ * created shipment (order made, AWB not assigned) resumes rather than starting
+ * over.
+ */
+router.post('/admin/orders/:id/shipment/create', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const orderRes = await pool.query('SELECT id, order_number FROM orders WHERE id = $1', [req.params.id]);
+  const row = orderRes.rows[0];
+  if (!row) return res.status(404).json({ error: 'Order not found.' });
+
+  if (!shipmentsEnabled()) {
+    return res.status(503).json({
+      error: 'Shipping is not enabled. Set SHIPROCKET_LIVE_MODE=true with credentials to create real shipments.',
+    });
+  }
+
+  const result = await createShipmentForOrder(row.id);
+  if (!result.ok) {
+    // The operator sees the real reason; it is already logged server-side too.
+    return res.status(502).json({ error: result.error || 'Could not create the shipment.' });
+  }
+
+  await logAudit(req, 'CREATE_SHIPMENT', 'ORDER', row.id, row.order_number, 'shipment booked');
+
+  const db = await loadDatabase();
+  const updated = await pool.query('SELECT * FROM orders WHERE id = $1', [row.id]);
+  res.json({ order: await buildOrderFromRow(updated.rows[0], db) });
+});
+
+/**
+ * The post-AWB shipment documents and the pickup request.
+ *
+ * All four are exposed as explicit admin actions as well as being run
+ * automatically after booking, because each can fail independently of the
+ * shipment itself and each is individually idempotent. Pressing any of them
+ * twice is a no-op rather than a second pickup or a reissued manifest.
+ *
+ * None of these moves inventory, payment, or the order's own status — the one
+ * exception is the pickup, which advances the parcel's shipping lifecycle
+ * through applyShippingStatus like any other courier event.
+ */
+const SHIPMENT_DOCUMENT_ACTIONS: Record<
+  string,
+  { run: (orderId: string) => Promise<{ ok: boolean; error?: string }>; audit: string; label: string }
+> = {
+  pickup: { run: ensureShipmentPickup, audit: 'GENERATE_PICKUP', label: 'pickup requested' },
+  manifest: { run: generateShipmentManifest, audit: 'GENERATE_MANIFEST', label: 'manifest generated' },
+  invoice: { run: ensureShipmentInvoice, audit: 'GENERATE_INVOICE', label: 'invoice generated' },
+};
+
+router.post('/admin/orders/:id/shipment/:action', requireAdmin, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const action = SHIPMENT_DOCUMENT_ACTIONS[req.params.action];
+  // Anything this does not own (create, cancel) is handed back to the router so
+  // the more specific routes still match, whatever order they are declared in.
+  if (!action) return next();
+
+  const orderRes = await pool.query('SELECT id, order_number FROM orders WHERE id = $1', [req.params.id]);
+  const row = orderRes.rows[0];
+  if (!row) return res.status(404).json({ error: 'Order not found.' });
+
+  const result = await action.run(row.id);
+  if (!result.ok) {
+    // 502 rather than 500: the failure is upstream, and the operator-facing
+    // message has already been scrubbed of anything secret-shaped.
+    return res.status(502).json({ error: result.error || 'The courier did not complete this step.' });
+  }
+
+  await logAudit(req, action.audit, 'ORDER', row.id, row.order_number, action.label);
+
+  const shipmentRes = await pool.query(
+    `SELECT awb_code, courier_name, label_url, invoice_url, manifest_url,
+            pickup_scheduled_at, integration_status, status
+     FROM shipments WHERE order_id = $1`,
+    [row.id]
+  );
+  res.json({ ok: true, shipment: shipmentRes.rows[0] || null });
+});
+
+/** Cancels a courier booking that has not yet been picked up. */
+router.post('/admin/orders/:id/shipment/cancel', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const orderRes = await pool.query('SELECT id, order_number FROM orders WHERE id = $1', [req.params.id]);
+  const row = orderRes.rows[0];
+  if (!row) return res.status(404).json({ error: 'Order not found.' });
+
+  const cancelled = await cancelShipmentForOrder(row.id);
+  if (!cancelled) {
+    return res.status(409).json({ error: 'This shipment cannot be cancelled — it may already be in transit.' });
+  }
+
+  await logAudit(req, 'CANCEL_SHIPMENT', 'ORDER', row.id, row.order_number, 'shipment cancelled');
+  const db = await loadDatabase();
+  const updated = await pool.query('SELECT * FROM orders WHERE id = $1', [row.id]);
+  res.json({ order: await buildOrderFromRow(updated.rows[0], db) });
+});
+
+/** Pulls the latest courier scan on demand, rather than waiting for a webhook. */
+router.get('/admin/orders/:id/shipment/track', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const shipmentRes = await pool.query('SELECT id, awb_code FROM shipments WHERE order_id = $1', [req.params.id]);
+  const awb = shipmentRes.rows[0]?.awb_code;
+  if (!awb) return res.status(404).json({ error: 'This order has no AWB yet.' });
+
+  const provider = getShippingProvider();
+  const tracking = await provider.track(awb);
+  if (!tracking.ok || !tracking.value) {
+    return res.status(502).json({ error: tracking.error || 'Could not reach the courier.' });
+  }
+
+  // Polled scans go through the same idempotent writer as webhook scans and
+  // under the same dedupe key, so pressing "track" on a parcel whose webhooks
+  // already arrived adds nothing rather than duplicating its whole history.
+  await recordTrackingEvents({
+    orderId: req.params.id,
+    shipmentRowId: shipmentRes.rows[0].id,
+    awb,
+    scans: tracking.value.scans || [],
+    source: 'tracking_api',
+    providerStatus: tracking.value.status,
+    mappedStatus: tracking.value.status,
+  });
+
+  // A manual check also reconciles, so pressing "track" fixes an order whose
+  // webhook was missed.
+  await applyShippingStatus({
+    orderId: req.params.id,
+    status: tracking.value.status,
+    awbCode: awb,
+    courierName: tracking.value.courierName,
+    deliveredAt: tracking.value.deliveredAt,
+  });
+
+  res.json({ awb, status: tracking.value.status, events: tracking.value.events, courierName: tracking.value.courierName });
+});
+
+// --- Refunds ---
+
+/**
+ * Refunds a prepaid order back to the instrument it was paid with.
+ *
+ * The amount is clamped server-side to what is actually refundable, so an
+ * over-stated amount in the request body cannot send a customer more than they
+ * paid.
+ */
+router.post('/admin/orders/:id/refund', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const { amount, reason } = req.body || {};
+
+  const orderRes = await pool.query('SELECT id, order_number, amount_paid, amount_refunded FROM orders WHERE id = $1', [
+    req.params.id,
+  ]);
+  const row = orderRes.rows[0];
+  if (!row) return res.status(404).json({ error: 'Order not found.' });
+
+  const refundable = Math.max(0, Number(row.amount_paid) - Number(row.amount_refunded));
+  const requested = Number(amount) > 0 ? Number(amount) : refundable;
+  if (requested <= 0) return res.status(400).json({ error: 'There is nothing left to refund on this order.' });
+
+  const result = await refundOrderPayment(row.id, requested, String(reason || 'Refunded by store'));
+  if (!result.ok) return res.status(400).json({ error: result.error || 'Refund failed.' });
+
+  await logAudit(req, 'REFUND_ORDER', 'ORDER', row.id, row.order_number, `₹${Math.min(requested, refundable)}`);
+
+  const db = await loadDatabase();
+  const updated = await pool.query('SELECT * FROM orders WHERE id = $1', [row.id]);
+  res.json({ order: await buildOrderFromRow(updated.rows[0], db) });
+});
+
+/** Full payment history for one order, for support to answer "was I charged?" */
+router.get('/admin/orders/:id/payments', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const result = await pool.query('SELECT * FROM payments WHERE order_id = $1 ORDER BY created_at DESC', [
+    req.params.id,
+  ]);
+  res.json({
+    payments: result.rows.map((row) => ({
+      id: row.id,
+      orderId: row.order_id,
+      provider: row.provider,
+      providerOrderId: row.provider_order_id || undefined,
+      providerPaymentId: row.provider_payment_id || undefined,
+      amount: Number(row.amount_minor) / 100,
+      currency: row.currency,
+      status: row.status,
+      method: row.method || undefined,
+      errorCode: row.error_code || undefined,
+      errorDescription: row.error_description || undefined,
+      refundedAmount: Number(row.refunded_minor) / 100,
+      createdAt: new Date(row.created_at).toISOString(),
+      updatedAt: new Date(row.updated_at).toISOString(),
+    })),
+  });
+});
+
+// ==========================================
+// INVENTORY
+//
+// Every route here is behind requireAdmin — the same gate as the rest of this
+// router, which is what keeps stock correction an admin-only capability. No
+// customer-facing endpoint can reach any of it.
+// ==========================================
+
+/**
+ * Which system owns stock right now.
+ *
+ * The product editor needs this before it renders: under SQL mode its stock
+ * inputs cannot safely write (they would overwrite counters tied to live
+ * orders), so they must be shown read-only rather than left looking editable.
+ */
+router.get('/admin/inventory-mode', requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+  res.json({ sqlMode: sqlInventoryEnabled(), mirroringLegacy: env.inventory.mirrorLegacy });
+});
+
+/** Current counters for one product, across every stock-bearing level. */
+router.get('/admin/inventory/:productId', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const units = await getProductInventory(req.params.productId);
+  res.json({ productId: req.params.productId, units, sqlMode: sqlInventoryEnabled() });
+});
+
+/** Movement history, newest first — the audit trail behind a disputed count. */
+router.get('/admin/inventory/:productId/transactions', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit || '100'), 10) || 100));
+  res.json({ transactions: await getInventoryTransactions(req.params.productId, limit) });
+});
+
+/** Everything at or below its low-stock threshold. */
+router.get('/admin/inventory-alerts/low-stock', requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+  res.json({ units: await getLowStockUnits() });
+});
+
+/**
+ * Stocktake correction.
+ *
+ * Sets an absolute available count. Quantities are validated as non-negative
+ * whole numbers before anything is locked, and the adjustment is written with
+ * the acting admin's id so a correction is always attributable.
+ */
+router.put('/admin/inventory/:productId', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const { variantId, sizeLabel, availableStock, lowStockThreshold, reason } = req.body || {};
+
+  if (!Number.isInteger(availableStock) || availableStock < 0) {
+    return res.status(400).json({ error: 'Available stock must be a whole number of zero or more.' });
+  }
+  if (lowStockThreshold !== undefined && (!Number.isInteger(lowStockThreshold) || lowStockThreshold < 0)) {
+    return res.status(400).json({ error: 'Low stock threshold must be a whole number of zero or more.' });
+  }
+
+  const result = await adjustInventory({
+    productId: req.params.productId,
+    variantId: variantId || null,
+    sizeLabel: sizeLabel || null,
+    availableStock,
+    lowStockThreshold,
+    actor: req.user?.id || 'admin',
+    reason: String(reason || 'Manual stock adjustment').slice(0, 300),
+  });
+  if (!result.ok) return res.status(400).json({ error: result.error || 'Could not adjust inventory.' });
+
+  await logAudit(
+    req,
+    'ADJUST_INVENTORY',
+    'PRODUCT',
+    req.params.productId,
+    req.params.productId,
+    `${variantId || '-'}/${sizeLabel || '-'} -> ${availableStock}`
+  );
+  res.json({ units: await getProductInventory(req.params.productId) });
+});
+
+/**
+ * Legacy-vs-SQL comparison, straight from the database view.
+ *
+ * This is the gate on switching INVENTORY_SQL_MODE on: until every unit
+ * reports MATCH, the two systems disagree and the flag must stay off.
+ */
+router.get('/admin/inventory-migration/verify', requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+  const [summary, mismatches] = await Promise.all([
+    pool.query('SELECT verdict, COUNT(*)::int AS count FROM inventory_migration_check GROUP BY verdict'),
+    pool.query(`SELECT * FROM inventory_migration_check WHERE verdict <> 'MATCH' ORDER BY product_id LIMIT 200`),
+  ]);
+
+  const counts: Record<string, number> = {};
+  for (const row of summary.rows) counts[row.verdict] = row.count;
+
+  res.json({
+    sqlMode: sqlInventoryEnabled(),
+    mirroringLegacy: env.inventory.mirrorLegacy,
+    summary: counts,
+    // Only the rows that disagree; a clean run returns an empty array.
+    mismatches: mismatches.rows,
+    safeToSwitch: (counts.MISMATCH || 0) === 0 && (counts.MISSING_IN_SQL || 0) === 0,
+  });
 });
 
 router.get('/admin/returns', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
@@ -743,6 +1129,10 @@ router.post('/admin/products', requireAdmin, async (req: AuthenticatedRequest, r
 
   db.products.push(newProduct);
   await saveDatabase(db);
+  // Provision the SQL inventory rows this product needs. Without it a product
+  // created after migration 012 would be unsellable the moment SQL inventory
+  // became authoritative.
+  await ensureProductInventory(newProduct as any);
   await logAudit(req, 'CREATE_PRODUCT', 'PRODUCT', newProduct.id, newProduct.name);
   broadcastEvent('CMS_UPDATE', 'products', newProduct);
 
@@ -765,6 +1155,11 @@ router.put('/admin/products/:id', requireAdmin, async (req: AuthenticatedRequest
   db.products[idx] = merged;
 
   await saveDatabase(db);
+  // An edit can introduce a new shade or size that defines its own stock, so
+  // the same provisioning runs here. Existing rows are never overwritten —
+  // stock corrections go through PUT /admin/inventory/:productId, which locks
+  // the row and records who changed it.
+  await ensureProductInventory(db.products[idx] as any);
   await logAudit(req, 'UPDATE_PRODUCT', 'PRODUCT', db.products[idx].id, db.products[idx].name);
   broadcastEvent('CMS_UPDATE', 'products', db.products[idx]);
 

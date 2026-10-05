@@ -92,6 +92,7 @@ import {
   Order,
   Address,
   Review,
+  ReviewMedia,
   ReturnRequest,
   DEFAULT_PROMO_NOTIFICATION_MESSAGES,
   applyPromoMessageTemplate,
@@ -190,8 +191,11 @@ function AppContent() {
     }
   }, []);
   const pendingActionRef = React.useRef<(() => void) | null>(null);
-  // Which tab the auth modal should open on — "Create Account" in the nav
-  // should land on registration, not on sign-in.
+  // Which tab the auth modal should open on. Both values now land on the same
+  // mobile + OTP screen — verifying a number signs you in or creates the
+  // account as needed — so nothing passes 'register' any more. The parameter
+  // is kept because the legacy email/password form behind
+  // LEGACY_EMAIL_AUTH_ENABLED (AuthModal.tsx) still distinguishes the two.
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
   const requireLogin = (action: () => void, mode: 'login' | 'register' = 'login') => {
     if (isCustomerLoggedIn) {
@@ -899,8 +903,14 @@ function AppContent() {
     return { success: false, error: res.error };
   };
 
-  const handleSubmitReview = async (productId: string, rating: number, title: string, comment: string) => {
-    const res = await commerceRef.current.submitReview(productId, rating, title, comment);
+  const handleSubmitReview = async (
+    productId: string,
+    rating: number,
+    title: string,
+    comment: string,
+    media?: ReviewMedia[]
+  ) => {
+    const res = await commerceRef.current.submitReview(productId, rating, title, comment, media);
     if (res.success && res.review) {
       setMyReviews((prev) => [res.review!, ...prev.filter((r) => r.productId !== productId)]);
       showToast('Thank you — your review has been posted.');
@@ -1249,18 +1259,15 @@ function AppContent() {
                   </p>
                 </div>
                 {!customerLoading && (
+                  // One button, because signing in and signing up are now the
+                  // same act: verifying a mobile number creates the account if
+                  // there isn't one yet.
                   <div className="flex flex-wrap items-center justify-center gap-3">
                     <button
                       onClick={() => openAuth('login')}
                       className="px-6 py-3 bg-[#0B0B0B] text-white text-[11px] font-semibold tracking-[0.16em] uppercase rounded-full hover:bg-[#171717] transition-colors cursor-pointer"
                     >
-                      Sign In
-                    </button>
-                    <button
-                      onClick={() => openAuth('register')}
-                      className="px-6 py-3 border border-[#0B0B0B] text-[#121212] text-[11px] font-semibold tracking-[0.16em] uppercase rounded-full hover:bg-[#0B0B0B] hover:text-white transition-colors cursor-pointer"
-                    >
-                      Create Account
+                      Sign In / Create Account
                     </button>
                   </div>
                 )}
@@ -1334,6 +1341,8 @@ function AppContent() {
               if (p) navigateToProduct(p);
             }}
             onCheckout={(addr, details) => commerceRef.current.checkout(addr, details)}
+            onVerifyPayment={(input) => commerceRef.current.verifyPayment(input)}
+            onCancelPayment={(orderId) => commerceRef.current.cancelPayment(orderId)}
           />
         )}
 

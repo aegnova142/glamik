@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Eye, Heart, ShoppingBag, Trash2 } from 'lucide-react';
+import { Eye, Heart, ShoppingBag, Trash2, X } from 'lucide-react';
 import { Product, Shade } from '@glamirk/shared/types';
 import { useAccount } from '../../../context/AccountContext';
 import { ProductImage } from '../../product/ProductImage';
@@ -35,8 +35,9 @@ export const RecentlyViewedSection: React.FC<RecentlyViewedSectionProps> = ({
   onExploreShop,
   showToast,
 }) => {
-  const { recentlyViewed, loadRecentlyViewed, clearRecentlyViewed } = useAccount();
+  const { recentlyViewed, loadRecentlyViewed, clearRecentlyViewed, removeRecentlyViewed } = useAccount();
   const [clearing, setClearing] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadRecentlyViewed();
@@ -47,6 +48,15 @@ export const RecentlyViewedSection: React.FC<RecentlyViewedSectionProps> = ({
     const res = await clearRecentlyViewed();
     setClearing(false);
     showToast(res.success ? 'Browsing history cleared' : res.error || 'Could not clear your history.');
+  };
+
+  const handleRemove = async (productId: string) => {
+    setRemovingId(productId);
+    const res = await removeRecentlyViewed(productId);
+    setRemovingId(null);
+    // Success is already visible — the card disappears — so only a failure
+    // needs to say anything.
+    if (!res.success) showToast(res.error || 'Could not remove this item.');
   };
 
   if (recentlyViewed.loading && !recentlyViewed.loaded) {
@@ -99,7 +109,15 @@ export const RecentlyViewedSection: React.FC<RecentlyViewedSectionProps> = ({
             const wishlisted = wishlist.includes(product.id);
             const outOfStock = product.inStock === false || product.stock === 0;
             return (
-              <article key={product.id} className="bg-white border border-[#E8D5A8] rounded-xl overflow-hidden flex flex-col group">
+              <article key={product.id} className="bg-white border border-[#E8D5A8] rounded-xl overflow-hidden flex flex-col group relative">
+                <button
+                  onClick={() => handleRemove(product.id)}
+                  disabled={removingId === product.id}
+                  aria-label={`Remove ${product.name} from browsing history`}
+                  className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-white/90 border border-[#E8D5A8] text-[#6B6B6B] hover:text-[#C0392B] hover:border-[#C0392B] transition-colors cursor-pointer flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
                 <button
                   onClick={() => onSelectProduct(product)}
                   className="aspect-square bg-[#FAF9F6] overflow-hidden relative cursor-pointer block w-full"

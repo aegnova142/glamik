@@ -467,23 +467,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <h4 className="font-serif text-sm text-[#FAF9F6] mt-0.5">Account &amp; Sign In</h4>
                         </div>
 
+                        {/* Signing in and creating an account are the same
+                            step now — one mobile number, one code — so this is
+                            one button rather than two that go to the same place. */}
                         <div className="p-3.5 space-y-2.5">
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="text-[11px] text-[#9C9689]">New to Glamirk?</span>
-                            <button
-                              onClick={() => closeAccountMenu(() => onOpenAuth?.('register'))}
-                              className="px-3.5 py-2 bg-gradient-to-r from-[#C9972B] to-[#E3B84B] text-[#0B0B0B] text-[10px] font-bold tracking-[0.12em] uppercase rounded-full hover:brightness-110 transition-all cursor-pointer shrink-0"
-                            >
-                              Create Account
-                            </button>
-                          </div>
+                          <p className="text-[11px] text-[#9C9689] leading-relaxed">
+                            Sign in with your mobile number. New here? Your account is created automatically.
+                          </p>
 
                           <button
                             onClick={() => closeAccountMenu(() => onOpenAuth?.('login'))}
-                            className="w-full px-3.5 py-2.5 border border-[#C9972B]/50 text-[#C9972B] text-[10.5px] font-semibold tracking-[0.14em] uppercase rounded-full hover:bg-[#C9972B] hover:text-[#0B0B0B] transition-colors cursor-pointer flex items-center justify-center gap-2"
+                            className="w-full px-3.5 py-2.5 bg-gradient-to-r from-[#C9972B] to-[#E3B84B] text-[#0B0B0B] text-[10.5px] font-bold tracking-[0.14em] uppercase rounded-full hover:brightness-110 transition-all cursor-pointer flex items-center justify-center gap-2"
                           >
                             <LogIn className="w-3.5 h-3.5" />
-                            Sign In
+                            Sign In / Create Account
                           </button>
                         </div>
 
@@ -924,21 +921,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <button
                           onClick={() => {
                             setMobileMenuOpen(false);
-                            onOpenAuth?.('register');
+                            onOpenAuth?.('login');
                           }}
                           className="w-full text-left font-semibold text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-white cursor-pointer"
                         >
-                          <span>Create Account</span>
-                          <span className="text-[11px] text-[#F05A7E] font-bold">New →</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setMobileMenuOpen(false);
-                            onOpenAuth?.('login');
-                          }}
-                          className="w-full text-left font-medium text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white cursor-pointer"
-                        >
-                          <span>Sign In</span>
+                          <span>Sign In / Create Account</span>
                           <LogIn className="w-4 h-4 text-[#F05A7E]" />
                         </button>
                         {[

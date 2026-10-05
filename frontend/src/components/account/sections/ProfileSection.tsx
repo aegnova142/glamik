@@ -5,6 +5,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, Trash2, BadgeCheck, AlertTriangle, Mail, Phone } from 'lucide-react';
+import { Gender, GENDER_OPTIONS } from '@glamirk/shared/types';
 import { useAccount } from '../../../context/AccountContext';
 import {
   AccountButton,
@@ -33,6 +34,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
+  const [gender, setGender] = useState<Gender | ''>('');
   const [dirty, setDirty] = useState(false);
 
   const [saving, setSaving] = useState(false);
@@ -56,6 +58,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
     setLastName(profile.data.lastName || profile.data.name?.split(' ').slice(1).join(' ') || '');
     setPhone(profile.data.phone || '');
     setDateOfBirth(profile.data.dateOfBirth || '');
+    setGender(profile.data.gender || '');
   }, [profile.data, dirty]);
 
   // A verification link lands on /account/profile?verifyEmail=<token>.
@@ -94,6 +97,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
       lastName: lastName.trim(),
       phone: phone.trim(),
       dateOfBirth: dateOfBirth || undefined,
+      gender,
     });
     setSaving(false);
 
@@ -324,16 +328,34 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
             </AccountField>
           </div>
 
-          <AccountField label="Date of Birth" htmlFor="profile-dob" hint="Optional — so we can send you a birthday treat" className="sm:max-w-xs">
-            <input
-              id="profile-dob"
-              type="date"
-              value={dateOfBirth}
-              max={new Date().toISOString().slice(0, 10)}
-              onChange={(e) => setDateOfBirth(e.target.value)}
-              className={inputClass}
-            />
-          </AccountField>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <AccountField label="Date of Birth" htmlFor="profile-dob" hint="Optional — so we can send you a birthday treat">
+              <input
+                id="profile-dob"
+                type="date"
+                value={dateOfBirth}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                className={inputClass}
+              />
+            </AccountField>
+
+            <AccountField label="Gender" htmlFor="profile-gender" hint="Optional — helps us tailor your recommendations">
+              <select
+                id="profile-gender"
+                value={gender}
+                onChange={(e) => setGender(e.target.value as Gender | '')}
+                className={inputClass}
+              >
+                <option value="">Not specified</option>
+                {GENDER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </AccountField>
+          </div>
 
           <AccountFormMessage tone="error" message={error} />
           <AccountFormMessage tone="success" message={success} />

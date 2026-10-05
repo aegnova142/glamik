@@ -133,10 +133,18 @@ export function getStoredCustomerUser(): any | null {
   }
 }
 
+/**
+ * `details` carries the parsed body of a FAILED response. Errors deliberately
+ * leave `data` unset — callers everywhere treat `res.data` as the success
+ * signal — but some endpoints return structured hints alongside the message
+ * (how long until a retry is allowed, how many attempts are left, whether the
+ * thing being retried is dead and needs re-requesting). Those would otherwise
+ * be thrown away with the body.
+ */
 export async function customerApiFetch<T>(
   endpoint: string,
   options: RequestInit = {}
-): Promise<{ data?: T; error?: string; status: number }> {
+): Promise<{ data?: T; error?: string; details?: any; status: number }> {
   const token = getCustomerToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -160,7 +168,7 @@ export async function customerApiFetch<T>(
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      return { error: data.error || `Request failed with status ${status}`, status };
+      return { error: data.error || `Request failed with status ${status}`, details: data, status };
     }
 
     return { data, status };

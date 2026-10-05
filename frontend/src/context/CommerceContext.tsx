@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { customerApiFetch, getCustomerToken } from '@glamirk/shared/utils/cmsClient';
-import { CartItem, Product, Shade, ServerCartItem, Order, Address, Review, ReturnRequest, Coupon, PaymentMethodType, AppNotification } from '@glamirk/shared/types';
+import { CartItem, Product, Shade, ServerCartItem, Order, Address, Review, ReviewMedia, ReturnRequest, Coupon, PaymentMethodType, AppNotification } from '@glamirk/shared/types';
 import { useCustomerAuth } from './CustomerAuthContext';
 import { getSocket } from '@glamirk/shared/utils/socket';
 import { getCurrentPrice } from '@glamirk/shared/utils/productVariant';
@@ -14,6 +14,21 @@ interface MutationResult {
 interface CheckoutResult extends MutationResult {
   order?: Order;
   whatsappUrl?: string;
+  /** Present only for an online order: what the browser needs to open the
+   * gateway's hosted payment sheet. The order exists but is not confirmed
+   * until that payment is verified server-side. */
+  payment?: {
+    provider: string;
+    gatewayOrderId: string;
+    keyId: string | null;
+    amountMinor: number;
+    currency: string;
+    isMock: boolean;
+  };
+}
+
+interface VerifyPaymentResult extends MutationResult {
+  order?: Order;
 }
 
 interface CancelOrderResult extends MutationResult {
@@ -41,13 +56,24 @@ interface CheckoutDetails {
   customerName: string;
   customerPhone: string;
   customerEmail: string;
-  paymentMethod: Exclude<PaymentMethodType, 'online'>;
+  // 'online' is now a real choice: it means "take me to the gateway", with
+  // the instrument picked there rather than here.
+  paymentMethod: PaymentMethodType;
   couponCode?: string;
   /** Demo-only payment inputs — never a real card number is stored server-side, only the last 4 digits. */
   upiId?: string;
   cardNumber?: string;
   bankName?: string;
   walletProvider?: string;
+}
+
+/** Outcome of a reorder. `unavailable` names what could not be re-added and
+ * why, so a partial reorder can be reported honestly instead of silently. */
+export interface ReorderResult {
+  success: boolean;
+  error?: string;
+  addedCount?: number;
+  unavailable?: { productName: string; reason: string }[];
 }
 
 interface CommerceContextType {
@@ -61,6 +87,7 @@ interface CommerceContextType {
   markAllNotificationsRead: () => Promise<void>;
   isCommerceLoading: boolean;
   addToCart: (product: Product, shade?: Shade, quantity?: number, size?: string) => Promise<MutationResult>;
+  reorder: (orderId: string) => Promise<ReorderResult>;
   updateCartItemQuantity: (index: number, quantity: number) => Promise<MutationResult>;
   removeCartItem: (index: number) => Promise<MutationResult>;
   saveForLater: (index: number) => Promise<MutationResult>;
@@ -70,8 +97,21 @@ interface CommerceContextType {
   toggleWishlist: (productId: string) => Promise<MutationResult>;
   refreshCommerce: () => Promise<void>;
   checkout: (shippingAddress: Address, details: CheckoutDetails) => Promise<CheckoutResult>;
+  verifyPayment: (input: {
+    orderId: string;
+    razorpayOrderId: string;
+    razorpayPaymentId: string;
+    razorpaySignature: string;
+  }) => Promise<VerifyPaymentResult>;
+  cancelPayment: (orderId: string) => Promise<void>;
   cancelOrder: (orderId: string, reason?: string) => Promise<CancelOrderResult>;
-  submitReview: (productId: string, rating: number, title: string, comment: string) => Promise<SubmitReviewResult>;
+  submitReview: (
+    productId: string,
+    rating: number,
+    title: string,
+    comment: string,
+    media?: ReviewMedia[]
+  ) => Promise<SubmitReviewResult>;
   submitReturnRequest: (orderId: string, productId: string, reason: string, comment?: string) => Promise<SubmitReturnResult>;
   validateCoupon: (couponCode: string, subtotal: number) => Promise<ValidateCouponResult>;
   updateAddress: (addressId: string, address: Omit<Address, 'id'>) => Promise<UpdateAddressResult>;
@@ -275,6 +315,34 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
     return { success: false, error: res.error || 'Could not add this item to your bag.' };
   };
 
+  /**
+   * Puts a whole past order back in the bag.
+   *
+   * Returns the per-item outcome rather than a bare success flag: months on,
+   * some items will have been delisted or sold out, and the caller needs to
+   * be able to tell the customer which ones instead of letting them discover
+   * a short bag at checkout.
+   */
+  const reorder = async (orderId: string): Promise<ReorderResult> => {
+    const res = await customerApiFetch<{
+      items: ServerCartItem[];
+      subtotal: number;
+      addedCount: number;
+      unavailable: { productName: string; reason: string }[];
+    }>(`/api/customer/orders/${orderId}/reorder`, { method: 'POST' });
+
+    if (res.data) {
+      setServerCartItems(res.data.items || []);
+      setCartSubtotal(res.data.subtotal || 0);
+      return {
+        success: true,
+        addedCount: res.data.addedCount || 0,
+        unavailable: res.data.unavailable || [],
+      };
+    }
+    return { success: false, error: res.error || 'Could not add these items to your bag.' };
+  };
+
   const updateCartItemQuantity = async (index: number, quantity: number): Promise<MutationResult> => {
     if (!isCustomerLoggedIn) {
       const item = guestCartItems[index];
@@ -402,15 +470,58 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
   const checkout = async (shippingAddress: Address, details: CheckoutDetails): Promise<CheckoutResult> => {
     if (!isCustomerLoggedIn) return { success: false, loginRequired: true };
     const idempotencyKey = 'checkout-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
-    const res = await customerApiFetch<{ order: Order; whatsappUrl?: string }>('/api/customer/checkout', {
-      method: 'POST',
-      body: JSON.stringify({ shippingAddress, idempotencyKey, ...details }),
-    });
+    const res = await customerApiFetch<{ order: Order; whatsappUrl?: string; payment?: CheckoutResult['payment'] }>(
+      '/api/customer/checkout',
+      {
+        method: 'POST',
+        body: JSON.stringify({ shippingAddress, idempotencyKey, ...details }),
+      }
+    );
     if (res.data?.order) {
+      // The server has already emptied the server-side bag; this clears the
+      // local mirror. Done for an online order too: the order exists and owns
+      // the stock from this point, so leaving items in the bag would let the
+      // customer check out the same units twice.
       clearCartLocally();
-      return { success: true, order: res.data.order, whatsappUrl: res.data.whatsappUrl };
+      return {
+        success: true,
+        order: res.data.order,
+        whatsappUrl: res.data.whatsappUrl,
+        payment: res.data.payment,
+      };
     }
     return { success: false, error: res.error || 'Checkout failed. Please try again.' };
+  };
+
+  /**
+   * Hands the gateway's response back to the server for verification.
+   *
+   * The browser never decides that a payment succeeded — it only relays what
+   * the gateway returned. The server re-checks the signature and the amount
+   * before anything is marked paid.
+   */
+  const verifyPayment = async (input: {
+    orderId: string;
+    razorpayOrderId: string;
+    razorpayPaymentId: string;
+    razorpaySignature: string;
+  }): Promise<VerifyPaymentResult> => {
+    const res = await customerApiFetch<{ success: boolean; order: Order }>('/api/customer/payments/verify', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    if (res.data?.order) return { success: true, order: res.data.order };
+    return {
+      success: false,
+      error:
+        res.error ||
+        'We could not confirm your payment. If money was deducted it will be reflected on your order shortly.',
+    };
+  };
+
+  /** Best-effort: tells the server the customer closed the payment window. */
+  const cancelPayment = async (orderId: string): Promise<void> => {
+    await customerApiFetch(`/api/customer/payments/${orderId}/cancel`, { method: 'POST' }).catch(() => undefined);
   };
 
   const cancelOrder = async (orderId: string, reason?: string): Promise<CancelOrderResult> => {
@@ -425,11 +536,17 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
     return { success: false, error: res.error || 'Could not cancel this order.' };
   };
 
-  const submitReview = async (productId: string, rating: number, title: string, comment: string): Promise<SubmitReviewResult> => {
+  const submitReview = async (
+    productId: string,
+    rating: number,
+    title: string,
+    comment: string,
+    media: ReviewMedia[] = []
+  ): Promise<SubmitReviewResult> => {
     if (!isCustomerLoggedIn) return { success: false, loginRequired: true };
     const res = await customerApiFetch<{ review: Review }>('/api/customer/reviews', {
       method: 'POST',
-      body: JSON.stringify({ productId, rating, title, comment }),
+      body: JSON.stringify({ productId, rating, title, comment, media }),
     });
     if (res.data?.review) {
       return { success: true, review: res.data.review };
@@ -489,6 +606,7 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
     markAllNotificationsRead,
     isCommerceLoading,
     addToCart,
+    reorder,
     updateCartItemQuantity,
     removeCartItem,
     saveForLater,
@@ -498,6 +616,8 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
     toggleWishlist,
     refreshCommerce,
     checkout,
+    verifyPayment,
+    cancelPayment,
     cancelOrder,
     submitReview,
     submitReturnRequest,

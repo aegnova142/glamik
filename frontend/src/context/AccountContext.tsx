@@ -11,14 +11,19 @@ import {
   AccountOverview,
   CustomerProfile,
   CustomerSession,
+  Gender,
   GlamProfile,
   NotificationPreferences,
   OrderTracking,
+  PaymentsSummary,
   Product,
   ReviewableProduct,
+  ReviewMedia,
   RewardsSummary,
   ShadeHistoryEntry,
   SupportTicket,
+  TryOnHistoryEntry,
+  TryOnMode,
 } from '@glamirk/shared/types';
 
 // ==========================================
@@ -62,6 +67,8 @@ interface AccountContextType {
   reviewableProducts: Slice<ReviewableProduct[]>;
   sessions: Slice<CustomerSession[]>;
   supportTickets: Slice<SupportTicket[]>;
+  payments: Slice<PaymentsSummary>;
+  tryOnHistory: Slice<TryOnHistoryEntry[]>;
 
   loadOverview: (force?: boolean) => Promise<void>;
   loadProfile: (force?: boolean) => Promise<void>;
@@ -74,12 +81,15 @@ interface AccountContextType {
   loadReviewableProducts: (force?: boolean) => Promise<void>;
   loadSessions: (force?: boolean) => Promise<void>;
   loadSupportTickets: (force?: boolean) => Promise<void>;
+  loadPayments: (force?: boolean) => Promise<void>;
+  loadTryOnHistory: (force?: boolean) => Promise<void>;
 
   updateProfile: (input: {
     firstName: string;
     lastName?: string;
     phone?: string;
     dateOfBirth?: string;
+    gender?: Gender | '';
   }) => Promise<MutationResult>;
   uploadAvatar: (file: File) => Promise<MutationResult>;
   removeAvatar: () => Promise<MutationResult>;
@@ -94,6 +104,11 @@ interface AccountContextType {
 
   trackProductView: (productId: string) => Promise<void>;
   clearRecentlyViewed: () => Promise<MutationResult>;
+  removeRecentlyViewed: (productId: string) => Promise<MutationResult>;
+
+  recordTryOn: (input: { productId: string; shadeId?: string; mode: TryOnMode }) => Promise<void>;
+  deleteTryOnEntry: (id: string) => Promise<MutationResult>;
+  clearTryOnHistory: () => Promise<MutationResult>;
 
   changePassword: (currentPassword: string, newPassword: string) => Promise<MutationResult>;
   revokeSession: (sessionId: string) => Promise<MutationResult>;
@@ -107,6 +122,9 @@ interface AccountContextType {
   openInvoice: (orderId: string, orderNumber: string) => Promise<MutationResult>;
 
   deleteReview: (reviewId: string) => Promise<MutationResult>;
+  /** Uploads one attachment and returns it for the composer to hold until the
+   * review itself is submitted. */
+  uploadReviewMedia: (file: File) => Promise<MutationResult & { media?: ReviewMedia }>;
 }
 
 const AccountContext = createContext<AccountContextType | undefined>(undefined);
@@ -127,6 +145,8 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [reviewableProducts, setReviewableProducts] = useState<Slice<ReviewableProduct[]>>(emptySlice);
   const [sessions, setSessions] = useState<Slice<CustomerSession[]>>(emptySlice);
   const [supportTickets, setSupportTickets] = useState<Slice<SupportTicket[]>>(emptySlice);
+  const [payments, setPayments] = useState<Slice<PaymentsSummary>>(emptySlice);
+  const [tryOnHistory, setTryOnHistory] = useState<Slice<TryOnHistoryEntry[]>>(emptySlice);
 
   // Guards against a second fetch firing while the first is still in flight —
   // React 18 StrictMode double-invokes effects in development, and a section
@@ -146,6 +166,8 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
     setReviewableProducts(emptySlice);
     setSessions(emptySlice);
     setSupportTickets(emptySlice);
+    setPayments(emptySlice);
+    setTryOnHistory(emptySlice);
   }, []);
 
   // Signing out must drop every cached slice — otherwise the next person to
@@ -252,6 +274,14 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
     makeLoader<SupportTicket[]>('tickets', '/api/customer/account/support-tickets', setSupportTickets, (d) => d.tickets || []),
     []
   );
+  const loadPayments = useCallback(
+    makeLoader<PaymentsSummary>('payments', '/api/customer/account/payments', setPayments, (d) => d.payments),
+    []
+  );
+  const loadTryOnHistory = useCallback(
+    makeLoader<TryOnHistoryEntry[]>('try-on', '/api/customer/account/try-on-history', setTryOnHistory, (d) => d.entries || []),
+    []
+  );
 
   // ------------------------------------------
   // Profile mutations
@@ -262,6 +292,7 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
     lastName?: string;
     phone?: string;
     dateOfBirth?: string;
+    gender?: Gender | '';
   }): Promise<MutationResult> => {
     const res = await customerApiFetch<{ profile: CustomerProfile }>('/api/customer/account/profile', {
       method: 'PUT',
@@ -417,6 +448,81 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
     return { success: false, error: res.error || 'Could not clear your browsing history.' };
   };
 
+  const removeRecentlyViewed = async (productId: string): Promise<MutationResult> => {
+    const res = await customerApiFetch<{ success: boolean }>(
+      `/api/customer/account/recently-viewed/${encodeURIComponent(productId)}`,
+      { method: 'DELETE' }
+    );
+    if (res.data?.success) {
+      setRecentlyViewed((prev) => ({ ...prev, data: (prev.data || []).filter((i) => i.product.id !== productId) }));
+      return { success: true };
+    }
+    return { success: false, error: res.error || 'Could not remove this item.' };
+  };
+
+  // ------------------------------------------
+  // Virtual Try-On history
+  // ------------------------------------------
+
+  /** Fire-and-forget, like trackProductView: a failure to record history must
+   * never interrupt the try-on the customer is actually using. */
+  const recordTryOn = async (input: { productId: string; shadeId?: string; mode: TryOnMode }): Promise<void> => {
+    if (!getCustomerToken()) return;
+    await customerApiFetch('/api/customer/account/try-on-history', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    setTryOnHistory((prev) => ({ ...prev, loaded: false }));
+  };
+
+  const deleteTryOnEntry = async (id: string): Promise<MutationResult> => {
+    const res = await customerApiFetch<{ success: boolean }>(`/api/customer/account/try-on-history/${id}`, {
+      method: 'DELETE',
+    });
+    if (res.data?.success) {
+      setTryOnHistory((prev) => ({ ...prev, data: (prev.data || []).filter((e) => e.id !== id) }));
+      return { success: true };
+    }
+    return { success: false, error: res.error || 'Could not remove this entry.' };
+  };
+
+  const clearTryOnHistory = async (): Promise<MutationResult> => {
+    const res = await customerApiFetch<{ success: boolean }>('/api/customer/account/try-on-history', {
+      method: 'DELETE',
+    });
+    if (res.data?.success) {
+      setTryOnHistory({ data: [], loading: false, error: null, loaded: true });
+      return { success: true };
+    }
+    return { success: false, error: res.error || 'Could not clear your try-on history.' };
+  };
+
+  // ------------------------------------------
+  // Review media
+  // ------------------------------------------
+
+  const uploadReviewMedia = async (file: File): Promise<MutationResult & { media?: ReviewMedia }> => {
+    const token = getCustomerToken();
+    if (!token) return { success: false, error: 'Please sign in to continue.' };
+
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      // Same reason as uploadAvatar: customerApiFetch would set a JSON
+      // Content-Type and the multipart boundary would never be written.
+      const res = await fetch('/api/customer/account/reviews/media', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: payload.error || 'Could not upload that file.' };
+      return { success: true, media: payload.media };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Could not upload that file.' };
+    }
+  };
+
   // ------------------------------------------
   // Security
   // ------------------------------------------
@@ -563,6 +669,8 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
     reviewableProducts,
     sessions,
     supportTickets,
+    payments,
+    tryOnHistory,
     loadOverview,
     loadProfile,
     loadGlamProfile,
@@ -574,6 +682,8 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
     loadReviewableProducts,
     loadSessions,
     loadSupportTickets,
+    loadPayments,
+    loadTryOnHistory,
     updateProfile,
     uploadAvatar,
     removeAvatar,
@@ -585,6 +695,10 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
     saveNotificationPreferences,
     trackProductView,
     clearRecentlyViewed,
+    removeRecentlyViewed,
+    recordTryOn,
+    deleteTryOnEntry,
+    clearTryOnHistory,
     changePassword,
     revokeSession,
     logoutAllDevices,
@@ -594,6 +708,7 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
     fetchOrderTracking,
     openInvoice,
     deleteReview,
+    uploadReviewMedia,
   };
 
   return <AccountContext.Provider value={value}>{children}</AccountContext.Provider>;

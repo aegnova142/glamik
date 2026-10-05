@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Heart, Sparkles, ShoppingBag, Star, Check, ShieldCheck } from 'lucide-react';
 import { Product, Shade, CartItem } from '@glamirk/shared/types';
 import { ProductImage } from './ProductImage';
+import { isProductSellable } from '@glamirk/shared/utils/productVariant';
 
 interface ProductCardProps {
   product: Product;
@@ -79,7 +80,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
       : 0;
 
-  const isLowStock = product.inStock && typeof product.stock === 'number' && product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD;
+  // Availability is resolved across every sellable unit, not from the
+  // product-level pool alone: a shaded product whose pool has drained is
+  // still buyable while its shades have stock, and must not be greyed out.
+  const sellable = isProductSellable(product);
+  const isLowStock = sellable && typeof product.stock === 'number' && product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD;
 
   const ImageArea = (
     <div className={`relative shrink-0 overflow-hidden rounded-lg bg-[#FCE8ED] ${viewMode === 'list' ? 'aspect-square w-28 sm:w-40' : 'aspect-[4/3] w-full'}`}>
@@ -90,7 +95,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         className="h-full w-full object-contain object-center transition-transform duration-500 ease-out group-hover:scale-[1.04]"
       />
 
-      {!product.inStock && (
+      {!sellable && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
           <span className="rounded-full border border-[#E8D5A8] bg-white px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-wider text-[#121212]">
             Out of Stock
@@ -193,9 +198,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const AddToCartButton = (
     <button
       id={`quickadd-btn-${product.id}`}
-      disabled={!product.inStock}
+      disabled={!sellable}
       onClick={
-        !product.inStock
+        !sellable
           ? undefined
           : isInCart
           ? (e) => {
@@ -205,14 +210,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           : handleAddToCartClick
       }
       className={`flex items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold shadow-sm transition-all active:scale-95 ${
-        !product.inStock
+        !sellable
           ? 'cursor-not-allowed bg-[#E8D5A8]/50 text-[#6B6B6B]'
           : isInCart
           ? 'cursor-pointer border border-[#0B0B0B] bg-white text-[#121212] hover:bg-[#FAF9F6]'
           : 'cursor-pointer bg-[#F05A7E] text-white hover:bg-[#e0496c]'
       } ${viewMode === 'list' ? 'w-full sm:w-auto sm:flex-1' : 'flex-1'}`}
     >
-      {!product.inStock ? (
+      {!sellable ? (
         <>
           <ShoppingBag className="h-3.5 w-3.5" />
           <span>Out of Stock</span>
@@ -234,7 +239,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const BuyNowButton = (
     <button
       id={`buynow-btn-${product.id}`}
-      disabled={!product.inStock}
+      disabled={!sellable}
       onClick={handleBuyNowClick}
       className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E8D5A8] bg-white px-3.5 py-2 text-xs font-bold uppercase tracking-wide text-[#121212] shadow-sm transition-all hover:border-[#F05A7E] hover:bg-[#FCE8ED] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#E8D5A8] disabled:hover:bg-white"
     >

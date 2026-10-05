@@ -6,7 +6,16 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '@glamirk/shared/utils/cmsClient';
 import { formatDate, formatDateTime } from '@glamirk/shared/utils/dateFormat';
-import { Order, OrderStatus, ReturnRequest, ORDER_STATUS_SEQUENCE, CANCELLABLE_ORDER_STATUSES, RETURN_STATUSES } from '@glamirk/shared/types';
+import {
+  Order,
+  OrderStatus,
+  ReturnRequest,
+  ORDER_STATUS_SEQUENCE,
+  ORDER_STATUSES,
+  CANCELLABLE_ORDER_STATUSES,
+  canonicalOrderStatus,
+  RETURN_STATUSES,
+} from '@glamirk/shared/types';
 import {
   Package,
   RefreshCw,
@@ -19,7 +28,9 @@ import {
   Check,
 } from 'lucide-react';
 
-const ALL_ORDER_STATUSES: (OrderStatus | 'ALL')[] = ['ALL', ...ORDER_STATUS_SEQUENCE, 'CANCELLED', 'RETURN_REQUESTED'];
+// Every status an order may actually hold, including the legacy spellings —
+// filtering by a status no order can have would silently return nothing.
+const ALL_ORDER_STATUSES: (OrderStatus | 'ALL')[] = ['ALL', ...ORDER_STATUSES];
 
 const STATUS_BADGE_COLOR: Record<string, string> = {
   PLACED: 'bg-[#C9972B]/10 text-[#C9972B] border-[#C9972B]/30',
@@ -97,10 +108,29 @@ export const AdminOrders: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
+  /**
+   * The moves this order may legally make next.
+   *
+   * Statuses are normalised through canonicalOrderStatus first so an order
+   * still on a legacy PLACED/PACKED value offers the same next step as a
+   * modern one — without that it would find no index on the ladder and offer
+   * nothing but "cancel", stranding every pre-split order.
+   *
+   * Mirrors isValidStatusTransition on the server: anything offered here is
+   * accepted there, and anything it would reject is never shown.
+   */
   const nextStatusOptions = (order: Order): OrderStatus[] => {
-    const idx = ORDER_STATUS_SEQUENCE.indexOf(order.status);
+    const current = canonicalOrderStatus(order.status);
     const options: OrderStatus[] = [];
+
+    const idx = ORDER_STATUS_SEQUENCE.indexOf(current);
     if (idx !== -1 && idx < ORDER_STATUS_SEQUENCE.length - 1) options.push(ORDER_STATUS_SEQUENCE[idx + 1]);
+
+    // Post-delivery outcomes, offered only where the server would honour them.
+    if (current === 'DELIVERED') options.push('RETURN_REQUESTED');
+    if (current === 'RETURN_REQUESTED') options.push('RETURNED');
+    if (current === 'SHIPPED' || current === 'OUT_FOR_DELIVERY') options.push('RTO');
+
     if (CANCELLABLE_ORDER_STATUSES.includes(order.status)) options.push('CANCELLED');
     return options;
   };

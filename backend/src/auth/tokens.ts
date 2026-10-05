@@ -13,17 +13,26 @@ const TOKEN_TTL = '30d';
 
 /** Claims carried by every customer token. `tv` is the account's token
  * version at signing time and `sid` identifies the device session — both are
- * what make logout and revocation real rather than client-side-only. */
+ * what make logout and revocation real rather than client-side-only.
+ *
+ * `email` is nullable because an account created through mobile + OTP has no
+ * email address until the customer adds one. Nothing authenticates on this
+ * claim — it is carried for convenience only, and identity is `id`. */
 export interface CustomerTokenClaims {
   id: string;
-  email: string;
+  email: string | null;
   role: 'customer';
   tv: number;
   sid?: string;
 }
 
-export function signCustomerToken(id: string, email: string, tokenVersion: number, sessionId?: string): string {
-  const claims: CustomerTokenClaims = { id, email, role: 'customer', tv: tokenVersion, sid: sessionId };
+export function signCustomerToken(
+  id: string,
+  email: string | null,
+  tokenVersion: number,
+  sessionId?: string
+): string {
+  const claims: CustomerTokenClaims = { id, email: email || null, role: 'customer', tv: tokenVersion, sid: sessionId };
   return jwt.sign(claims, JWT_SECRET, { expiresIn: TOKEN_TTL });
 }
 

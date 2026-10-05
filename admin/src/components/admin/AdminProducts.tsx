@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { Product, Shade, VariantImage, SizeOption, ProductAttribute, UsageStep } from '@glamirk/shared/types';
 import {
@@ -30,6 +30,8 @@ import {
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { PRODUCT_TAXONOMY } from '@glamirk/shared/data/taxonomy';
+import { apiFetch } from '@glamirk/shared/utils/cmsClient';
+import { InventoryPanel, ReadOnlyStockField } from './InventoryPanel';
 
 type ProductImageSlot = 'primary' | 'secondary' | 'detail' | 'texture' | 'lifestyle' | 'swatch';
 
@@ -40,6 +42,27 @@ export const AdminProducts: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  /**
+   * Whether SQL inventory owns stock.
+   *
+   * Fetched rather than assumed, because the product form's stock inputs
+   * cannot safely write once it does: an inventory row carries reserved and
+   * sold counts tied to live orders, and a form save would overwrite the
+   * available figure with no lock, no audit entry and no regard for what is
+   * reserved. Null until known, and treated as "legacy" meanwhile — the
+   * direction that leaves the existing editable behaviour intact.
+   */
+  const [sqlInventoryMode, setSqlInventoryMode] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<{ sqlMode: boolean }>('/api/admin/inventory-mode').then((res) => {
+      if (!cancelled && res.data) setSqlInventoryMode(res.data.sqlMode === true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1033,7 +1056,9 @@ export const AdminProducts: React.FC = () => {
                             value={shade.stock ?? ''}
                             placeholder={String(editingProduct.stock ?? 0)}
                             onChange={(e) => handleUpdateShade(idx, 'stock', e.target.value === '' ? undefined : Math.max(0, parseInt(e.target.value, 10) || 0))}
-                            className="w-full px-2 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
+                            disabled={sqlInventoryMode}
+                            title={sqlInventoryMode ? 'SQL inventory owns this number — adjust it in the Inventory panel' : undefined}
+                            className={`w-full px-2 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6] ${sqlInventoryMode ? 'cursor-not-allowed opacity-50' : ''}`}
                           />
                         </div>
                       </div>
@@ -1125,7 +1150,9 @@ export const AdminProducts: React.FC = () => {
                                     placeholder="Optional"
                                     onChange={(e) => handleUpdateShadeSizeField(idx, sizeOpt.id, 'stock', e.target.value === '' ? undefined : Math.max(0, parseInt(e.target.value, 10) || 0))}
                                     className="w-full px-2 py-1.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
-                                  />
+                            disabled={sqlInventoryMode}
+                            title={sqlInventoryMode ? 'SQL inventory owns this number — adjust it in the Inventory panel' : undefined}
+                          />
                                 </div>
                                 <button
                                   type="button"
@@ -1417,7 +1444,9 @@ export const AdminProducts: React.FC = () => {
                           value={pricing?.stock ?? ''}
                           placeholder={String(editingProduct.stock ?? 0)}
                           onChange={(e) => handleUpdateSizePricing(label, 'stock', e.target.value === '' ? undefined : Math.max(0, parseInt(e.target.value, 10) || 0))}
-                          className="w-full px-2 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
+                          disabled={sqlInventoryMode}
+                            title={sqlInventoryMode ? 'SQL inventory owns this number — adjust it in the Inventory panel' : undefined}
+                            className={`w-full px-2 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6] ${sqlInventoryMode ? 'cursor-not-allowed opacity-50' : ''}`}
                         />
                       </div>
                       <button
@@ -1585,19 +1614,40 @@ export const AdminProducts: React.FC = () => {
                 <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
                   Stock Quantity
                 </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={editingProduct.stock ?? 0}
-                  onChange={(e) =>
-                    setEditingProduct({ ...editingProduct, stock: Math.max(0, parseInt(e.target.value, 10) || 0) })
-                  }
-                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
-                />
-                <p className="text-[10px] text-[#6B6B6B] mt-1">
-                  This is the real, decremented-on-order quantity used by cart &amp; checkout validation.
-                </p>
+                {sqlInventoryMode ? (
+                  <>
+                    <ReadOnlyStockField value={editingProduct.stock} />
+                    <p className="text-[10px] text-[#6B6B6B] mt-1">
+                      SQL inventory owns this number. Saving the product form cannot change it — use the Inventory
+                      panel below, which locks the row and records the adjustment.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editingProduct.stock ?? 0}
+                      onChange={(e) =>
+                        setEditingProduct({ ...editingProduct, stock: Math.max(0, parseInt(e.target.value, 10) || 0) })
+                      }
+                      className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                    />
+                    <p className="text-[10px] text-[#6B6B6B] mt-1">
+                      This is the real, decremented-on-order quantity used by cart &amp; checkout validation.
+                    </p>
+                  </>
+                )}
               </div>
+
+              {/* The adjustment flow the read-only fields point at. Rendered
+                  only in SQL mode: in legacy mode the inputs above are still
+                  the real control and a second one would be ambiguous. */}
+              {sqlInventoryMode && editingProduct.id && (
+                <div className="md:col-span-2">
+                  <InventoryPanel productId={editingProduct.id} />
+                </div>
+              )}
 
               <div className="pt-2 flex items-center justify-between border-t border-[#E8D5A8]/10">
                 <span className="text-xs font-semibold text-[#FAF9F6]">Stock Status</span>

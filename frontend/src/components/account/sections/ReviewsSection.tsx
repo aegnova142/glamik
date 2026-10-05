@@ -4,8 +4,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Star, Pencil, Trash2, BadgeCheck } from 'lucide-react';
-import { Review, ReviewableProduct } from '@glamirk/shared/types';
+import { Star, Pencil, Trash2, BadgeCheck, Video } from 'lucide-react';
+import { Review, ReviewableProduct, ReviewMedia } from '@glamirk/shared/types';
 import { useAccount } from '../../../context/AccountContext';
 import { ProductImage } from '../../product/ProductImage';
 import {
@@ -21,7 +21,13 @@ import { WriteReviewModal } from './OrderActionModals';
 
 interface ReviewsSectionProps {
   onExploreShop: () => void;
-  onSubmitReview: (productId: string, rating: number, title: string, comment: string) => Promise<{ success: boolean; error?: string }>;
+  onSubmitReview: (
+    productId: string,
+    rating: number,
+    title: string,
+    comment: string,
+    media?: ReviewMedia[]
+  ) => Promise<{ success: boolean; error?: string }>;
   showToast: (message: string) => void;
 }
 
@@ -54,8 +60,14 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
     }
   };
 
-  const handleSubmit = async (productId: string, rating: number, title: string, comment: string) => {
-    const res = await onSubmitReview(productId, rating, title, comment);
+  const handleSubmit = async (
+    productId: string,
+    rating: number,
+    title: string,
+    comment: string,
+    media?: ReviewMedia[]
+  ) => {
+    const res = await onSubmitReview(productId, rating, title, comment, media);
     if (res.success) loadReviewableProducts(true);
     return res;
   };
@@ -162,6 +174,38 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
                           {review.title && <p className="font-serif text-[14px] text-[#121212]">{review.title}</p>}
                           <p className="text-[12.5px] text-[#6B6B6B] leading-relaxed">{review.comment}</p>
 
+                          {/* Reads `media` only — the server folds a legacy
+                              photoUrl in as the first entry, so old reviews
+                              still show their photo without a special case. */}
+                          {(review.media || []).length > 0 && (
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              {review.media!.map((m, idx) => (
+                                <a
+                                  key={m.publicId || m.url}
+                                  href={m.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="relative w-16 h-16 rounded-lg overflow-hidden border border-[#E8D5A8] bg-[#FAF9F6] block"
+                                >
+                                  {m.type === 'video' ? (
+                                    <>
+                                      <video src={m.url} className="w-full h-full object-cover" muted playsInline />
+                                      <span className="absolute bottom-1 left-1 bg-[#0B0B0B]/75 text-white rounded-full p-1">
+                                        <Video className="w-2.5 h-2.5" />
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <img
+                                      src={m.url}
+                                      alt={`Your photo ${idx + 1} of ${item.productName}`}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  )}
+                                </a>
+                              ))}
+                            </div>
+                          )}
+
                           <div className="flex flex-wrap gap-2 pt-2">
                             <AccountButton variant="ghost" onClick={() => setEditing({ item, review })}>
                               <Pencil className="w-3.5 h-3.5" />
@@ -195,6 +239,7 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
         initialRating={editing?.review?.rating ?? 5}
         initialTitle={editing?.review?.title || ''}
         initialComment={editing?.review?.comment || ''}
+        initialMedia={editing?.review?.media || []}
         onClose={() => setEditing(null)}
         onConfirm={handleSubmit}
         showToast={showToast}

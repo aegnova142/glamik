@@ -1216,6 +1216,17 @@ router.post('/admin/products/duplicate/:id', requireAdmin, async (req: Authentic
 
   db.products.push(duplicated);
   await saveDatabase(db);
+  // The clone is a new product with its own id, so it needs its own inventory
+  // rows exactly as a created one does. This was missing, and the omission is
+  // invisible until something compares the two stores: the duplicate carried
+  // the original's stock in the legacy document while SQL had no row for it at
+  // all, so inventory:verify reported MISSING_IN_SQL and the catalogue totals
+  // drifted apart by the clone's stock.
+  //
+  // Idempotent — ensureProductInventory inserts ON CONFLICT DO NOTHING, so a
+  // retried duplicate neither creates a second row nor resets stock on one
+  // that already exists.
+  await ensureProductInventory(duplicated as any);
   await logAudit(req, 'DUPLICATE_PRODUCT', 'PRODUCT', duplicated.id, duplicated.name);
   broadcastEvent('CMS_UPDATE', 'products', duplicated);
 

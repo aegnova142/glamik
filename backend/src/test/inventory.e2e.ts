@@ -41,6 +41,7 @@ import {
   getProductInventory,
   getInventoryTransactions,
   sqlInventoryEnabled,
+  ensureProductInventory,
 } from '../services/inventory.service';
 
 let passed = 0;
@@ -608,6 +609,103 @@ async function run(): Promise<void> {
     `SELECT COUNT(*)::int n FROM inventory_reservations WHERE order_id = 'o-rb'`
   );
   check('rollback left no orphan reservation rows', orphanReservations.rows[0].n === 0, String(orphanReservations.rows[0].n));
+
+  // ==========================================
+  section('Provisioning — a product without SQL inventory is a silent drift');
+  // ==========================================
+  //
+  // Regression for a real incident. The admin duplicate-product flow wrote the
+  // clone into the CMS document but never called ensureProductInventory, so the
+  // duplicate carried the original's stock in legacy while SQL had no row for
+  // it. Nothing failed; the two stores simply disagreed by the clone's stock
+  // until inventory:verify was run.
+
+  await pool.query('DELETE FROM inventory_transactions');
+  await pool.query('DELETE FROM inventory_reservations');
+  await pool.query('DELETE FROM inventory');
+
+  const original: any = {
+    id: 'prov-original',
+    stock: 60,
+    shades: [
+      { id: 'prov-shade-a', stock: 20 },
+      { id: 'prov-shade-b', stock: 15, sizes: [{ label: '30g', stock: 5 }] },
+    ],
+    sizePricing: { '50g': { stock: 9 } },
+  };
+
+  const createdForOriginal = await ensureProductInventory(original);
+  check('provisioning creates a row per stock-bearing unit', createdForOriginal === 5, String(createdForOriginal));
+
+  const originalRows = await pool.query(
+    `SELECT COALESCE(SUM(available_stock),0)::int total, COUNT(*)::int n FROM inventory WHERE product_id = 'prov-original'`
+  );
+  check('...with the stock the product declares', originalRows.rows[0].total === 109, String(originalRows.rows[0].total));
+
+  // The duplicate: a different id carrying the same stock, exactly what the
+  // admin route builds.
+  const duplicate: any = { ...JSON.parse(JSON.stringify(original)), id: 'prov-original-copy-1', shades: original.shades };
+
+  const beforeDup = await pool.query(`SELECT COUNT(*)::int n FROM inventory WHERE product_id = 'prov-original-copy-1'`);
+  check('the duplicate starts with no inventory rows', beforeDup.rows[0].n === 0);
+
+  const createdForDuplicate = await ensureProductInventory(duplicate);
+  check('provisioning the duplicate creates its own rows', createdForDuplicate === 5, String(createdForDuplicate));
+
+  const dupRows = await pool.query(
+    `SELECT COALESCE(SUM(available_stock),0)::int total, COUNT(*)::int n FROM inventory WHERE product_id = 'prov-original-copy-1'`
+  );
+  check('the duplicate has its own inventory rows', dupRows.rows[0].n === 5, String(dupRows.rows[0].n));
+  check('...carrying the duplicated stock', dupRows.rows[0].total === 109, String(dupRows.rows[0].total));
+
+  // The drift the incident produced: legacy counts both products, SQL only one.
+  const legacyTotal = 60 + 60; // both products' pool stock, as the catalogue sees it
+  const sqlPoolTotal = await pool.query(
+    `SELECT COALESCE(SUM(available_stock),0)::int t FROM inventory WHERE variant_id IS NULL AND size_label IS NULL`
+  );
+  check('legacy and SQL pool stock now agree across both products', sqlPoolTotal.rows[0].t === legacyTotal, String(sqlPoolTotal.rows[0].t));
+
+  // --- idempotency: retrying must not duplicate rows or reset stock ---------
+  await pool.query(`UPDATE inventory SET available_stock = 3, reserved_stock = 2 WHERE product_id = 'prov-original-copy-1' AND variant_id IS NULL AND size_label IS NULL`);
+
+  const createdAgain = await ensureProductInventory(duplicate);
+  check('re-provisioning creates nothing', createdAgain === 0, String(createdAgain));
+
+  const afterRetry = await pool.query(
+    `SELECT available_stock, reserved_stock FROM inventory WHERE product_id = 'prov-original-copy-1' AND variant_id IS NULL AND size_label IS NULL`
+  );
+  check('...and does NOT reset existing stock', Number(afterRetry.rows[0].available_stock) === 3, afterRetry.rows[0].available_stock);
+  check('...nor existing reservations', Number(afterRetry.rows[0].reserved_stock) === 2, afterRetry.rows[0].reserved_stock);
+
+  const rowCountAfterRetry = await pool.query(`SELECT COUNT(*)::int n FROM inventory WHERE product_id = 'prov-original-copy-1'`);
+  check('...and creates no duplicate rows', rowCountAfterRetry.rows[0].n === 5, String(rowCountAfterRetry.rows[0].n));
+
+  // Concurrent duplicates of the same product must not race into two rows —
+  // the unique unit index is what guarantees it, not the application.
+  // inventory_transactions references inventory, so the audit rows go first.
+  await pool.query(`DELETE FROM inventory_transactions WHERE product_id = 'prov-original-copy-1'`);
+  await pool.query(`DELETE FROM inventory WHERE product_id = 'prov-original-copy-1'`);
+  const racing = await Promise.all([
+    ensureProductInventory(duplicate),
+    ensureProductInventory(duplicate),
+    ensureProductInventory(duplicate),
+    ensureProductInventory(duplicate),
+  ]);
+  const racedRows = await pool.query(`SELECT COUNT(*)::int n FROM inventory WHERE product_id = 'prov-original-copy-1'`);
+  check('4 concurrent provisionings still produce exactly 5 rows', racedRows.rows[0].n === 5, String(racedRows.rows[0].n));
+  check('...and only one of them reports creating them', racing.filter((n) => n > 0).length >= 1 && racing.reduce((a, b) => a + b, 0) === 5,
+        racing.join(','));
+
+  // A product with no shades or sizes still gets its single pool row.
+  const plainProduct: any = { id: 'prov-plainProduct', stock: 12 };
+  const createdPlain = await ensureProductInventory(plainProduct);
+  check('a product with no variants gets one pool row', createdPlain === 1, String(createdPlain));
+
+  // Every provisioning is attributable.
+  const txns = await pool.query(
+    `SELECT COUNT(*)::int n FROM inventory_transactions WHERE product_id = 'prov-original-copy-1' AND operation = 'MIGRATE'`
+  );
+  check('provisioning is recorded in inventory_transactions', txns.rows[0].n === 5, String(txns.rows[0].n));
 
   // ------------------------------------------
 

@@ -23,12 +23,8 @@ export const GLAMIRK_PRODUCTS: Product[] = [
     texture: 'Weightless Velvet Fluid',
     skinType: ['All Skin Tones', 'Formulated for Indian Undertones'],
     images: {
-      primary: 'https://images.unsplash.com/photo-1586495777744-4413f21062fa?auto=format&fit=crop&w=1200&q=85',
-      secondary: 'https://images.unsplash.com/photo-1627384113743-6bd5a479fffd?auto=format&fit=crop&w=1200&q=85',
-      detail: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=1200&q=85',
-      texture: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=1200&q=85',
-      lifestyle: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1200&q=85',
-      swatch: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=1200&q=85'
+      primary: '',
+      secondary: '',
     },
     shades: [
       {
@@ -108,12 +104,8 @@ export const GLAMIRK_PRODUCTS: Product[] = [
     texture: 'Micro-Fluid Ceremonial Emulsion',
     skinType: ['Sensitive Scalp Friendly', 'All Skin Tones'],
     images: {
-      primary: 'https://images.unsplash.com/photo-1616683693504-3ea7e9ad6fec?auto=format&fit=crop&w=1200&q=85',
-      secondary: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=1200&q=85',
-      detail: 'https://images.unsplash.com/photo-1599305090598-fe179d501227?auto=format&fit=crop&w=1200&q=85',
-      texture: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=1200&q=85',
-      lifestyle: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=1200&q=85',
-      swatch: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=1200&q=85'
+      primary: '',
+      secondary: '',
     },
     shades: [
       {
@@ -174,11 +166,8 @@ export const GLAMIRK_PRODUCTS: Product[] = [
     texture: 'Solid Melting Balm to Milky Water',
     skinType: ['All Skin Types', 'Sensitive Skin Safe', 'Dry & Dehydrated', 'Oily & Combination'],
     images: {
-      primary: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=1200&q=85',
-      secondary: 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=1200&q=85',
-      detail: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?auto=format&fit=crop&w=1200&q=85',
-      texture: 'https://images.unsplash.com/photo-1617897903246-719242758050?auto=format&fit=crop&w=1200&q=85',
-      lifestyle: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=1200&q=85'
+      primary: '',
+      secondary: '',
     },
     benefits: [
       '3-Phase Transformation: Solid Balm → Silken Oil → Purifying Milk',
@@ -223,11 +212,8 @@ export const GLAMIRK_PRODUCTS: Product[] = [
     texture: 'Solid Melting Balm to Milky Water',
     skinType: ['All Skin Types', 'Sensitive Skin Safe', 'Dry & Dehydrated', 'Oily & Combination'],
     images: {
-      primary: 'https://images.unsplash.com/photo-1571781926291-c477ebfd024b?auto=format&fit=crop&w=1200&q=85',
-      secondary: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=1200&q=85',
-      detail: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?auto=format&fit=crop&w=1200&q=85',
-      texture: 'https://images.unsplash.com/photo-1571875257727-256c39da42af?auto=format&fit=crop&w=1200&q=85',
-      lifestyle: 'https://images.unsplash.com/photo-1601049676869-702ea24cfd58?auto=format&fit=crop&w=1200&q=85'
+      primary: '',
+      secondary: '',
     },
     benefits: [
       'Generous 50g ritual jar for daily morning and evening cleansing',

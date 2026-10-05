@@ -25,7 +25,8 @@
     "inventory:validate": "tsx src/db/cli-validate-migration.ts",
     "inventory:resync": "tsx src/db/cli-inventory.ts resync",
     "inventory:rollback": "tsx src/db/cli-inventory.ts rollback",
-    "inventory:repair-flags": "tsx src/db/cli-inventory.ts repair-flags"
+    "inventory:repair-flags": "tsx src/db/cli-inventory.ts repair-flags",
+    "images:cleanup": "tsx src/db/cli-cleanup-seed-images.ts"
   },
   "dependencies": {
     "@glamirk/shared": "*",

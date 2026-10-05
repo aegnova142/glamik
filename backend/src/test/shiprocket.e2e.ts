@@ -257,9 +257,34 @@ async function postWebhook(
   return { status: res.status, json: await res.json().catch(() => ({})) };
 }
 
-/** Webhooks are acknowledged before processing finishes, so a test that
- * inspects the resulting state has to let the handler's tail run. */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 120));
+/**
+ * Waits until every delivered webhook has actually finished processing.
+ *
+ * The endpoint acknowledges before doing the work, so the state a test wants to
+ * assert on does not exist yet when the HTTP response returns. This was a fixed
+ * 120ms sleep, which passed in isolation and then failed five assertions when
+ * the suite ran back-to-back with the others on a loaded machine — the worst
+ * kind of test, because an intermittent red teaches people to re-run rather
+ * than to look.
+ *
+ * Polling the ledger asserts the real condition instead of guessing at a
+ * duration: claimEvent() inserts the row as RECEIVED *before* the response is
+ * sent, and finishEvent() moves it to PROCESSED/IGNORED/FAILED, so "no row left
+ * in RECEIVED" means the handler tail has drained. Usually returns on the first
+ * poll, and still holds when the machine is busy.
+ */
+async function settle(timeoutMs = 8000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const res = await pool.query(`SELECT COUNT(*)::int n FROM webhook_events WHERE status = 'RECEIVED'`);
+    if (res.rows[0].n === 0) return;
+    if (Date.now() > deadline) {
+      console.warn(`  (settle timed out with ${res.rows[0].n} webhook event(s) still processing)`);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
 
 async function scanCount(orderId: string): Promise<number> {
   const res = await pool.query('SELECT COUNT(*)::int n FROM shipment_tracking_events WHERE order_id = $1', [orderId]);

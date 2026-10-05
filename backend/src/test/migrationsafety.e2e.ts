@@ -27,6 +27,10 @@ import {
   describeHost,
   buildAutoMigrationRefusal,
 } from '../config/databaseTarget';
+// Pure helper, imported directly rather than through `env` — env captures
+// NODE_ENV once at module load, so the production branch could not otherwise be
+// exercised in the same process as the development branch.
+import { resolveJwtSecret, DEV_JWT_SECRET } from '../config/env';
 import { runMigrations } from '../db/migrate';
 
 let passed = 0;
@@ -188,6 +192,58 @@ async function run(): Promise<void> {
     verifyPassed = false;
   }
   check('with the schema current, ensureSchema verifies and proceeds', verifyPassed);
+
+  // ========================================
+  section('JWT_SECRET — production never falls back to a committed default');
+  // ========================================
+
+  // The old behaviour was `process.env.JWT_SECRET || '<a literal in this repo>'`.
+  // A deployment that simply lost the variable kept booting and signed every
+  // admin session, customer session and OTP hash with a publicly readable key.
+  const LEAKED = 'glamirk_luxury_atelier_jwt_secret_2026';
+  const throws = (configured: string | undefined, isProd: boolean): boolean => {
+    try {
+      resolveJwtSecret(configured, isProd);
+      return false;
+    } catch {
+      return true;
+    }
+  };
+
+  check('production with no JWT_SECRET refuses to start', throws(undefined, true));
+  check('production with an empty JWT_SECRET refuses to start', throws('', true));
+  check('production with whitespace-only JWT_SECRET refuses to start', throws('   ', true));
+  // The specific value that leaked, rejected by name wherever it reappears —
+  // an operator copying .env.example verbatim must not land back on it.
+  check('production rejects the old committed default outright', throws(LEAKED, true));
+  check('production rejects the dev key outright', throws(DEV_JWT_SECRET, true));
+  check('production accepts a real secret', !throws('a'.repeat(64), true));
+  check('...and returns it unchanged', resolveJwtSecret('a'.repeat(64), true) === 'a'.repeat(64));
+  check('surrounding whitespace is trimmed', resolveJwtSecret('  realsecret  ', true) === 'realsecret');
+
+  // Development must stay runnable with no configuration at all, or people
+  // paste the production secret into their local .env to make the app start.
+  check('development with no JWT_SECRET still works', !throws(undefined, false));
+  check('...using the clearly-named dev key', resolveJwtSecret(undefined, false) === DEV_JWT_SECRET);
+  check('development downgrades the leaked default to the dev key', resolveJwtSecret(LEAKED, false) === DEV_JWT_SECRET);
+  check('development still honours a real secret', resolveJwtSecret('local-dev-secret', false) === 'local-dev-secret');
+
+  // The dev key must not be mistakable for a real one at a glance, and must
+  // not be the value that leaked. (Compared via String() so this stays a real
+  // runtime assertion rather than something the compiler folds away.)
+  check('the dev key is self-describing', /dev-only/.test(DEV_JWT_SECRET) && /not-for-production/.test(DEV_JWT_SECRET));
+  check('the leaked default is no longer the dev fallback', String(DEV_JWT_SECRET) !== String(LEAKED));
+
+  // The error has to say what to do, not just that something is wrong.
+  let jwtRefusal = '';
+  try {
+    resolveJwtSecret(undefined, true);
+  } catch (err: any) {
+    jwtRefusal = err?.message || '';
+  }
+  check('the jwtRefusal explains how to generate one', jwtRefusal.includes('openssl rand -hex 32'));
+  check('the jwtRefusal warns that rotating signs everyone out', /signs out every logged-in user/i.test(jwtRefusal));
+  check('the jwtRefusal never prints a secret', !jwtRefusal.includes(LEAKED) && !jwtRefusal.includes(DEV_JWT_SECRET));
 
   delete process.env.DATABASE_ENV;
   await pool.end();

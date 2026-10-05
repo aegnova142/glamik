@@ -256,10 +256,27 @@ async function waitForWebhookProcessed(eventId: string, timeoutMs = 5000): Promi
   return false;
 }
 
-/** Shiprocket sends no event id, so the handler derives one. Mirrored here so
- * the test can wait on the right row. */
-function shiprocketEventId(awb: string, statusText: string, timestamp: string): string {
-  return `${awb}:${statusText}:${timestamp}`;
+/**
+ * Waits until no webhook is still being processed.
+ *
+ * Used for the courier deliveries instead of waiting on a specific event id.
+ * The handler derives Shiprocket's event id itself (it sends none), and a test
+ * that recomputes that derivation silently stops matching the moment the
+ * derivation changes — which is exactly what happened here: these waits were
+ * looking up an id format the handler no longer produces, so each one sat out
+ * its full timeout and waited on nothing.
+ *
+ * Asking "is anything still in flight" needs no knowledge of the handler's
+ * internals, so it cannot drift out of sync with them.
+ */
+async function waitForWebhooksDrained(timeoutMs = 8000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const res = await pool.query(`SELECT COUNT(*)::int n FROM webhook_events WHERE status = 'RECEIVED'`);
+    if (res.rows[0].n === 0) return true;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return false;
 }
 
 // ------------------------------------------
@@ -501,19 +518,19 @@ async function run(): Promise<void> {
   const pickedBody = scan('Picked Up', 3, '2026-01-01T10:00:00Z');
   const picked = await postWebhook('/api/webhooks/shiprocket', pickedBody, { 'x-api-key': WEBHOOK_KEY });
   check('shipping webhook is accepted', picked.status === 200);
-  await waitForWebhookProcessed(shiprocketEventId(awb, 'Picked Up', '2026-01-01T10:00:00Z'));
+  await waitForWebhooksDrained();
   check('pickup advances the order to SHIPPED', (await orderRow('ord-online')).status === 'SHIPPED');
 
   const oodBody = scan('Out For Delivery', 17, '2026-01-02T09:00:00Z');
   await postWebhook('/api/webhooks/shiprocket', oodBody, { 'x-api-key': WEBHOOK_KEY });
-  await waitForWebhookProcessed(shiprocketEventId(awb, 'Out For Delivery', '2026-01-02T09:00:00Z'));
+  await waitForWebhooksDrained();
   const oodRow = await orderRow('ord-online');
   check('out-for-delivery scan updates shipping status', oodRow.shipping_status === 'OUT_FOR_DELIVERY');
   check('out-for-delivery scan updates order status', oodRow.status === 'OUT_FOR_DELIVERY');
 
   const deliveredBody = scan('Delivered', 7, '2026-01-03T14:00:00Z');
   await postWebhook('/api/webhooks/shiprocket', deliveredBody, { 'x-api-key': WEBHOOK_KEY });
-  await waitForWebhookProcessed(shiprocketEventId(awb, 'Delivered', '2026-01-03T14:00:00Z'));
+  await waitForWebhooksDrained();
   const deliveredRow = await orderRow('ord-online');
   check('delivery scan marks the order DELIVERED', deliveredRow.status === 'DELIVERED');
   check('delivery scan sets shipping status', deliveredRow.shipping_status === 'DELIVERED');
@@ -522,7 +539,7 @@ async function run(): Promise<void> {
   await postWebhook('/api/webhooks/shiprocket', scan('In Transit', 6, '2026-01-04T00:00:00Z'), {
     'x-api-key': WEBHOOK_KEY,
   });
-  await waitForWebhookProcessed(shiprocketEventId(awb, 'In Transit', '2026-01-04T00:00:00Z'));
+  await waitForWebhooksDrained();
   check('a late in-transit scan cannot un-deliver the order', (await orderRow('ord-online')).status === 'DELIVERED');
 
   const badKey = await postWebhook('/api/webhooks/shiprocket', pickedBody, { 'x-api-key': 'wrong' });

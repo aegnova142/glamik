@@ -25,6 +25,66 @@ function required(name: string, hint: string): string {
   return value;
 }
 
+/**
+ * Development-only signing key.
+ *
+ * Deliberately named so that it is unmistakable in a log, a token dump, or a
+ * code search. It is NOT a secret and is never reachable in production —
+ * resolveJwtSecret throws there instead of returning it.
+ */
+export const DEV_JWT_SECRET = 'dev-only-insecure-jwt-secret-not-for-production';
+
+/**
+ * Resolves the token-signing secret, and refuses to invent one in production.
+ *
+ * This used to be `process.env.JWT_SECRET || '<a literal committed in this
+ * repository and in .env.example>'`. The fallback meant that a deployment which
+ * simply forgot the variable — a fresh server, a clobbered .env, a deploy that
+ * dropped it — kept booting happily while signing every admin session, every
+ * customer session and every OTP hash with a value anyone holding the repo
+ * could read. Nothing failed, nothing warned, and the tokens were forgeable.
+ *
+ * So production fails closed. An unsigned-for deployment is an outage, which is
+ * loud and gets fixed in minutes; a silently forgeable admin session is a
+ * breach, which is quiet and gets found much later.
+ *
+ * Development keeps a fallback, because requiring configuration to run the app
+ * locally is how people end up pasting the production secret into their .env.
+ *
+ * Pure and exported so the behaviour can be tested directly, rather than only
+ * through a module whose value is captured at import time.
+ */
+export function resolveJwtSecret(configured: string | undefined, isProduction: boolean): string {
+  const value = (configured || '').trim();
+
+  if (!value) {
+    if (isProduction) {
+      throw new Error(
+        'JWT_SECRET is not set. Refusing to start in production with a default signing key — ' +
+          'it would sign admin sessions, customer sessions and OTP hashes with a value committed ' +
+          'to this repository. Generate one with `openssl rand -hex 32` and set JWT_SECRET. ' +
+          'Note that changing it signs out every logged-in user.'
+      );
+    }
+    return DEV_JWT_SECRET;
+  }
+
+  // The old committed default, rejected explicitly wherever it turns up. An
+  // operator copying .env.example verbatim must not land back on it.
+  if (value === 'glamirk_luxury_atelier_jwt_secret_2026' || value === DEV_JWT_SECRET) {
+    if (isProduction) {
+      throw new Error(
+        'JWT_SECRET is set to a known public placeholder. Refusing to start in production: ' +
+          'this value appears in the repository, so every session signed with it is forgeable. ' +
+          'Generate a real one with `openssl rand -hex 32`.'
+      );
+    }
+    return DEV_JWT_SECRET;
+  }
+
+  return value;
+}
+
 export const SHIPROCKET_DEFAULT_BASE_URL = 'https://apiv2.shiprocket.in';
 
 /**
@@ -90,10 +150,15 @@ export const env = {
     return required('DATABASE_URL', 'Add your Neon Postgres connection string to .env');
   },
 
-  // Signs both admin and customer tokens. The fallback keeps local development
-  // working without configuration, but a real deployment must set this — the
-  // warning below fires once at boot if it hasn't.
-  jwtSecret: process.env.JWT_SECRET || 'glamirk_luxury_atelier_jwt_secret_2026',
+  /**
+   * Signs admin tokens, customer tokens, and — via OTP_HASH_SECRET's fallback
+   * in otp.service — the stored OTP hashes.
+   *
+   * In production this throws rather than falling back. See resolveJwtSecret.
+   */
+  get jwtSecret(): string {
+    return resolveJwtSecret(process.env.JWT_SECRET, this.isProduction);
+  },
 
   appUrl: process.env.APP_URL && process.env.APP_URL !== 'MY_APP_URL' ? process.env.APP_URL : null,
   cloudinaryUrl: process.env.CLOUDINARY_URL || null,
@@ -286,10 +351,14 @@ export function warnOnWeakConfig(): void {
     console.log(`[config] database: ${target.host} (automatic migrations disabled — ${target.reason})`);
   }
 
-  if (env.isProduction && !process.env.JWT_SECRET) {
+  // In production an unset JWT_SECRET no longer reaches here — resolveJwtSecret
+  // throws before the app can serve anything. This warning is for development,
+  // where the fallback is deliberately still allowed, so nobody mistakes a dev
+  // token for a real one.
+  if (!env.isProduction && !process.env.JWT_SECRET) {
     console.warn(
-      '[config] JWT_SECRET is not set — running on the built-in development fallback. ' +
-        'Set it in .env before serving real customers; every existing session is invalidated when you do.'
+      '[config] JWT_SECRET is not set — signing with the development-only key. ' +
+        'Fine locally; production refuses to start without a real one.'
     );
   }
   if (!env.cloudinaryUrl) {

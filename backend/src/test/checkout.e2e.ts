@@ -38,6 +38,13 @@ if (!isLocal || !looksLikeTestDb) {
   process.exit(1);
 }
 
+// Pinned before any import reads it. dotenv does not override an already-set
+// variable, so this wins over the repo-root .env — otherwise the courier
+// webhook assertions below pass or fail depending on whether the developer
+// running them happens to have a real secret configured.
+const WEBHOOK_KEY = 'test-webhook-secret-do-not-use-anywhere-real';
+process.env.SHIPROCKET_WEBHOOK_SECRET = WEBHOOK_KEY;
+
 import crypto from 'crypto';
 import express from 'express';
 import { createServer, Server } from 'http';
@@ -492,20 +499,20 @@ async function run(): Promise<void> {
   });
 
   const pickedBody = scan('Picked Up', 3, '2026-01-01T10:00:00Z');
-  const picked = await postWebhook('/api/webhooks/shiprocket', pickedBody, { 'x-api-key': 'mock_shiprocket_secret' });
+  const picked = await postWebhook('/api/webhooks/shiprocket', pickedBody, { 'x-api-key': WEBHOOK_KEY });
   check('shipping webhook is accepted', picked.status === 200);
   await waitForWebhookProcessed(shiprocketEventId(awb, 'Picked Up', '2026-01-01T10:00:00Z'));
   check('pickup advances the order to SHIPPED', (await orderRow('ord-online')).status === 'SHIPPED');
 
   const oodBody = scan('Out For Delivery', 17, '2026-01-02T09:00:00Z');
-  await postWebhook('/api/webhooks/shiprocket', oodBody, { 'x-api-key': 'mock_shiprocket_secret' });
+  await postWebhook('/api/webhooks/shiprocket', oodBody, { 'x-api-key': WEBHOOK_KEY });
   await waitForWebhookProcessed(shiprocketEventId(awb, 'Out For Delivery', '2026-01-02T09:00:00Z'));
   const oodRow = await orderRow('ord-online');
   check('out-for-delivery scan updates shipping status', oodRow.shipping_status === 'OUT_FOR_DELIVERY');
   check('out-for-delivery scan updates order status', oodRow.status === 'OUT_FOR_DELIVERY');
 
   const deliveredBody = scan('Delivered', 7, '2026-01-03T14:00:00Z');
-  await postWebhook('/api/webhooks/shiprocket', deliveredBody, { 'x-api-key': 'mock_shiprocket_secret' });
+  await postWebhook('/api/webhooks/shiprocket', deliveredBody, { 'x-api-key': WEBHOOK_KEY });
   await waitForWebhookProcessed(shiprocketEventId(awb, 'Delivered', '2026-01-03T14:00:00Z'));
   const deliveredRow = await orderRow('ord-online');
   check('delivery scan marks the order DELIVERED', deliveredRow.status === 'DELIVERED');
@@ -513,7 +520,7 @@ async function run(): Promise<void> {
 
   // A late out-of-order scan must not un-deliver the order.
   await postWebhook('/api/webhooks/shiprocket', scan('In Transit', 6, '2026-01-04T00:00:00Z'), {
-    'x-api-key': 'mock_shiprocket_secret',
+    'x-api-key': WEBHOOK_KEY,
   });
   await waitForWebhookProcessed(shiprocketEventId(awb, 'In Transit', '2026-01-04T00:00:00Z'));
   check('a late in-transit scan cannot un-deliver the order', (await orderRow('ord-online')).status === 'DELIVERED');

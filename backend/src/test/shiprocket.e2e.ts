@@ -42,6 +42,16 @@ if (!isLocal || !looksLikeTestDb) {
 process.env.INVENTORY_SQL_MODE = 'false';
 process.env.INVENTORY_MIRROR_LEGACY = 'true';
 
+// Pinned, not inherited. dotenv does not override an already-set variable, so
+// setting this here wins over whatever the repo-root .env happens to contain.
+//
+// Without it the suite's result depends on local configuration: with no secret
+// in .env the dev fallback applies and the tests pass, and the moment someone
+// configures a real one every webhook assertion fails with 401. A test that
+// changes verdict based on a developer's untracked file is worse than no test.
+const TEST_WEBHOOK_SECRET = 'test-webhook-secret-do-not-use-anywhere-real';
+process.env.SHIPROCKET_WEBHOOK_SECRET = TEST_WEBHOOK_SECRET;
+
 import express from 'express';
 import { createServer, Server } from 'http';
 import { pool, loadDatabase, saveDatabase, ensureSchema } from '../db/db';
@@ -237,7 +247,7 @@ async function startWebhookServer(): Promise<void> {
 
 async function postWebhook(
   body: unknown,
-  headers: Record<string, string> = { 'x-api-key': DEV_WEBHOOK_SECRET }
+  headers: Record<string, string> = { 'x-api-key': TEST_WEBHOOK_SECRET }
 ): Promise<{ status: number; json: any }> {
   const res = await fetch(`http://127.0.0.1:${webhookPort}/api/webhooks/shiprocket`, {
     method: 'POST',
@@ -856,7 +866,7 @@ async function testWebhookAuth(): Promise<void> {
   check('an invalid x-api-key is rejected with 401', wrong.status === 401, `got ${wrong.status}`);
 
   // Same length as the real key, to prove the comparison is not a length check.
-  const sameLength = await postWebhook(body, { 'x-api-key': 'x'.repeat(DEV_WEBHOOK_SECRET.length) });
+  const sameLength = await postWebhook(body, { 'x-api-key': 'x'.repeat(TEST_WEBHOOK_SECRET.length) });
   check('a same-length wrong key is still rejected', sameLength.status === 401, `got ${sameLength.status}`);
 
   const empty = await postWebhook(body, { 'x-api-key': '' });
@@ -865,18 +875,41 @@ async function testWebhookAuth(): Promise<void> {
   const valid = await postWebhook(body);
   check('a valid x-api-key is accepted', valid.status === 200, `got ${valid.status}`);
 
-  check('the rejection body leaks nothing about the key', !JSON.stringify(wrong.json).includes(DEV_WEBHOOK_SECRET));
+  check('the rejection body leaks nothing about the key', !JSON.stringify(wrong.json).includes(TEST_WEBHOOK_SECRET));
+
+  // Both configured paths reach the same handler. The /courier path is the one
+  // given to Shiprocket, because their form refuses a URL containing their own
+  // name; /shiprocket is kept so an already-configured integration keeps working.
+  for (const path of ['/api/webhooks/courier', '/api/webhooks/shiprocket']) {
+    const res = await fetch(`http://127.0.0.1:${webhookPort}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': TEST_WEBHOOK_SECRET },
+      body: JSON.stringify(webhookPayload({ awb: '70000000001', channel_order_id: 'GLM-NO-SUCH' })),
+    });
+    check(`${path} is served`, res.status === 200, `got ${res.status}`);
+    const unauth = await fetch(`http://127.0.0.1:${webhookPort}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    check(`${path} rejects a missing key`, unauth.status === 401, `got ${unauth.status}`);
+  }
 
   // --- the unit-level guarantees -----------------------------------------
   check('verify rejects undefined', verifyShiprocketWebhook(undefined) === false);
   check('verify rejects null', verifyShiprocketWebhook(null) === false);
-  check('verify accepts the configured dev key outside production', verifyShiprocketWebhook(DEV_WEBHOOK_SECRET) === true);
+  check('the configured secret is accepted', verifyShiprocketWebhook(TEST_WEBHOOK_SECRET) === true);
 
   // A configured secret must take precedence over the dev fallback.
-  process.env.SHIPROCKET_WEBHOOK_SECRET = 'a-real-configured-secret-value';
-  check('a configured secret is used', verifyShiprocketWebhook('a-real-configured-secret-value') === true);
-  check('the dev fallback stops working once a secret is configured', verifyShiprocketWebhook(DEV_WEBHOOK_SECRET) === false);
+  check('the dev fallback does NOT work while a secret is configured', verifyShiprocketWebhook(DEV_WEBHOOK_SECRET) === false);
+
+  // ...and the fallback only applies when nothing at all is configured.
+  // env.shiprocket.webhookSecret is a getter, so this takes effect immediately.
   delete process.env.SHIPROCKET_WEBHOOK_SECRET;
+  check('with nothing configured, the dev key works outside production', verifyShiprocketWebhook(DEV_WEBHOOK_SECRET) === true);
+  check('...and a wrong key still does not', verifyShiprocketWebhook('nope') === false);
+  process.env.SHIPROCKET_WEBHOOK_SECRET = TEST_WEBHOOK_SECRET;
+  check('restoring the configured secret restores it', verifyShiprocketWebhook(TEST_WEBHOOK_SECRET) === true);
 
   // The security fix: in production, an unconfigured secret must fail closed
   // rather than silently accepting a constant that lives in this repository.
@@ -1130,9 +1163,9 @@ async function testWebhookProcessing(): Promise<void> {
   check('the order was NOT delivered on a contradictory identifier', notDelivered.status !== 'DELIVERED');
 
   // --- malformed payload --------------------------------------------------
-  const malformed = await postWebhook('{ this is not json', { 'x-api-key': DEV_WEBHOOK_SECRET });
+  const malformed = await postWebhook('{ this is not json', { 'x-api-key': TEST_WEBHOOK_SECRET });
   check('a malformed body returns 400', malformed.status === 400, `got ${malformed.status}`);
-  const notAnObject = await postWebhook('"a string"', { 'x-api-key': DEV_WEBHOOK_SECRET });
+  const notAnObject = await postWebhook('"a string"', { 'x-api-key': TEST_WEBHOOK_SECRET });
   check('a JSON body that is not an object returns 400', notAnObject.status === 400, `got ${notAnObject.status}`);
 }
 
@@ -1309,7 +1342,8 @@ async function testSecurity(): Promise<void> {
   // address the courier was given. What must NOT be there is anything secret.
   const stored = await pool.query(`SELECT payload::text AS p FROM webhook_events WHERE source = 'shiprocket' LIMIT 20`);
   const allPayloads = stored.rows.map((r) => r.p).join(' ');
-  check('no webhook secret was persisted into webhook_events', !allPayloads.includes(DEV_WEBHOOK_SECRET));
+  check('no webhook secret was persisted into webhook_events', !allPayloads.includes(TEST_WEBHOOK_SECRET));
+  check('nor the dev fallback constant', !allPayloads.includes(DEV_WEBHOOK_SECRET));
   check('no bearer token was persisted into webhook_events', !/eyJ[A-Za-z0-9_-]{8,}\./.test(allPayloads));
 
   const errors = await pool.query(`SELECT COALESCE(last_error,'') AS e FROM shipments`);

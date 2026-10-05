@@ -359,8 +359,22 @@ async function resolveShiprocketOrder(payload: ShiprocketWebhookPayload): Promis
  * line each. The ceiling is high enough that a genuine burst of courier scans
  * across many parcels passes untouched.
  */
+/**
+ * Both paths serve the same handler.
+ *
+ * Shiprocket's own webhook form asks you not to put the words "shiprocket",
+ * "kartrocket", "sr" or "kr" in the URL you give it — it is validated at their
+ * end, so the obvious path is the one path that may be refused. `/courier` is
+ * the address to configure.
+ *
+ * `/shiprocket` is kept and still works: it is what the tests, the docs and
+ * any already-configured integration use, and removing a webhook URL that
+ * something might still be calling is how deliveries get silently dropped.
+ */
+export const SHIPROCKET_WEBHOOK_PATHS = ['/webhooks/courier', '/webhooks/shiprocket'];
+
 router.post(
-  '/webhooks/shiprocket',
+  SHIPROCKET_WEBHOOK_PATHS,
   rateLimit({
     windowMs: 60 * 1000,
     max: 600,

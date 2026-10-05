@@ -12,6 +12,7 @@
 
 import { pool, ensureSchema, loadDatabase, saveDatabase } from './db';
 import { env } from '../config/env';
+import { maskConnectionString } from '../config/databaseTarget';
 import { hasSellableStock, enumerateStockUnits } from '@glamirk/shared/utils/productVariant';
 // The invariants live in the service so this tool and the running server
 // check exactly the same things.
@@ -20,8 +21,17 @@ import { runInventoryHealthChecks } from '../services/inventory.service';
 const command = process.argv[2];
 const confirmed = process.argv.includes('--confirm');
 
+/**
+ * The target, safe to print.
+ *
+ * Uses the shared masker rather than a local regex: the previous one replaced
+ * only the password, leaving the database username in every line of output
+ * these commands produce. That output gets pasted into tickets and chat logs,
+ * so it masks the whole credential pair and keeps just the host — enough to
+ * confirm you are pointed at the right database, and nothing more.
+ */
 function maskedTarget(): string {
-  return (process.env.DATABASE_URL || '(unset)').replace(/:[^:@/]+@/, ':***@');
+  return maskConnectionString(process.env.DATABASE_URL || '');
 }
 
 // ------------------------------------------
@@ -187,6 +197,244 @@ async function repairFlags(): Promise<number> {
   await saveDatabase(db);
 
   console.log(`\nRepaired ${ids.size} product(s). They are buyable again.\n`);
+  return 0;
+}
+
+// ------------------------------------------
+// mirror-check
+// ------------------------------------------
+
+/**
+ * Proves that ONE order wrote to both inventory stores.
+ *
+ * `verify` compares legacy and SQL in aggregate, which is the right check
+ * before a cutover but the wrong one after a deploy: two stores can agree in
+ * total while a specific order wrote to only one of them, because an equal and
+ * opposite error elsewhere hides it. That is precisely the failure mode the
+ * mirror fix addressed — cancelling an order moved legacy and left SQL
+ * untouched — and an aggregate total would not have caught it on day one.
+ *
+ * So this walks a single order's lines and asks, per line:
+ *
+ *   - did SQL record a reservation (or a sale) of exactly the ordered quantity?
+ *   - is there an inventory_transactions row attributing the movement to it?
+ *   - does the legacy document agree with SQL for that same unit?
+ *
+ * Read-only. Never writes, never repairs.
+ *
+ * Usage:
+ *   tsx src/db/cli-inventory.ts mirror-check            (newest order)
+ *   tsx src/db/cli-inventory.ts mirror-check GLM1234567 (a specific one)
+ */
+async function mirrorCheck(orderNumber?: string): Promise<number> {
+  const orderRes = orderNumber
+    ? await pool.query(
+        `SELECT id, order_number, status, payment_method, payment_status, shipping_status,
+                stock_committed, stock_restored, created_at
+         FROM orders WHERE order_number = $1`,
+        [orderNumber]
+      )
+    : await pool.query(
+        `SELECT id, order_number, status, payment_method, payment_status, shipping_status,
+                stock_committed, stock_restored, created_at
+         FROM orders ORDER BY created_at DESC LIMIT 1`
+      );
+
+  const order = orderRes.rows[0];
+  if (!order) {
+    console.log(orderNumber ? `\nNo order ${orderNumber}.\n` : '\nThere are no orders yet.\n');
+    return 1;
+  }
+
+  console.log('\nInventory mirror check — one order');
+  console.log('='.repeat(72));
+  console.log(`  target  ${maskedTarget()}`);
+  console.log('='.repeat(72));
+  console.log(`  order           ${order.order_number}  (${order.id})`);
+  console.log(`  placed          ${new Date(order.created_at).toISOString()}`);
+  console.log(`  status          ${order.status} · ${order.payment_method}/${order.payment_status} · ${order.shipping_status || '-'}`);
+  console.log(`  stock flags     committed ${order.stock_committed} · restored ${order.stock_restored}`);
+
+  // An order placed before SQL inventory existed cannot be expected to have
+  // written to it. Migration 012 created the tables and backfilled them from
+  // the catalogue as it stood at that moment; it did not reconstruct history.
+  // Reporting such an order as a mirror failure would be noise, and worse,
+  // would train whoever runs this to ignore a real failure later.
+  const sqlEpochRes = await pool.query<{ applied_at: Date }>(
+    `SELECT applied_at FROM schema_migrations WHERE version LIKE '012%' LIMIT 1`
+  );
+  const sqlEpoch = sqlEpochRes.rows[0]?.applied_at || null;
+  const predatesSql = sqlEpoch !== null && new Date(order.created_at) < new Date(sqlEpoch);
+  if (predatesSql) {
+    console.log(`\n  NOTE: this order predates SQL inventory (012 applied ${new Date(sqlEpoch).toISOString()}).`);
+    console.log('        Missing SQL rows below are historical, not mirror failures.');
+    console.log('        Run this against an order placed after the mirror deploy instead.');
+  }
+
+  // order_items calls the size `selected_size`; inventory calls the same thing
+  // `size_label`. Aliased here so the comparison below reads in one vocabulary.
+  const items = await pool.query(
+    `SELECT product_id, product_name, variant_id, selected_size AS size_label, quantity
+     FROM order_items WHERE order_id = $1 ORDER BY product_id`,
+    [order.id]
+  );
+  if (items.rows.length === 0) {
+    console.log('\n  This order has no line items.\n');
+    return 1;
+  }
+
+  // Legacy stock for the products on this order, read with a plain SELECT —
+  // never loadDatabase(), for the reason documented on findFlagMismatches().
+  const productIds = [...new Set(items.rows.map((i) => i.product_id))];
+  const legacyRes = await pool.query<{ product: any }>(
+    `SELECT p AS product
+     FROM cms_state s, LATERAL jsonb_array_elements(s.data->'products') AS p
+     WHERE s.id = 'main' AND (p->>'id') = ANY($1::text[])`,
+    [productIds]
+  );
+  const legacyById = new Map<string, any>(legacyRes.rows.map((r) => [r.product.id, r.product]));
+
+  let problems = 0;
+  let warnings = 0;
+  const note = (ok: boolean, text: string) => {
+    if (!ok) problems++;
+    console.log(`      ${ok ? 'OK  ' : 'FAIL'}  ${text}`);
+  };
+  /** A condition that is known, tracked elsewhere, and not a mirror defect —
+   * a historical order, or a product deleted from the catalogue after the
+   * fact. Reported, but it does not fail the run. */
+  const warn = (text: string) => {
+    warnings++;
+    console.log(`      WARN  ${text}`);
+  };
+
+  console.log(`\n  ${items.rows.length} line(s):`);
+  for (const item of items.rows) {
+    const unit = `${item.variant_id || '-'}/${item.size_label || '-'}`;
+    console.log(`\n    ${item.product_name}  [${item.product_id} ${unit}] ×${item.quantity}`);
+
+    const invRes = await pool.query(
+      `SELECT id, available_stock, reserved_stock, sold_stock
+       FROM inventory
+       WHERE product_id = $1
+         AND COALESCE(variant_id, '') = COALESCE($2, '')
+         AND COALESCE(size_label, '') = COALESCE($3, '')`,
+      [item.product_id, item.variant_id, item.size_label]
+    );
+    const inv = invRes.rows[0];
+    if (!inv) {
+      // Two benign reasons for a missing row, and one real one.
+      const stillInCatalogue = legacyById.has(item.product_id);
+      if (predatesSql) {
+        warn('no SQL inventory row — order predates SQL inventory');
+      } else if (!stillInCatalogue) {
+        // Same condition the health check reports as a WARNING; it is tracked
+        // there and does not belong in this command's verdict too.
+        warn('no SQL inventory row — product has been deleted from the catalogue');
+      } else {
+        note(false, 'no SQL inventory row for this unit, yet the product is still in the catalogue');
+      }
+      continue;
+    }
+    console.log(`      SQL   available ${inv.available_stock} · reserved ${inv.reserved_stock} · sold ${inv.sold_stock}`);
+
+    const resv = await pool.query(
+      `SELECT status, quantity FROM inventory_reservations
+       WHERE order_id = $1 AND inventory_id = $2 ORDER BY created_at`,
+      [order.id, inv.id]
+    );
+    const active = resv.rows.filter((r) => r.status === 'ACTIVE');
+    const activeQty = active.reduce((n, r) => n + Number(r.quantity), 0);
+    const consumed = resv.rows.filter((r) => r.status === 'CONSUMED');
+    const released = resv.rows.filter((r) => r.status === 'RELEASED');
+    console.log(
+      `      reservations  ACTIVE ${activeQty} · CONSUMED ${consumed.length} · RELEASED ${released.length}`
+    );
+
+    // What SQL *should* show depends on where the order is in its lifecycle.
+    // These are the same three states the fulfilment service moves between.
+    const isRestored = order.stock_restored === true;
+    const isDelivered = order.shipping_status === 'DELIVERED' || order.status === 'DELIVERED';
+
+    if (isRestored) {
+      note(activeQty === 0, `cancelled/returned order holds no ACTIVE reservation (holds ${activeQty})`);
+      note(released.length > 0 || resv.rows.length === 0, 'the reservation was released rather than abandoned');
+    } else if (isDelivered) {
+      note(activeQty === 0, `delivered order holds no ACTIVE reservation (holds ${activeQty})`);
+      note(consumed.length > 0, 'the reservation was consumed into sold stock');
+    } else if (order.stock_committed) {
+      // The live case: an in-flight order must be holding exactly its quantity.
+      note(
+        activeQty === Number(item.quantity),
+        `in-flight order holds an ACTIVE reservation of ${item.quantity} (holds ${activeQty})`
+      );
+    } else {
+      console.log('      --    stock not committed yet; nothing should be reserved');
+      note(activeQty === 0, `uncommitted order holds no reservation (holds ${activeQty})`);
+    }
+
+    const txns = await pool.query(
+      `SELECT operation, quantity FROM inventory_transactions
+       WHERE order_id = $1 AND inventory_id = $2 ORDER BY created_at`,
+      [order.id, inv.id]
+    );
+    console.log(
+      `      transactions  ${txns.rows.length === 0 ? '(none)' : txns.rows.map((t) => `${t.operation}×${t.quantity}`).join(', ')}`
+    );
+    if (order.stock_committed) {
+      note(txns.rows.length > 0, 'the SQL movement is attributed to this order in inventory_transactions');
+      // Idempotency: one movement per operation, never two for one order.
+      const dupes = txns.rows
+        .map((t) => t.operation)
+        .filter((op, i, all) => all.indexOf(op) !== i);
+      note(dupes.length === 0, `no duplicate transaction records${dupes.length ? ` (repeated: ${[...new Set(dupes)].join(', ')})` : ''}`);
+    }
+
+    // The mirror question itself: does the legacy document agree with SQL for
+    // this exact unit?
+    const product = legacyById.get(item.product_id);
+    if (!product) {
+      warn('product is no longer in the legacy catalogue, so the stores cannot be compared');
+      continue;
+    }
+    const legacyUnit = enumerateStockUnits(product).find(
+      (u) => (u.variantId || '') === (item.variant_id || '') && (u.sizeLabel || '') === (item.size_label || '')
+    );
+    const legacyStock = legacyUnit ? Number(legacyUnit.stock) : Number(product.stock) || 0;
+    console.log(`      legacy  stock ${legacyStock}`);
+    // Phrased as a comparison rather than a claim, so the line reads correctly
+    // under both the OK and the FAIL prefix.
+    note(
+      legacyStock === Number(inv.available_stock),
+      `legacy ${legacyStock} vs SQL available ${inv.available_stock}` +
+        (legacyStock === Number(inv.available_stock) ? ' — agree' : ` — DRIFT of ${legacyStock - Number(inv.available_stock)}`)
+    );
+  }
+
+  // The aggregate picture too, so one command answers both questions.
+  const totals = await pool.query(
+    `SELECT COALESCE(SUM(available_stock),0)::int a, COALESCE(SUM(reserved_stock),0)::int r,
+            COALESCE(SUM(sold_stock),0)::int s FROM inventory`
+  );
+  console.log(
+    `\n  overall SQL totals  available ${totals.rows[0].a} · reserved ${totals.rows[0].r} · sold ${totals.rows[0].s}`
+  );
+
+  console.log('='.repeat(72));
+  if (problems > 0) {
+    console.log(`  RESULT: ${problems} problem(s) — see the FAIL lines above\n`);
+    return 1;
+  }
+  if (predatesSql) {
+    console.log(`  RESULT: inconclusive — this order predates SQL inventory (${warnings} warning(s)).`);
+    console.log('          The mirror can only be proven by an order placed after the deploy.\n');
+    return 2;
+  }
+  if (warnings > 0) {
+    console.log(`  RESULT: no mirror failure, but ${warnings} line(s) could not be compared — see WARN above\n`);
+    return 0;
+  }
+  console.log('  RESULT: both stores recorded this order — mirror is working\n');
   return 0;
 }
 
@@ -501,7 +749,7 @@ async function main(): Promise<void> {
   //
   // So `verify` only confirms that migration 012 has already been applied, and
   // says so plainly if it has not.
-  if (command === 'verify' || command === 'health') {
+  if (command === 'verify' || command === 'health' || command === 'mirror-check') {
     const viewExists = await pool.query(
       `SELECT 1 FROM information_schema.views WHERE table_name = 'inventory_migration_check'`
     );
@@ -533,8 +781,13 @@ async function main(): Promise<void> {
     case 'health':
       code = await health();
       break;
+    case 'mirror-check':
+      // Third argument is an optional order number; anything starting with
+      // `--` is a flag, not an order.
+      code = await mirrorCheck(process.argv[3] && !process.argv[3].startsWith('--') ? process.argv[3] : undefined);
+      break;
     default:
-      console.log('\nUsage: tsx src/db/cli-inventory.ts <verify|resync|rollback> [--confirm]\n');
+      console.log('\nUsage: tsx src/db/cli-inventory.ts <verify|health|mirror-check [orderNumber]|resync|rollback|repair-flags> [--confirm]\n');
       code = 1;
   }
 

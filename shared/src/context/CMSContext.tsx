@@ -29,6 +29,8 @@ import {
   CMSJournalSectionCopy,
   CMSFindMyShadeResultsCopy,
   CMSFindMyShadeHero,
+  CMSPersonalizedBeauty,
+  CMSShopMegaMenu,
 } from '../types';
 import { apiFetch, getAdminToken, setAdminAuth, clearAdminAuth, getStoredAdminUser } from '../utils/cmsClient';
 import { getSocket } from '../utils/socket';
@@ -56,6 +58,8 @@ export interface CMSContextType {
   offers: CMSOffer[];
   promoBanners: CMSPromoBannerConfig | null;
   shadeFinderTeaser: CMSShadeFinderTeaser | null;
+  personalizedBeauty: CMSPersonalizedBeauty | null;
+  shopMegaMenu: CMSShopMegaMenu | null;
   journalSectionCopy: CMSJournalSectionCopy | null;
   findMyShadeResultsCopy: CMSFindMyShadeResultsCopy | null;
   findMyShadeHero: CMSFindMyShadeHero | null;
@@ -94,6 +98,8 @@ export interface CMSContextType {
   saveHeroContent: (hero: CMSHeroContent) => Promise<boolean>;
   savePromoBanners: (config: CMSPromoBannerConfig) => Promise<boolean>;
   saveShadeFinderTeaser: (teaser: CMSShadeFinderTeaser) => Promise<boolean>;
+  savePersonalizedBeauty: (data: CMSPersonalizedBeauty) => Promise<boolean>;
+  saveShopMegaMenu: (data: CMSShopMegaMenu) => Promise<boolean>;
   saveJournalSectionCopy: (copy: CMSJournalSectionCopy) => Promise<boolean>;
   saveFindMyShadeResultsCopy: (copy: CMSFindMyShadeResultsCopy) => Promise<boolean>;
   saveFindMyShadeHero: (hero: CMSFindMyShadeHero) => Promise<boolean>;
@@ -200,6 +206,8 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [offers, setOffers] = useState<CMSOffer[]>([]);
   const [promoBanners, setPromoBanners] = useState<CMSPromoBannerConfig | null>(null);
   const [shadeFinderTeaser, setShadeFinderTeaser] = useState<CMSShadeFinderTeaser | null>(null);
+  const [personalizedBeauty, setPersonalizedBeauty] = useState<CMSPersonalizedBeauty | null>(null);
+  const [shopMegaMenu, setShopMegaMenu] = useState<CMSShopMegaMenu | null>(null);
   const [journalSectionCopy, setJournalSectionCopy] = useState<CMSJournalSectionCopy | null>(null);
   const [findMyShadeResultsCopy, setFindMyShadeResultsCopy] = useState<CMSFindMyShadeResultsCopy | null>(null);
   const [findMyShadeHero, setFindMyShadeHero] = useState<CMSFindMyShadeHero | null>(null);
@@ -261,6 +269,8 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (res.data.offers) setOffers(res.data.offers);
         if (res.data.promoBanners) setPromoBanners(res.data.promoBanners);
         if (res.data.shadeFinderTeaser) setShadeFinderTeaser(res.data.shadeFinderTeaser);
+        if (res.data.personalizedBeauty) setPersonalizedBeauty(res.data.personalizedBeauty);
+        if (res.data.shopMegaMenu) setShopMegaMenu(res.data.shopMegaMenu);
         if (res.data.journalSectionCopy) setJournalSectionCopy(res.data.journalSectionCopy);
         if (res.data.findMyShadeResultsCopy) setFindMyShadeResultsCopy(res.data.findMyShadeResultsCopy);
         if (res.data.findMyShadeHero) setFindMyShadeHero(res.data.findMyShadeHero);
@@ -517,6 +527,26 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
+  // [Glamik CMS] 2026-10-03 — save hooks for the Personalized Beauty & Shop
+  // mega-menu sections (Shade Intelligence reuses saveShadeFinderTeaser).
+  const savePersonalizedBeauty = async (data: CMSPersonalizedBeauty): Promise<boolean> => {
+    const res = await apiFetch('/api/admin/personalized-beauty', { method: 'PUT', body: JSON.stringify(data) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
+  const saveShopMegaMenu = async (data: CMSShopMegaMenu): Promise<boolean> => {
+    const res = await apiFetch('/api/admin/shop-mega-menu', { method: 'PUT', body: JSON.stringify(data) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
   const saveJournalSectionCopy = async (copy: CMSJournalSectionCopy): Promise<boolean> => {
     const res = await apiFetch('/api/admin/journal-section-copy', { method: 'PUT', body: JSON.stringify(copy) });
     if (res.status < 400) {
@@ -748,6 +778,8 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     offers,
     promoBanners,
     shadeFinderTeaser,
+    personalizedBeauty,
+    shopMegaMenu,
     journalSectionCopy,
     findMyShadeResultsCopy,
     findMyShadeHero,
@@ -780,6 +812,8 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     saveHeroContent,
     savePromoBanners,
     saveShadeFinderTeaser,
+    savePersonalizedBeauty,
+    saveShopMegaMenu,
     saveJournalSectionCopy,
     saveFindMyShadeResultsCopy,
     saveFindMyShadeHero,

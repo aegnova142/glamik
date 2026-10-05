@@ -30,6 +30,8 @@ import {
   CMSJournalSectionCopy,
   CMSFindMyShadeResultsCopy,
   CMSFindMyShadeHero,
+  CMSPersonalizedBeauty,
+  CMSShopMegaMenu,
   Product,
   JournalArticle,
   SupportFaq,
@@ -1106,6 +1108,300 @@ export function getInitialDatabase(): InternalCMSDatabaseSchema {
         visual: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=800&q=85',
       },
     ],
+    // [Glamik CMS] 2026-10-03 — Find Your Perfect Match: look-types + 16-cell
+    // (4 undertones × 4 look-types) matrix. "before" seed URL fixed 2026-10-05.
+    highlight: 'Perfect Match',
+    chooseLabel: "Choose what you're looking for:",
+    lookTypes: [
+      { id: 'lip-shade', name: 'Lip Shade', description: 'Find your signature lip colour.', iconUrl: '', sortOrder: 0, isActive: true },
+      { id: 'sindoor-shade', name: 'Sindoor Shade', description: 'Ceremonial sindoor matched to your tone.', iconUrl: '', sortOrder: 1, isActive: true },
+      { id: 'complete-look', name: 'Complete Look', description: 'A coordinated lip + sindoor edit.', iconUrl: '', sortOrder: 2, isActive: true },
+      { id: 'occasion-based', name: 'Occasion Based', description: 'Looks tuned to the moment.', iconUrl: '', sortOrder: 3, isActive: true },
+    ],
+    // 16 cells (4 undertones × 4 look types) computed from the profiles above.
+    // Seed uses a shared neutral "before" and each profile's visual as "after"
+    // so the slider shows a real difference; admins upload real pairs later.
+    configs: (() => {
+      const beforeSeed = 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=85';
+      const undertones = [
+        { id: 'warm', title: 'Warm & Golden', description: 'Your skin glows with golden, peachy, or caramel undertones. Rich terracotta, toasted cinnamon, and spiced rose create radiant warmth.', lip: 'Spice Velvet & Nude Suede', sindoor: 'Ceremonial Scarlet', swatchHexes: ['#C9972B', '#E8D5A8', '#F05A7E'], visual: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=85' },
+        { id: 'neutral', title: 'Balanced Neutral', description: 'A harmonious balance of warm and cool notes. You can effortlessly carry dusty rose, classic ruby, and muted crimson pigments.', lip: 'Royal Rose & Crimson Sovereign', sindoor: 'Ceremonial Scarlet & Heritage Maroon', swatchHexes: ['#F05A7E', '#171717', '#F05A7E'], visual: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=85' },
+        { id: 'cool', title: 'Cool & Roseate', description: 'Hints of blue, pink, or deep berry undertones. Deep berry wines, blue-based red lips, and heritage maroon sindoor illuminate your complexion.', lip: 'Plum Opulence & Crimson Sovereign', sindoor: 'Heritage Maroon', swatchHexes: ['#9B2D4F', '#171717', '#C23B63'], visual: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?auto=format&fit=crop&w=800&q=85' },
+        { id: 'olive', title: 'Olive & Earthy', description: 'Subtle greenish-gold or neutral undertones that require depth. Earthy terracottas, toasted nudes, and opulent scarlet create striking definition.', lip: 'Spice Velvet & Plum Opulence', sindoor: 'Ceremonial Scarlet', swatchHexes: ['#8A7B2B', '#121212', '#F05A7E'], visual: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=800&q=85' },
+      ];
+      const looks = [
+        { id: 'lip-shade', primaryLabel: 'Lip', secondaryLabel: 'Sindoor', kind: 'lip' as const },
+        { id: 'sindoor-shade', primaryLabel: 'Sindoor', secondaryLabel: 'Lip', kind: 'sindoor' as const },
+        { id: 'complete-look', primaryLabel: 'Lip', secondaryLabel: 'Sindoor', kind: 'complete' as const },
+        { id: 'occasion-based', primaryLabel: 'Occasion', secondaryLabel: 'Pairing', kind: 'occasion' as const },
+      ];
+      return undertones.flatMap((u) =>
+        looks.map((lt) => ({
+          undertoneId: u.id,
+          lookTypeId: lt.id,
+          matchTitle: `${u.title} Match`,
+          matchDescription: u.description,
+          primaryLabel: lt.primaryLabel,
+          primary: lt.kind === 'sindoor' ? u.sindoor : u.lip,
+          secondaryLabel: lt.secondaryLabel,
+          secondary: lt.kind === 'sindoor' ? u.lip : u.sindoor,
+          beforeImage: beforeSeed,
+          afterImage: u.visual,
+          beforeLabel: 'Before',
+          afterLabel: 'After',
+          visualTitle: `${u.title} Spectrum`,
+          ctaLabel: '',
+          ctaUrl: '',
+          swatches: u.swatchHexes.map((c) => ({ color: c })),
+          isActive: true,
+        }))
+      );
+    })(),
+  };
+
+  // [Glamik CMS] 2026-10-03 — seed for the homepage Personalized Beauty section.
+  const initialPersonalizedBeauty: CMSPersonalizedBeauty = {
+    badgeText: 'Intelligent Color Calibration',
+    heading: 'Personalized',
+    headingHighlight: 'Beauty',
+    description:
+      'Formulations engineered precisely for Indian complexions. Select your undertone or take our 30-second AI diagnostic to receive your bespoke shade matches.',
+    stepNumber: '01',
+    stepLabel: 'Step One',
+    selectHeading: 'Select Your Undertone',
+    selectSubtext: 'Choose the undertone that best describes your natural complexion.',
+    aiCtaLabel: 'Start AI Shade Diagnostic',
+    aiCtaUrl: '#shade-finder',
+    matchPreviewLabel: 'Match Preview',
+    formulationHeading: 'Your Personalized Formulation Edit',
+    lipShadeLabel: 'Recommended Lip Shade',
+    pairingLabel: 'Ceremonial Pairing',
+    quizPrompt: 'Want a 4-question lifestyle quiz instead?',
+    quizCtaLabel: 'Take Beauty Quiz',
+    quizCtaUrl: '#beauty-quiz',
+    undertones: [
+      {
+        id: 'warm-golden',
+        name: 'Warm & Golden',
+        description: 'Golden, peachy, or caramel base.',
+        thumbnailUrl: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=400&q=80',
+        accentColor: '#C9972B',
+        tag: 'Best for golden yellow undertones',
+        sortOrder: 0,
+        isActive: true,
+        lipShade: {
+          title: 'Spice Velvet',
+          description: 'Weightless matte liquid pigment formulated with warm terracotta depth.',
+          mediaType: 'image',
+          mediaUrl: 'https://images.unsplash.com/photo-1586495777744-4413f21062fa?auto=format&fit=crop&w=800&q=85',
+          badge: '',
+          ctaLabel: 'Try On In Live AR',
+          ctaUrl: '#shade-finder',
+        },
+        pairing: {
+          title: 'Ceremonial Scarlet',
+          description: 'Enriched with 24K gold micro-shimmer and sacred saffron extract.',
+          mediaType: 'image',
+          mediaUrl: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=800&q=85',
+          badge: 'HERITAGE',
+          ctaLabel: 'View Product Details',
+          ctaUrl: '#',
+        },
+      },
+      {
+        id: 'balanced-neutral',
+        name: 'Balanced Neutral',
+        description: 'Balanced mix of warm & cool nuances.',
+        thumbnailUrl: 'https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?auto=format&fit=crop&w=400&q=80',
+        accentColor: '#C97B63',
+        tag: 'Best for balanced neutral undertones',
+        sortOrder: 1,
+        isActive: true,
+        lipShade: {
+          title: 'Spice Velvet',
+          description: 'Weightless matte liquid pigment formulated with sophisticated neutral pigments.',
+          mediaType: 'image',
+          mediaUrl: 'https://images.unsplash.com/photo-1586495777744-4413f21062fa?auto=format&fit=crop&w=800&q=85',
+          badge: '',
+          ctaLabel: 'Try On In Live AR',
+          ctaUrl: '#shade-finder',
+        },
+        pairing: {
+          title: 'Ceremonial Scarlet',
+          description: 'Enriched with 24K gold micro-shimmer and a refined balanced pigment.',
+          mediaType: 'image',
+          mediaUrl: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=800&q=85',
+          badge: 'HERITAGE',
+          ctaLabel: 'View Product Details',
+          ctaUrl: '#',
+        },
+      },
+      {
+        id: 'cool-roseate',
+        name: 'Cool & Roseate',
+        description: 'Blue, rosy, or deep berry undertones.',
+        thumbnailUrl: 'https://images.unsplash.com/photo-1583241800698-e8ab01830a07?auto=format&fit=crop&w=400&q=80',
+        accentColor: '#9B2D4F',
+        tag: 'Illuminated by rich berry & ruby tones',
+        sortOrder: 2,
+        isActive: true,
+        lipShade: {
+          title: 'Plum Opulence',
+          description: 'Deep berry-wine pigment that illuminates cool, roseate complexions.',
+          mediaType: 'image',
+          mediaUrl: 'https://images.unsplash.com/photo-1631214540553-ff044a3ff1d4?auto=format&fit=crop&w=800&q=85',
+          badge: '',
+          ctaLabel: 'Try On In Live AR',
+          ctaUrl: '#shade-finder',
+        },
+        pairing: {
+          title: 'Heritage Maroon',
+          description: 'A blue-based ceremonial maroon with a refined, long-wear finish.',
+          mediaType: 'image',
+          mediaUrl: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=800&q=85',
+          badge: 'HERITAGE',
+          ctaLabel: 'View Product Details',
+          ctaUrl: '#',
+        },
+      },
+      {
+        id: 'olive-earthy',
+        name: 'Olive & Earthy',
+        description: 'Greenish-gold or neutral earthy depth.',
+        thumbnailUrl: 'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?auto=format&fit=crop&w=400&q=80',
+        accentColor: '#8A7B2B',
+        tag: 'Flourishes with terracotta & rich plums',
+        sortOrder: 3,
+        isActive: true,
+        lipShade: {
+          title: 'Spice Velvet',
+          description: 'Earthy terracotta pigment that adds striking definition to olive depth.',
+          mediaType: 'image',
+          mediaUrl: 'https://images.unsplash.com/photo-1586495777744-4413f21062fa?auto=format&fit=crop&w=800&q=85',
+          badge: '',
+          ctaLabel: 'Try On In Live AR',
+          ctaUrl: '#shade-finder',
+        },
+        pairing: {
+          title: 'Ceremonial Scarlet',
+          description: 'Opulent scarlet with 24K gold micro-shimmer for earthy, neutral depth.',
+          mediaType: 'image',
+          mediaUrl: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=800&q=85',
+          badge: 'HERITAGE',
+          ctaLabel: 'View Product Details',
+          ctaUrl: '#',
+        },
+      },
+    ],
+  };
+
+  // [Glamik CMS] 2026-10-03 — seed for the header Shop mega-menu. (Broken seed
+  // image for Travel Cleanser replaced 2026-10-05 after a link-check pass.)
+  const initialShopMegaMenu: CMSShopMegaMenu = {
+    enabled: true,
+    columns: [
+      {
+        id: 'col-lips-makeup',
+        title: 'Lips & Makeup',
+        iconUrl: '',
+        badge: '8 Shades',
+        badgeEnabled: true,
+        viewAllLabel: 'Explore All Makeup',
+        viewAllUrl: '/shop/makeup',
+        isActive: true,
+        sortOrder: 0,
+        items: [
+          {
+            id: 'item-matte-lip',
+            name: 'Matte Liquid Lipsticks',
+            url: '/shop/makeup/lips',
+            imageUrl: 'https://images.unsplash.com/photo-1586495777744-4413f21062fa?auto=format&fit=crop&w=200&q=80',
+            altText: 'Matte liquid lipstick',
+            badge: 'Bestseller',
+            isActive: true,
+            sortOrder: 0,
+          },
+          {
+            id: 'item-velvet-lip',
+            name: 'Velvet Lip Stains & Liners',
+            url: '/shop/makeup/lips',
+            imageUrl: 'https://images.unsplash.com/photo-1631214540553-ff044a3ff1d4?auto=format&fit=crop&w=200&q=80',
+            altText: 'Velvet lip stain',
+            badge: '',
+            isActive: true,
+            sortOrder: 1,
+          },
+          {
+            id: 'item-sindoor',
+            name: 'Luxury Sindoor',
+            subtitle: 'Scarlet & Maroon',
+            url: '/shop/makeup/face',
+            imageUrl: 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=200&q=80',
+            altText: 'Luxury sindoor',
+            badge: '',
+            isActive: true,
+            sortOrder: 2,
+          },
+        ],
+      },
+      {
+        id: 'col-skin-cleansing',
+        title: 'Skin & Cleansing',
+        iconUrl: '',
+        badge: 'Balm',
+        badgeEnabled: true,
+        viewAllLabel: 'Explore All Skincare',
+        viewAllUrl: '/shop/skin',
+        isActive: true,
+        sortOrder: 1,
+        items: [
+          {
+            id: 'item-balm-50',
+            name: 'Balm To Water Cleanser (50g)',
+            url: '/shop/skin/cleansing',
+            imageUrl: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=200&q=80',
+            altText: 'Balm to water cleanser',
+            badge: 'Hero',
+            isActive: true,
+            sortOrder: 0,
+          },
+          {
+            id: 'item-travel-30',
+            name: 'Travel Cleanser Format (30g)',
+            url: '/shop/skin/cleansing',
+            imageUrl: 'https://images.unsplash.com/photo-1612817288484-6f916006741a?auto=format&fit=crop&w=200&q=80',
+            altText: 'Travel cleanser',
+            badge: '',
+            isActive: true,
+            sortOrder: 1,
+          },
+          {
+            id: 'item-barrier',
+            name: 'Skin Barrier & Ceramide Formulations',
+            url: '/shop/skin',
+            imageUrl: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?auto=format&fit=crop&w=200&q=80',
+            altText: 'Skin barrier formulation',
+            badge: '',
+            isActive: true,
+            sortOrder: 2,
+          },
+        ],
+      },
+    ],
+    promo: {
+      label: 'The Glamirk Atelier',
+      title: 'Tailored for Indian undertones.',
+      description: 'Precision shade matching for warm, neutral, cool, and olive complexions.',
+      mediaType: 'image',
+      mediaUrl: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=800&q=85',
+      posterUrl: '',
+      primaryCtaLabel: 'Shop Entire Catalog',
+      primaryCtaUrl: '/shop',
+      secondaryCtaLabel: 'Start Diagnostic',
+      secondaryCtaUrl: '#find-my-shade',
+      badge: '',
+      isActive: true,
+    },
   };
 
   const initialAuditLogs: CMSAuditLog[] = [
@@ -1147,6 +1443,8 @@ export function getInitialDatabase(): InternalCMSDatabaseSchema {
     journalSectionCopy: initialJournalSectionCopy,
     findMyShadeResultsCopy: initialFindMyShadeResultsCopy,
     findMyShadeHero: initialFindMyShadeHero,
+    personalizedBeauty: initialPersonalizedBeauty,
+    shopMegaMenu: initialShopMegaMenu,
   };
 }
 
@@ -1251,6 +1549,20 @@ export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
       }
       if (!cachedDb.shadeFinderTeaser) {
         cachedDb.shadeFinderTeaser = initial.shadeFinderTeaser;
+      } else {
+        // [Glamik CMS] 2026-10-03 — backfill the look-type matrix onto teasers saved before it existed.
+        if (!cachedDb.shadeFinderTeaser.lookTypes || cachedDb.shadeFinderTeaser.lookTypes.length === 0) {
+          cachedDb.shadeFinderTeaser.lookTypes = initial.shadeFinderTeaser.lookTypes;
+        }
+        if (!cachedDb.shadeFinderTeaser.configs || cachedDb.shadeFinderTeaser.configs.length === 0) {
+          cachedDb.shadeFinderTeaser.configs = initial.shadeFinderTeaser.configs;
+        }
+        if (!cachedDb.shadeFinderTeaser.highlight) {
+          cachedDb.shadeFinderTeaser.highlight = initial.shadeFinderTeaser.highlight;
+        }
+        if (!cachedDb.shadeFinderTeaser.chooseLabel) {
+          cachedDb.shadeFinderTeaser.chooseLabel = initial.shadeFinderTeaser.chooseLabel;
+        }
       }
       if (!cachedDb.journalSectionCopy) {
         cachedDb.journalSectionCopy = initial.journalSectionCopy;
@@ -1260,6 +1572,14 @@ export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
       }
       if (!cachedDb.findMyShadeHero) {
         cachedDb.findMyShadeHero = initial.findMyShadeHero;
+      }
+      // [Glamik CMS] 2026-10-03 — backfill new sections onto existing cms_state
+      // rows (no DB migration: cms_state is a single JSONB document).
+      if (!cachedDb.personalizedBeauty || !cachedDb.personalizedBeauty.undertones?.length) {
+        cachedDb.personalizedBeauty = initial.personalizedBeauty;
+      }
+      if (!cachedDb.shopMegaMenu || !cachedDb.shopMegaMenu.columns?.length) {
+        cachedDb.shopMegaMenu = initial.shopMegaMenu;
       }
       if (!cachedDb.globalSettings.codRules) {
         cachedDb.globalSettings.codRules = initial.globalSettings.codRules;

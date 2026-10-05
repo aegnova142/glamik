@@ -296,6 +296,32 @@ router.get('/cms/content', async (req: Request, res: Response) => {
     benefitsSection: db.benefitsSection,
     promoBanners: db.promoBanners || { enabled: false, banners: [], intervalMs: 4000 },
     shadeFinderTeaser: db.shadeFinderTeaser,
+    // [Glamik CMS] 2026-10-03 — expose Personalized Beauty + Shop mega-menu to
+    // the storefront (active-only, sorted) alongside the existing sections.
+    personalizedBeauty: db.personalizedBeauty
+      ? {
+          ...db.personalizedBeauty,
+          // Only ship active undertones to the storefront, in display order.
+          undertones: (db.personalizedBeauty.undertones || [])
+            .filter((u) => u.isActive !== false)
+            .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+        }
+      : undefined,
+    shopMegaMenu: db.shopMegaMenu
+      ? {
+          ...db.shopMegaMenu,
+          // Ship only active columns/items to the storefront, in order.
+          columns: (db.shopMegaMenu.columns || [])
+            .filter((c) => c.isActive !== false)
+            .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+            .map((c) => ({
+              ...c,
+              items: (c.items || [])
+                .filter((i) => i.isActive !== false)
+                .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+            })),
+        }
+      : undefined,
     journalSectionCopy: db.journalSectionCopy,
     findMyShadeResultsCopy: db.findMyShadeResultsCopy,
     findMyShadeHero: db.findMyShadeHero,
@@ -1588,6 +1614,62 @@ router.put('/admin/promo-banners', requireAdmin, async (req: AuthenticatedReques
 });
 
 // --- Homepage Shade Intelligence Teaser ---
+// [Glamik CMS] 2026-10-03 — admin-only save for the homepage Personalized Beauty section.
+router.put('/admin/personalized-beauty', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const incoming = req.body;
+
+  // Basic server-side validation — never trust the frontend-only admin check.
+  if (!incoming || typeof incoming !== 'object' || !Array.isArray(incoming.undertones)) {
+    return res.status(400).json({ error: 'Invalid Personalized Beauty payload' });
+  }
+  for (const u of incoming.undertones) {
+    if (!u.id || !u.name) {
+      return res.status(400).json({ error: 'Each undertone needs an id and a name' });
+    }
+    for (const card of [u.lipShade, u.pairing]) {
+      if (card && card.mediaType && card.mediaType !== 'image' && card.mediaType !== 'video') {
+        return res.status(400).json({ error: 'mediaType must be "image" or "video"' });
+      }
+    }
+  }
+
+  db.personalizedBeauty = incoming;
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_PERSONALIZED_BEAUTY', 'PERSONALIZED_BEAUTY', 'personalized-beauty-main', 'Homepage Personalized Beauty Section Updated');
+  broadcastEvent('CMS_UPDATE', 'personalizedBeauty', db.personalizedBeauty);
+
+  res.json(db.personalizedBeauty);
+});
+
+// [Glamik CMS] 2026-10-03 — admin-only save for the header Shop mega-menu.
+router.put('/admin/shop-mega-menu', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const incoming = req.body;
+
+  if (!incoming || typeof incoming !== 'object' || !Array.isArray(incoming.columns) || !incoming.promo) {
+    return res.status(400).json({ error: 'Invalid Shop mega-menu payload' });
+  }
+  for (const col of incoming.columns) {
+    if (!col.id || !col.title) {
+      return res.status(400).json({ error: 'Each column needs an id and a title' });
+    }
+    if (!Array.isArray(col.items)) {
+      return res.status(400).json({ error: 'Each column needs an items array' });
+    }
+  }
+  if (incoming.promo.mediaType && incoming.promo.mediaType !== 'image' && incoming.promo.mediaType !== 'video') {
+    return res.status(400).json({ error: 'promo.mediaType must be "image" or "video"' });
+  }
+
+  db.shopMegaMenu = incoming;
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_SHOP_MEGA_MENU', 'SHOP_MEGA_MENU', 'shop-mega-menu-main', 'Header Shop Mega-Menu Updated');
+  broadcastEvent('CMS_UPDATE', 'shopMegaMenu', db.shopMegaMenu);
+
+  res.json(db.shopMegaMenu);
+});
+
 router.put('/admin/shade-finder-teaser', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   const db = await loadDatabase();
   const newTeaser = req.body;

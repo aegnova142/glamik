@@ -61,6 +61,7 @@ import {
   hashBuffer,
   UploadedAsset,
 } from '../services/media.service';
+import { findBrokenShadeImageUrls } from '@glamirk/shared/utils/shadeMatch';
 import { env } from '../config/env';
 import { requireAdmin, AuthenticatedRequest } from '../middleware/requireAdmin';
 import {
@@ -1670,8 +1671,30 @@ router.put('/admin/shade-finder-teaser', requireAdmin, async (req: Authenticated
   const db = await loadDatabase();
   const newTeaser = req.body;
 
+  // Every image field is checked before anything is written. The admin screen
+  // checks the same thing with the same function, but that check lives in a
+  // browser the server does not control — and a broken URL stored here is a
+  // broken image on the homepage, found by a customer rather than by us.
+  //
+  // Only fields someone has actually typed a non-URL into are refused. An
+  // empty field means "not configured yet", which is a legitimate state the
+  // storefront handles and the admin's coverage panel reports.
+  const brokenUrls = findBrokenShadeImageUrls(newTeaser);
+  if (brokenUrls.length) {
+    console.warn(
+      `[shade-intelligence] rejected save from ${req.user?.email || 'unknown admin'}: ${brokenUrls.join('; ')}`
+    );
+    return res.status(400).json({
+      error: 'Some image fields are not usable URLs. Nothing was saved.',
+      details: brokenUrls,
+    });
+  }
+
   // Replaced profile visuals are left alone — see the "Rollback & Cleanup
-  // Timing" policy at the top of this file.
+  // Timing" policy at the top of this file. Removing an image here only
+  // clears the reference; the asset itself stays in the Media Library, where
+  // DELETE /admin/media/:id is the single place that destroys anything and
+  // re-checks at that moment that nothing still points at it.
   db.shadeFinderTeaser = newTeaser;
 
   await saveDatabase(db);

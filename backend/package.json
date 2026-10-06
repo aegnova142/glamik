@@ -20,6 +20,7 @@
     "test:mirror": "tsx src/test/mirror.e2e.ts",
     "test:mediaupload": "tsx src/test/mediaupload.e2e.ts",
     "test:mediauploadapi": "tsx src/test/mediauploadapi.e2e.ts",
+    "test:shadematch": "tsx src/test/shadematch.e2e.ts",
     "inventory:verify": "tsx src/db/cli-inventory.ts verify",
     "inventory:health": "tsx src/db/cli-inventory.ts health",
     "inventory:mirror-check": "tsx src/db/cli-inventory.ts mirror-check",

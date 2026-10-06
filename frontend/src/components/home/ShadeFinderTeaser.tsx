@@ -6,6 +6,7 @@ import { Sparkles, ArrowRight, Droplet, Gift, Smile, Heart } from 'lucide-react'
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { BeforeAfterSlider } from './BeforeAfterSlider';
 import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
+import { resolveShadeMatch } from '@glamirk/shared/utils/shadeMatch';
 
 interface ShadeFinderTeaserProps {
   onOpenShadeFinderModal: () => void;
@@ -28,7 +29,9 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
     () => (shadeFinderTeaser?.lookTypes || []).filter((l) => l.isActive !== false).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
     [shadeFinderTeaser]
   );
-  const configs = shadeFinderTeaser?.configs || [];
+  // The matrix itself is read through resolveShadeMatch rather than here —
+  // the pairing rule it enforces is not something this component should be
+  // reimplementing inline.
 
   const [undertoneId, setUndertoneId] = useState<string>('');
   const [lookTypeId, setLookTypeId] = useState<string>('');
@@ -48,24 +51,16 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
 
   if (!shadeFinderTeaser || profiles.length === 0) return null;
 
-  const profile = profiles.find((p) => p.id === undertoneId) || profiles[0];
-  const config = configs.find((c) => c.undertoneId === profile.id && c.lookTypeId === lookTypeId && c.isActive !== false);
-
-  // Resolve every field with a graceful fallback to the undertone profile.
-  const r = {
-    matchTitle: config?.matchTitle || `${profile.title} Match`,
-    matchDescription: config?.matchDescription || profile.description,
-    primaryLabel: config?.primaryLabel || 'Lip',
-    primary: config?.primary || profile.recommendedLip,
-    secondaryLabel: config?.secondaryLabel || 'Sindoor',
-    secondary: config?.secondary || profile.recommendedSindoor,
-    beforeImage: config?.beforeImage || profile.visual,
-    afterImage: config?.afterImage || profile.visual,
-    beforeLabel: config?.beforeLabel || 'Before',
-    afterLabel: config?.afterLabel || 'After',
-    visualTitle: config?.visualTitle || `${profile.title} Spectrum`,
-    swatches: (config?.swatches?.map((s) => s.color) || profile.swatchHexes || []).filter(Boolean),
-  };
+  // Strict lookup by the selected ids. resolveShadeMatch returns null rather
+  // than substituting a neighbouring profile when `undertoneId` matches
+  // nothing — which happens for a render or two after an admin deletes the
+  // selected undertone, and used to silently show profiles[0]'s photographs
+  // under the deleted shade's heading. Rendering nothing for that one frame
+  // is the correct trade: the effect above re-selects a valid undertone
+  // immediately, and no customer is ever shown another shade's face.
+  const r = resolveShadeMatch(shadeFinderTeaser, undertoneId, lookTypeId);
+  if (!r || !r.profile) return null;
+  const profile = r.profile;
 
   const heading = shadeFinderTeaser.heading;
   const highlight = shadeFinderTeaser.highlight || '';

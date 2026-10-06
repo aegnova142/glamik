@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Save, Check, Plus, Trash2, GripVertical, ImageOff, Eye, EyeOff } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Save, Check, Plus, Trash2, GripVertical, ImageOff, Eye, EyeOff, AlertTriangle, X } from 'lucide-react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { CMSShadeFinderTeaser, CMSShadeUndertoneProfile, CMSShadeLookType, CMSShadeMatchConfig } from '@glamirk/shared/types';
 import { ImageCropUploadModal } from './ImageCropUploadModal';
@@ -7,6 +7,7 @@ import { MediaUploadField } from './MediaUploadField';
 import { useSyncOnce } from '../../hooks/useSyncOnce';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
+import { shadeImageCoverage, findBrokenShadeImageUrls, findSharedShadeImages, isUsableImageUrl } from '@glamirk/shared/utils/shadeMatch';
 
 const DEFAULT_TEASER: CMSShadeFinderTeaser = {
   badgeText: 'Shade Intelligence',
@@ -22,6 +23,8 @@ export const AdminShadeIntelligence: React.FC = () => {
   const [state, setState] = useState<CMSShadeFinderTeaser>(shadeFinderTeaser || DEFAULT_TEASER);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  /** Field-by-field reasons the save was refused, so the admin knows where to look. */
+  const [saveError, setSaveError] = useState<string[] | null>(null);
   const [uploadTarget, setUploadTarget] = useState<number | null>(null);
   const [matrixCell, setMatrixCell] = useState<{ undertoneId: string; lookTypeId: string } | null>(null);
 
@@ -79,13 +82,35 @@ export const AdminShadeIntelligence: React.FC = () => {
     setState((prev) => ({ ...prev, [field]: value }));
   };
 
+  // Which undertone × look-type cells still have no imagery. Recomputed from
+  // the in-progress edit rather than the saved copy, so the admin watches the
+  // gaps close as they upload instead of after a round trip.
+  const coverage = useMemo(() => shadeImageCoverage(state), [state]);
+  // Images one undertone is sharing with another. Reported, never blocked —
+  // see findSharedShadeImages for why this is worth surfacing even though a
+  // fully-populated matrix otherwise looks finished.
+  const sharedImages = useMemo(() => findSharedShadeImages(state), [state]);
+
   const handleSave = async () => {
+    // A field someone has typed a non-URL into is refused here rather than
+    // being saved and discovered later as a broken image on the homepage.
+    // An EMPTY field is not an error — "not configured yet" is a legitimate
+    // state, and the coverage panel above already reports it.
+    const broken = findBrokenShadeImageUrls(state);
+    if (broken.length) {
+      setSaveError(broken);
+      return;
+    }
+    setSaveError(null);
+
     setIsSaving(true);
     const ok = await saveShadeFinderTeaser(state);
     setIsSaving(false);
     if (ok) {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
+    } else {
+      setSaveError(['The server rejected the save. Nothing was changed — please try again.']);
     }
   };
 
@@ -154,6 +179,119 @@ export const AdminShadeIntelligence: React.FC = () => {
           <span>{saveSuccess ? 'Saved Live!' : isSaving ? 'Saving...' : 'Save & Publish Live'}</span>
         </button>
       </div>
+
+      {saveError && (
+        <div className="p-4 rounded-xl bg-[#F05A7E]/10 border border-[#F05A7E]/40 space-y-1.5">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-xs font-bold text-[#F05A7E] uppercase tracking-wider flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" /> Not saved — fix these first
+            </p>
+            <button onClick={() => setSaveError(null)} className="p-0.5 text-[#F05A7E] hover:opacity-70 cursor-pointer" title="Dismiss">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          {saveError.map((msg) => (
+            <p key={msg} className="text-[11px] text-[#F05A7E]/90 pl-5">{msg}</p>
+          ))}
+        </div>
+      )}
+
+      {/* Before/After coverage — which cells a customer would see imagery for. */}
+      {coverage.total > 0 && (
+        <div className="p-6 rounded-2xl bg-[#171717] border border-[#E8D5A8]/25 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h3 className="font-serif text-base text-[#FAF9F6]">Before / After Coverage</h3>
+              <p className="text-xs text-[#6B6B6B] mt-0.5">
+                Every undertone × option the storefront can show a comparison for. A cell with only one
+                image still works — the slider shows that single photo instead of a comparison — but it is
+                usually a half-finished upload.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px] font-mono shrink-0">
+              <span className="text-[#7BD389]">{coverage.complete} complete</span>
+              {coverage.partial > 0 && <span className="text-[#E3B84B]">{coverage.partial} partial</span>}
+              {coverage.missing > 0 && <span className="text-[#F05A7E]">{coverage.missing} empty</span>}
+            </div>
+          </div>
+
+          {sharedImages.length > 0 && (
+            <div className="p-3 rounded-xl bg-[#C9972B]/10 border border-[#C9972B]/40 space-y-2">
+              <p className="text-[11px] font-bold text-[#E3B84B] uppercase tracking-wider flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" /> The same photo is used by more than one undertone
+              </p>
+              <p className="text-[10.5px] text-[#E3B84B]/80">
+                Every slot being filled is not the same as every slot being right. A fresh store ships a
+                stand-in photo in all of these; replace them with real photography per undertone so a
+                customer comparing Warm against Cool is actually seeing two different faces.
+              </p>
+              <div className="space-y-1.5 pt-1">
+                {sharedImages.map((s) => (
+                  <div key={`${s.side}-${s.url}`} className="flex items-center gap-2.5">
+                    <img
+                      src={cloudinaryImageUrl(s.url, 'thumb')}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="w-9 h-11 object-cover rounded border border-[#C9972B]/30 shrink-0"
+                    />
+                    <span className="text-[10.5px] text-[#E3B84B] min-w-0">
+                      <strong>{s.side}</strong> image shared by: {s.undertones.join(', ')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2.5">
+            {coverage.byUndertone.map((group) => (
+              <div key={group.undertoneId} className="p-3 rounded-xl bg-[#0B0B0B] border border-[#E8D5A8]/20">
+                <div className="flex items-center gap-2 mb-2">
+                  {group.cells.every((c) => c.complete) ? (
+                    <Check className="w-3.5 h-3.5 text-[#7BD389] shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-3.5 h-3.5 text-[#E3B84B] shrink-0" />
+                  )}
+                  <span className="text-xs font-bold text-[#FAF9F6]">{group.undertoneTitle}</span>
+                  {/* The id is what the images are actually keyed on, so it is
+                      shown rather than left implicit — a renamed title does not
+                      move anyone's photographs, a changed id would. */}
+                  <code className="text-[10px] text-[#6B6B6B] font-mono">{group.undertoneId}</code>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1.5">
+                  {group.cells.map((cell) => (
+                    <button
+                      key={cell.lookTypeId}
+                      type="button"
+                      onClick={() => setMatrixCell({ undertoneId: cell.undertoneId, lookTypeId: cell.lookTypeId })}
+                      className={`px-2.5 py-2 rounded-lg border text-left transition-colors cursor-pointer hover:border-[#F05A7E] ${
+                        cell.complete
+                          ? 'bg-[#2E7D32]/10 border-[#2E7D32]/40'
+                          : cell.partial
+                          ? 'bg-[#C9972B]/10 border-[#C9972B]/40'
+                          : 'bg-[#0B0B0B] border-[#E8D5A8]/20'
+                      }`}
+                      title={`Edit ${cell.undertoneTitle} × ${cell.lookTypeName}`}
+                    >
+                      <span className="block text-[10.5px] font-semibold text-[#FAF9F6] truncate">{cell.lookTypeName}</span>
+                      <span className="block text-[10px] font-mono mt-0.5">
+                        <span className={cell.hasBefore ? 'text-[#7BD389]' : 'text-[#F05A7E]'}>
+                          Before {cell.hasBefore ? '✓' : '✕'}
+                        </span>
+                        <span className="text-[#6B6B6B]">{'  '}</span>
+                        <span className={cell.hasAfter ? 'text-[#7BD389]' : 'text-[#F05A7E]'}>
+                          After {cell.hasAfter ? '✓' : '✕'}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Section copy */}
       <div className="p-6 rounded-2xl bg-[#171717] border border-[#E8D5A8]/25 space-y-4">
@@ -262,16 +400,27 @@ export const AdminShadeIntelligence: React.FC = () => {
                     {lookTypes.map((lt) => {
                       const cfg = configs.find((c) => c.undertoneId === p.id && c.lookTypeId === lt.id);
                       const isOpen = matrixCell?.undertoneId === p.id && matrixCell?.lookTypeId === lt.id;
-                      const configured = cfg && (cfg.beforeImage || cfg.afterImage || cfg.matchTitle);
+                      // Judged on IMAGES, not on any field being filled in.
+                      // This used to count `matchTitle` too, so a cell with
+                      // copy and no photographs showed a green tick — exactly
+                      // the cell an admin most needs to notice.
+                      const hasBefore = isUsableImageUrl(cfg?.beforeImage);
+                      const hasAfter = isUsableImageUrl(cfg?.afterImage);
+                      const tone = hasBefore && hasAfter
+                        ? 'border-[#2E7D32]/40 text-[#7BD389]'
+                        : hasBefore || hasAfter
+                        ? 'border-[#C9972B]/40 text-[#E3B84B]'
+                        : 'border-[#E8D5A8]/30 text-[#6B6B6B]';
                       return (
                         <td key={lt.id} className="p-1.5">
                           <button
                             onClick={() => setMatrixCell(isOpen ? null : { undertoneId: p.id, lookTypeId: lt.id })}
-                            className={`w-full px-2 py-2 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
-                              isOpen ? 'bg-[#F05A7E] border-[#F05A7E] text-white' : configured ? 'bg-[#0B0B0B] border-[#2E7D32]/40 text-[#7BD389] hover:border-[#F05A7E]' : 'bg-[#0B0B0B] border-[#E8D5A8]/30 text-[#6B6B6B] hover:border-[#F05A7E]'
+                            title={`Before ${hasBefore ? 'set' : 'missing'} · After ${hasAfter ? 'set' : 'missing'}`}
+                            className={`w-full px-2 py-2 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer hover:border-[#F05A7E] ${
+                              isOpen ? 'bg-[#F05A7E] border-[#F05A7E] text-white' : `bg-[#0B0B0B] ${tone}`
                             }`}
                           >
-                            {isOpen ? 'Editing' : configured ? 'Edit ✓' : 'Edit'}
+                            {isOpen ? 'Editing' : hasBefore && hasAfter ? 'Edit ✓' : hasBefore || hasAfter ? 'Edit ⚠' : 'Edit'}
                           </button>
                         </td>
                       );
@@ -292,9 +441,19 @@ export const AdminShadeIntelligence: React.FC = () => {
             const swatches = cfg.swatches || [];
             return (
               <div className="p-5 rounded-xl bg-[#0B0B0B] border border-[#F05A7E]/40 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-bold text-[#FAF9F6] uppercase tracking-wider">{p.title} × {lt.name}</h4>
-                  <button onClick={() => updateConfig(matrixCell.undertoneId, matrixCell.lookTypeId, { isActive: !cfg.isActive })} className={`px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 border cursor-pointer ${cfg.isActive ? 'bg-[#2E7D32]/20 border-[#2E7D32]/40 text-[#7BD389]' : 'bg-[#171717] border-[#E8D5A8]/30 text-[#6B6B6B]'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-bold text-[#FAF9F6] uppercase tracking-wider">{p.title} × {lt.name}</h4>
+                    {/* The identity the images are actually stored against.
+                        Shown because the pair of ids — not the titles, and not
+                        the row position — is what the storefront looks up. */}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono text-[#6B6B6B]">
+                      <span>undertone: <span className="text-[#E8D5A8]">{p.id}</span></span>
+                      <span>look: <span className="text-[#E8D5A8]">{lt.id}</span></span>
+                      <span>pill: <span className="text-[#E8D5A8]">{p.label}</span></span>
+                    </div>
+                  </div>
+                  <button onClick={() => updateConfig(matrixCell.undertoneId, matrixCell.lookTypeId, { isActive: !cfg.isActive })} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 border cursor-pointer ${cfg.isActive ? 'bg-[#2E7D32]/20 border-[#2E7D32]/40 text-[#7BD389]' : 'bg-[#171717] border-[#E8D5A8]/30 text-[#6B6B6B]'}`}>
                     {cfg.isActive ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}{cfg.isActive ? 'Active' : 'Hidden'}
                   </button>
                 </div>
@@ -333,16 +492,53 @@ export const AdminShadeIntelligence: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-[#E8D5A8]/15">
-                  <div className="space-y-2">
-                    <MediaUploadField kind="image" label="Before Image" value={cfg.beforeImage || ''} onChange={(url) => up({ beforeImage: url })} />
-                    <input type="text" value={cfg.beforeLabel || ''} onChange={(e) => up({ beforeLabel: e.target.value })} placeholder="Before label (e.g. Original)" className={inputClass} />
-                    {cfg.beforeImage && <img src={cloudinaryImageUrl(cfg.beforeImage, 'thumb')} alt="" className="w-full h-28 object-cover rounded-lg border border-[#E8D5A8]/20" />}
-                  </div>
-                  <div className="space-y-2">
-                    <MediaUploadField kind="image" label="After Image" value={cfg.afterImage || ''} onChange={(url) => up({ afterImage: url })} />
-                    <input type="text" value={cfg.afterLabel || ''} onChange={(e) => up({ afterLabel: e.target.value })} placeholder="After label (e.g. Matched)" className={inputClass} />
-                    {cfg.afterImage && <img src={cloudinaryImageUrl(cfg.afterImage, 'thumb')} alt="" className="w-full h-28 object-cover rounded-lg border border-[#E8D5A8]/20" />}
-                  </div>
+                  {/* Both sides render identically; only the field they write
+                      to differs. Kept as one mapped block so the Before and
+                      After controls can never drift apart. */}
+                  {([
+                    { side: 'Before', url: cfg.beforeImage, label: cfg.beforeLabel, setUrl: (u: string) => up({ beforeImage: u }), setLabel: (v: string) => up({ beforeLabel: v }), placeholder: 'Before label (e.g. Original)' },
+                    { side: 'After', url: cfg.afterImage, label: cfg.afterLabel, setUrl: (u: string) => up({ afterImage: u }), setLabel: (v: string) => up({ afterLabel: v }), placeholder: 'After label (e.g. Matched)' },
+                  ] as const).map((f) => {
+                    const set = !!(f.url && f.url.trim());
+                    const valid = isUsableImageUrl(f.url);
+                    return (
+                      <div key={f.side} className="space-y-2">
+                        <MediaUploadField kind="image" label={`${f.side} Image`} value={f.url || ''} onChange={f.setUrl} />
+
+                        {/* Status, stated plainly. "Set but not a usable URL"
+                            is called out separately from "not configured",
+                            because only the first one blocks the save. */}
+                        {!set ? (
+                          <p className="flex items-center gap-1.5 text-[10px] text-[#E3B84B]">
+                            <AlertTriangle className="w-3 h-3 shrink-0" /> {f.side} image not configured
+                          </p>
+                        ) : valid ? (
+                          <p className="flex items-center gap-1.5 text-[10px] text-[#7BD389]">
+                            <Check className="w-3 h-3 shrink-0" /> {f.side} image set
+                          </p>
+                        ) : (
+                          <p className="flex items-center gap-1.5 text-[10px] text-[#F05A7E]">
+                            <AlertTriangle className="w-3 h-3 shrink-0" /> Not a usable image URL — this will block saving
+                          </p>
+                        )}
+
+                        <input type="text" value={f.label || ''} onChange={(e) => f.setLabel(e.target.value)} placeholder={f.placeholder} className={inputClass} />
+
+                        {valid && (
+                          <img
+                            src={cloudinaryImageUrl(f.url, 'thumb')}
+                            alt={`${f.side} preview`}
+                            loading="lazy"
+                            decoding="async"
+                            // object-contain, not cover: a swatch preview that
+                            // silently crops is the one thing an admin must
+                            // not be shown when checking a shade photo.
+                            className="w-full h-28 object-contain bg-[#171717] rounded-lg border border-[#E8D5A8]/20"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Swatches */}

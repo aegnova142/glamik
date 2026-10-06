@@ -37,6 +37,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
+        ADMIN_HOST: 'admin.glamirk.com',
       },
       out_file: './logs/glamirk-out.log',
       error_file: './logs/glamirk-error.log',

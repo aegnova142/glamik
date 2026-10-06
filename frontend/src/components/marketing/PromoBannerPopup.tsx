@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 const SESSION_KEY = 'glamirk_promo_banner_popup_shown';
 const OPEN_DELAY_MS = 800;
@@ -151,10 +152,21 @@ export const PromoBannerPopup: React.FC = () => {
                 — no sequential "flash", and the container never collapses
                 since the in-flow (entering) image still drives its size. */}
             <AnimatePresence mode="popLayout">
+              {/* The popup caps at 1200px, so 'detail' is the right ceiling.
+                  q_auto:best because a promo banner usually carries set type —
+                  the first thing chroma-heavy compression smears. */}
               <motion.img
                 key={current.id}
-                src={current.image}
+                {...responsiveImage(
+                  current.image,
+                  'detail',
+                  '(max-width: 640px) 100vw, (max-width: 1024px) 78vw, 1200px'
+                )}
                 alt={current.altText || 'Promotional offer'}
+                // Opens ~800ms after load, over the page — never a LCP
+                // candidate, so it must not compete with one.
+                loading="lazy"
+                decoding="async"
                 initial={{ opacity: 0, scale: 1.03 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.98 }}

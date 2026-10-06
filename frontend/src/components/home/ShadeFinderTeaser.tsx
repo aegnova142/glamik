@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Sparkles, ArrowRight, Droplet, Gift, Smile, Heart } from 'lucide-react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { BeforeAfterSlider } from './BeforeAfterSlider';
+import { SectionBackground } from './SectionBackground';
 
 interface ShadeFinderTeaserProps {
   onOpenShadeFinderModal: () => void;
@@ -74,13 +75,14 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
 
   return (
     <section id="shade-finder-teaser" className="py-16 lg:py-24 bg-gradient-to-b from-white via-[#FFF6F8] to-white border-b border-[#F0E0E5] relative overflow-hidden">
+      <SectionBackground sectionKey="find-your-match" className="z-[1]" />
       <style>{`
         @keyframes sfFade { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none;} }
         .sf-fade { animation: sfFade .35s ease both; }
         @media (prefers-reduced-motion: reduce) { .sf-fade { animation: none; } }
       `}</style>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="relative z-[2] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
           {/* LEFT */}
           <div className="order-2 lg:order-1">

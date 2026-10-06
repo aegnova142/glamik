@@ -9,6 +9,7 @@ import { BeautyProfile, Product, CMSPersonalizedUndertone, CMSPersonalizedBeauty
 import { GLAMIRK_PRODUCTS } from '@glamirk/shared/data/products';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { BeautyMedia } from './BeautyMedia';
+import { SectionBackground } from './SectionBackground';
 
 interface PersonalizedHomeBannerProps {
   beautyProfile: BeautyProfile | null;
@@ -87,8 +88,9 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
     const recShade = lipstickProduct.shades?.find((s) => s.name === recShadeName) || lipstickProduct.shades?.[0];
 
     return (
-      <section id="personalized-beauty-section" className="py-12 sm:py-16 bg-gradient-to-b from-[#FCE8ED]/60 to-white border-b border-[#E8D5A8]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="personalized-beauty-section" className="relative overflow-hidden py-12 sm:py-16 bg-gradient-to-b from-[#FCE8ED]/60 to-white border-b border-[#E8D5A8]">
+        <SectionBackground sectionKey="personalized-beauty" className="z-[1]" />
+        <div className="relative z-[2] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-white border border-[#E8D5A8] rounded-3xl p-6 sm:p-10 shadow-[0_12px_36px_rgba(240,90,126,0.08)]">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
               
@@ -269,8 +271,9 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
   return (
     <section
       id="personalized-beauty-section"
-      className="py-14 sm:py-20 bg-gradient-to-b from-[#FCE8ED]/50 via-white to-white border-b border-[#E8D5A8]"
+      className="relative overflow-hidden py-14 sm:py-20 bg-gradient-to-b from-[#FCE8ED]/50 via-white to-white border-b border-[#E8D5A8]"
     >
+      <SectionBackground sectionKey="personalized-beauty" className="z-[1]" />
       {/* Keyed fade for the preview content; disabled under reduced-motion. */}
       <style>{`
         @keyframes beautyFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -278,7 +281,7 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
         @media (prefers-reduced-motion: reduce) { .beauty-fade { animation: none; } }
       `}</style>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="relative z-[2] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-14 space-y-3">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-[#FCE8ED] border border-[#E8D5A8] rounded-full shadow-xs">

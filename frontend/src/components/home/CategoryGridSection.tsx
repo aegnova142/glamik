@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SectionBackground } from './SectionBackground';
 import { ArrowRight, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
@@ -85,8 +86,9 @@ export const CategoryGridSection: React.FC<CategoryGridSectionProps> = ({
   const visibleCategories = showAll ? CATEGORIES : CATEGORIES.slice(0, CARDS_PER_ROW);
   const hasMore = CATEGORIES.length > CARDS_PER_ROW;
   return (
-    <section id="shop-by-category-section" className="py-14 sm:py-20 bg-white border-b border-[#E8D5A8]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section id="shop-by-category-section" className="relative overflow-hidden py-14 sm:py-20 bg-white border-b border-[#E8D5A8]">
+      <SectionBackground sectionKey="shop-by-category" className="z-[1]" />
+      <div className="relative z-[2] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* Section Header */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 sm:mb-12 gap-4">

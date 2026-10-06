@@ -59,6 +59,7 @@ import { TrendingDiscovery } from './components/home/TrendingDiscovery';
 import { NotFoundPage } from './components/content/NotFoundPage';
 import { LegalPage } from './components/content/LegalPage';
 import { OfflineBanner } from './components/layout/OfflineBanner';
+import { SectionBackground } from './components/home/SectionBackground';
 
 // CMS Context & Admin Components
 import { CMSProvider, useCMS } from '@glamirk/shared/context/CMSContext';
@@ -1092,22 +1093,26 @@ function AppContent() {
             {/* [Glamik] 2026-10-04 — restyled to match the site's pink "Still have
                 questions?" bar (icon + copy + pill CTA). */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-24">
-              <div className="bg-[#F05A7E] rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-5">
-                <div className="flex items-center gap-4">
-                  <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center shrink-0">
-                    <Sparkles className="w-5 h-5 text-[#F05A7E]" />
+              <div className="relative overflow-hidden bg-[#F05A7E] rounded-2xl p-6 sm:p-8">
+                {/* Admin-managed background (overlays the pink base when configured) */}
+                <SectionBackground sectionKey="bottom-cta" className="z-[1]" />
+                <div className="relative z-[2] flex flex-col sm:flex-row items-center justify-between gap-5">
+                  <div className="flex items-center gap-4">
+                    <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center shrink-0">
+                      <Sparkles className="w-5 h-5 text-[#F05A7E]" />
+                    </div>
+                    <div className="text-center sm:text-left">
+                      <h3 className="text-base font-bold text-white">Unsure about your undertone?</h3>
+                      <p className="text-xs text-white/80">Match your shade with precision across liquid lipsticks and ceremonial sindoor.</p>
+                    </div>
                   </div>
-                  <div className="text-center sm:text-left">
-                    <h3 className="text-base font-bold text-white">Unsure about your undertone?</h3>
-                    <p className="text-xs text-white/80">Match your shade with precision across liquid lipsticks and ceremonial sindoor.</p>
-                  </div>
+                  <button
+                    onClick={navigateToFindMyShade}
+                    className="px-6 py-3 bg-white text-[#F05A7E] text-xs font-bold uppercase tracking-wider rounded-full hover:bg-[#FCE8ED] transition-colors cursor-pointer shrink-0"
+                  >
+                    Find My Shade
+                  </button>
                 </div>
-                <button
-                  onClick={navigateToFindMyShade}
-                  className="px-6 py-3 bg-white text-[#F05A7E] text-xs font-bold uppercase tracking-wider rounded-full hover:bg-[#FCE8ED] transition-colors cursor-pointer shrink-0"
-                >
-                  Find My Shade
-                </button>
               </div>
             </div>
           </div>

@@ -145,7 +145,7 @@ export const BeautyJourneySection: React.FC<BeautyJourneySectionProps> = ({ jour
               STEP {activeIndex + 1}
             </span>
             <h3 className="font-serif text-2xl text-[#121212] mt-2">{activeStep.title}</h3>
-            <p className="text-sm text-[#6B6B6B] mt-3 leading-relaxed">{activeStep.description}</p>
+            <p className="text-sm text-[#524C4C] mt-3 leading-relaxed">{activeStep.description}</p>
             <button
               type="button"
               onClick={onStepAction}
@@ -177,7 +177,7 @@ export const BeautyJourneySection: React.FC<BeautyJourneySectionProps> = ({ jour
               );
             })()}
             <h3 className="text-sm font-extrabold text-[#121212] uppercase tracking-wide">{activeStep.title}</h3>
-            <p className="text-xs text-[#6B6B6B] mt-2 leading-relaxed">{activeStep.description}</p>
+            <p className="text-xs text-[#524C4C] mt-2 leading-relaxed">{activeStep.description}</p>
             <button
               type="button"
               onClick={onStepAction}

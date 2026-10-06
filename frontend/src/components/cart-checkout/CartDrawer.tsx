@@ -78,7 +78,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <h3 className="text-lg font-bold text-[#121212]">
                     Shopping Bag
                   </h3>
-                  <span className="text-xs text-[#6B6B6B]">
+                  <span className="text-xs text-[#524C4C]">
                     {cartItems.reduce((acc, item) => acc + item.quantity, 0)} {cartItems.reduce((acc, item) => acc + item.quantity, 0) === 1 ? 'item' : 'items'}
                   </span>
                 </div>
@@ -95,7 +95,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
             {/* Free Shipping Progress Bar */}
             <div className="bg-[#FCE8ED] px-6 py-3 border-b border-[#E8D5A8]">
-              <div className="flex items-center justify-between text-xs font-semibold text-[#6B6B6B] mb-1.5">
+              <div className="flex items-center justify-between text-xs font-semibold text-[#524C4C] mb-1.5">
                 {remainingForFreeShipping > 0 ? (
                   <span>
                     Add <strong className="text-[#F05A7E]">₹{remainingForFreeShipping}</strong> more for free delivery
@@ -125,7 +125,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <h4 className="text-xl font-bold text-[#121212]">
                     Your bag is empty
                   </h4>
-                  <p className="text-xs text-[#6B6B6B] max-w-xs mx-auto leading-relaxed">
+                  <p className="text-xs text-[#524C4C] max-w-xs mx-auto leading-relaxed">
                     Discover our curated collection of velvet lipsticks, ceremonial sindoor, and melting cleanser rituals.
                   </p>
                   <button
@@ -159,7 +159,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           </h4>
                           <button
                             onClick={() => onRemoveItem(idx)}
-                            className="text-[#6B6B6B] hover:text-[#F05A7E] transition-colors p-1 cursor-pointer"
+                            className="text-[#524C4C] hover:text-[#F05A7E] transition-colors p-1 cursor-pointer"
                             title="Remove"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -167,7 +167,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         </div>
 
                         {item.selectedShade && (
-                          <div className="flex items-center gap-1.5 mt-1 text-[11px] text-[#6B6B6B]">
+                          <div className="flex items-center gap-1.5 mt-1 text-[11px] text-[#524C4C]">
                             <span
                               className="w-3 h-3 rounded-full border border-[#0B0B0B]/10 inline-block"
                               style={{ backgroundColor: item.selectedShade.hex }}
@@ -177,7 +177,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         )}
 
                         {item.selectedSize && (
-                          <span className="text-[11px] text-[#6B6B6B] block mt-0.5">
+                          <span className="text-[11px] text-[#524C4C] block mt-0.5">
                             Size: {item.selectedSize}
                           </span>
                         )}
@@ -242,7 +242,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </div>
                 )}
 
-                <div className="space-y-1.5 text-xs text-[#6B6B6B] pt-1">
+                <div className="space-y-1.5 text-xs text-[#524C4C] pt-1">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
                     <span className="font-bold text-[#121212]">₹{subtotal}</span>
@@ -280,7 +280,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   )}
                 </div>
 
-                <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#6B6B6B]">
+                <div className="flex items-center justify-center gap-1.5 text-[11px] text-[#524C4C]">
                   <ShieldCheck className="w-3.5 h-3.5 text-[#F05A7E]" />
                   <span>100% Authentic Glamirk Formulations</span>
                 </div>

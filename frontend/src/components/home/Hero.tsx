@@ -3,6 +3,7 @@ import { ArrowRight, Sparkles, ShieldCheck, Truck, Headphones, RotateCcw, Lock, 
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { CMSHeroContent, CMSHeroSlide, CMSHeroBackground } from '@glamirk/shared/types';
 import { HeroBackgroundCarousel } from './HeroBackgroundCarousel';
+import { SectionBackground } from './SectionBackground';
 import { resolveHeroLayout, heroRowOrderClass, heroTextAlignClasses } from '@glamirk/shared/components';
 
 // Stable reference so a hero with no Portion 2 images doesn't hand
@@ -272,6 +273,10 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
       {/* Portion 2 — independent decorative background carousel (admin-managed, own timer, never synced to the Portion 1 slide carousel below) */}
       <HeroBackgroundCarousel images={hero.backgrounds || EMPTY_BACKGROUNDS} intervalMs={hero.backgroundIntervalMs} />
 
+      {/* Homepage Background Manager layer (renders only when configured in admin;
+          paints above the decorative carousel, below the hero content). */}
+      <SectionBackground sectionKey="hero" className="z-[1]" />
+
       <div className="relative mx-auto max-w-[1200px] px-5 pb-8 pt-8 sm:px-8 lg:px-10 lg:pb-10 lg:pt-10">
 
         {/* HERO SLIDE — swipe/drag surface; hovering anywhere here (text, buttons, image) pauses autoplay */}
@@ -327,7 +332,7 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
               </h1>
 
               {/* Description */}
-              <p className={`mt-5 max-w-[540px] text-[15px] leading-7 text-[#6B6B6B] sm:text-[16px] ${textAlign.text}`}>
+              <p className={`mt-5 max-w-[540px] text-[15px] leading-7 text-[#524C4C] sm:text-[16px] ${textAlign.text}`}>
                 {activeSlide.description}
               </p>
 
@@ -359,7 +364,7 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
               </div>
 
               {/* Trust indicators */}
-              <div className={`mt-7 flex flex-wrap gap-x-6 gap-y-3 text-[11px] text-[#6B6B6B] ${textAlign.justify}`}>
+              <div className={`mt-7 flex flex-wrap gap-x-6 gap-y-3 text-[11px] text-[#524C4C] ${textAlign.justify}`}>
                 {hero.trustIndicators.map((ti) => {
                   const Icon = ICON_MAP[ti.icon] || ShieldCheck;
                   return (
@@ -491,7 +496,7 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
                   <p className="text-[11px] font-bold text-[#121212] line-clamp-1">
                     {badge.title}
                   </p>
-                  <p className="mt-1 text-[9px] text-[#6B6B6B] line-clamp-2">
+                  <p className="mt-1 text-[9px] text-[#524C4C] line-clamp-2">
                     {badge.subtitle}
                   </p>
                 </div>

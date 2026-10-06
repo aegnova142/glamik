@@ -378,7 +378,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
         {/* Camera fallback notification if triggered */}
         {cameraError && (
-          <div className="bg-[#FAF9F6] px-4 py-2 text-xs text-[#6B6B6B] border-b border-[#E8D5A8] flex items-center justify-between">
+          <div className="bg-[#FAF9F6] px-4 py-2 text-xs text-[#524C4C] border-b border-[#E8D5A8] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-[#C9972B] shrink-0" />
               <span>{cameraError}</span>
@@ -564,7 +564,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                   <span className="font-serif text-xl text-[#121212] font-medium">
                     {currentProduct.currency}{currentProduct.price}
                   </span>
-                  <span className="text-xs text-[#6B6B6B] uppercase tracking-wider">
+                  <span className="text-xs text-[#524C4C] uppercase tracking-wider">
                     Finish: <strong>{currentProduct.finish || 'Velvet Matte'}</strong>
                   </span>
                 </div>
@@ -575,7 +575,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                 <div className="flex items-center justify-between">
                   <button
                     onClick={handlePrevShade}
-                    className="p-1.5 text-[#6B6B6B] hover:text-[#121212] hover:bg-[#E8D5A8] rounded-full transition-colors cursor-pointer"
+                    className="p-1.5 text-[#524C4C] hover:text-[#121212] hover:bg-[#E8D5A8] rounded-full transition-colors cursor-pointer"
                     title="Previous Shade"
                   >
                     <ChevronLeft className="w-5 h-5" />
@@ -598,21 +598,21 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
                   <button
                     onClick={handleNextShade}
-                    className="p-1.5 text-[#6B6B6B] hover:text-[#121212] hover:bg-[#E8D5A8] rounded-full transition-colors cursor-pointer"
+                    className="p-1.5 text-[#524C4C] hover:text-[#121212] hover:bg-[#E8D5A8] rounded-full transition-colors cursor-pointer"
                     title="Next Shade"
                   >
                     <ChevronRight className="w-5 h-5" />
                   </button>
                 </div>
 
-                <p className="text-xs text-[#6B6B6B] font-light text-center leading-relaxed italic pt-1 border-t border-[#E8D5A8]">
+                <p className="text-xs text-[#524C4C] font-light text-center leading-relaxed italic pt-1 border-t border-[#E8D5A8]">
                   "{currentShade.description}"
                 </p>
               </div>
 
               {/* Shade Selector Carousel */}
               <div className="space-y-2">
-                <span className="text-[11px] font-semibold tracking-[0.2em] uppercase text-[#6B6B6B] block">
+                <span className="text-[11px] font-semibold tracking-[0.2em] uppercase text-[#524C4C] block">
                   Select Another Shade ({allShades.length} Available):
                 </span>
                 <div className="grid grid-cols-4 gap-2.5">
@@ -640,7 +640,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
 
               {/* AR Intensity Slider */}
               <div className="space-y-1.5 pt-2">
-                <div className="flex items-center justify-between text-xs text-[#6B6B6B]">
+                <div className="flex items-center justify-between text-xs text-[#524C4C]">
                   <span className="uppercase tracking-wider font-medium flex items-center gap-1">
                     <Sliders className="w-3 h-3 text-[#C9972B]" />
                     <span>Coverage Intensity</span>
@@ -663,7 +663,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                   <span className="text-[9.5px] uppercase tracking-widest text-[#C9972B] font-semibold block">
                     Not sure if it matches?
                   </span>
-                  <span className="text-xs text-[#6B6B6B] font-light">
+                  <span className="text-xs text-[#524C4C] font-light">
                     Take our 60-second shade quiz.
                   </span>
                 </div>
@@ -717,7 +717,7 @@ export const VirtualTryOnModal: React.FC<VirtualTryOnModalProps> = ({
                   onClose();
                   onViewProduct(currentProduct);
                 }}
-                className="w-full py-2 text-center text-xs tracking-widest uppercase font-medium text-[#6B6B6B] hover:text-[#121212] transition-colors cursor-pointer"
+                className="w-full py-2 text-center text-xs tracking-widest uppercase font-medium text-[#524C4C] hover:text-[#121212] transition-colors cursor-pointer"
               >
                 View Full Product Details & Formulation Ritual →
               </button>

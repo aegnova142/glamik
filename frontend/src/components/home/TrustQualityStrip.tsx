@@ -60,7 +60,7 @@ export const TrustQualityStrip: React.FC = () => {
                   <h3 className="text-base font-bold text-[#121212]">
                     {benefit.title}
                   </h3>
-                  <p className="text-xs text-[#6B6B6B] leading-relaxed">
+                  <p className="text-xs text-[#524C4C] leading-relaxed">
                     {benefit.description}
                   </p>
                 </div>

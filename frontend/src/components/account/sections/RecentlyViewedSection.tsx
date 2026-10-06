@@ -135,7 +135,7 @@ export const RecentlyViewedSection: React.FC<RecentlyViewedSectionProps> = ({
                       onClick={() => onToggleWishlist(product.id)}
                       aria-label={wishlisted ? 'Remove from wishlist' : 'Save to wishlist'}
                       className={`px-2.5 py-2 border rounded-full transition-colors cursor-pointer ${
-                        wishlisted ? 'border-[#F05A7E] text-[#F05A7E]' : 'border-[#E8D5A8] text-[#6B6B6B] hover:text-[#F05A7E]'
+                        wishlisted ? 'border-[#F05A7E] text-[#F05A7E]' : 'border-[#E8D5A8] text-[#524C4C] hover:text-[#F05A7E]'
                       }`}
                     >
                       <Heart className={`w-3.5 h-3.5 ${wishlisted ? 'fill-[#F05A7E]' : ''}`} />

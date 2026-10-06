@@ -68,7 +68,7 @@ export const JournalModal: React.FC<JournalModalProps> = ({
 
             {/* Article Content */}
             <div className="p-6 sm:p-8 space-y-6">
-              <div className="flex items-center justify-between text-xs text-[#6B6B6B] pb-4 border-b border-[#E8D5A8]">
+              <div className="flex items-center justify-between text-xs text-[#524C4C] pb-4 border-b border-[#E8D5A8]">
                 <div className="flex items-center gap-3">
                   <span className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5" />
@@ -95,7 +95,7 @@ export const JournalModal: React.FC<JournalModalProps> = ({
                 <span className="text-[10px] tracking-widest uppercase text-[#C9972B] font-semibold block">
                   GLAMIRK BEAUTY INTELLIGENCE
                 </span>
-                <p className="text-xs text-[#6B6B6B]">
+                <p className="text-xs text-[#524C4C]">
                   Discover your personalized undertone and shade recommendations with our intelligent matcher.
                 </p>
                 <button
@@ -112,7 +112,7 @@ export const JournalModal: React.FC<JournalModalProps> = ({
               </div>
 
               <div className="pt-4 border-t border-[#E8D5A8] flex items-center justify-between">
-                <span className="text-xs text-[#6B6B6B]">
+                <span className="text-xs text-[#524C4C]">
                   Glamirk Beauty Editorial Studio
                 </span>
                 <button

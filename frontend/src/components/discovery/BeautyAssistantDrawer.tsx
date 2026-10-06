@@ -1,3 +1,7 @@
+// [Glamik] 2026-10-06 — Beauty Consultant drawer, premium pass: luxe gradient
+// header (layered gold ring avatar, gold-foil title, availability status),
+// avatar-beside chat bubbles with soft layered shadows, warm stream backdrop,
+// tactile pill chips, and a gold-foil send button. Updated 2026-10-06.
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -10,6 +14,7 @@ import {
   User,
   Bot,
   HelpCircle,
+  ShieldCheck,
 } from 'lucide-react';
 import { Product, Shade, AssistantMessage } from '@glamirk/shared/types';
 import { GLAMIRK_PRODUCTS } from '@glamirk/shared/data/products';
@@ -254,27 +259,40 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="bg-[#FAF9F6] w-full max-w-lg h-full shadow-2xl flex flex-col justify-between border-l border-[#E8D5A8]"
+        className="bg-[#FBF7F4] w-full max-w-lg h-full shadow-[0_0_60px_rgba(0,0,0,0.3)] flex flex-col justify-between border-l border-[#EADFE3] lg:rounded-l-3xl overflow-hidden"
       >
         {/* Header */}
-        <div className="p-5 bg-[#0B0B0B] text-[#FAF9F6] border-b border-[#0B0B0B] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-[#0B0B0B] border border-[#C9972B]/50 flex items-center justify-center text-[#C9972B]">
-              <Sparkles className="w-4 h-4" />
+        <div className="relative px-5 py-5 bg-gradient-to-br from-[#331420] via-[#1A1012] to-[#0E0809] text-[#FAF9F6] flex items-center justify-between shrink-0 overflow-hidden">
+          {/* soft gold glows + double hairline */}
+          <div aria-hidden="true" className="pointer-events-none absolute -top-12 -right-8 w-48 h-48 rounded-full bg-[#C9972B]/18 blur-3xl" />
+          <div aria-hidden="true" className="pointer-events-none absolute -bottom-10 left-10 w-40 h-40 rounded-full bg-[#9B2D4F]/15 blur-3xl" />
+          <div aria-hidden="true" className="pointer-events-none absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9972B]/60 to-transparent" />
+          <div aria-hidden="true" className="pointer-events-none absolute bottom-[3px] left-8 right-8 h-px bg-gradient-to-r from-transparent via-[#C9972B]/20 to-transparent" />
+
+          <div className="relative flex items-center gap-3.5">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#2B1016] to-[#0B0B0B] ring-1 ring-[#C9972B]/70 shadow-[0_0_18px_rgba(201,151,43,0.4)] flex items-center justify-center text-[#E3B84B]">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <span className="absolute inset-0 rounded-full ring-1 ring-[#C9972B]/25 scale-[1.22]" aria-hidden="true" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#4ADE80] ring-2 ring-[#1A1012]" aria-hidden="true" />
             </div>
             <div>
-              <span className="text-[9.5px] font-semibold tracking-[0.24em] uppercase text-[#C9972B] block">
-                GLAMIRK CONCIERGE
+              <span className="text-[9.5px] font-semibold tracking-[0.28em] uppercase text-[#C9972B] block">
+                Glamirk Concierge
               </span>
-              <h3 className="font-serif text-base text-[#FAF9F6]">
-                BEAUTY CONSULTANT
+              <h3 className="font-serif text-xl leading-tight text-[#FAF9F6] tracking-wide bg-gradient-to-r from-[#FFF3DF] to-[#E3B84B] bg-clip-text text-transparent">
+                Beauty Consultant
               </h3>
+              <span className="mt-0.5 flex items-center gap-1.5 text-[9px] text-[#B79A7E]">
+                <span className="w-1 h-1 rounded-full bg-[#4ADE80]" /> Available for a private consultation
+              </span>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 text-[#C9972B] hover:text-white hover:bg-[#0B0B0B] rounded-full transition-colors cursor-pointer"
+            className="relative p-2 text-[#C9972B] hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
             aria-label="Close assistant"
           >
             <X className="w-5 h-5" />
@@ -282,7 +300,7 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
         </div>
 
         {/* Message Stream */}
-        <div className="flex-grow p-5 overflow-y-auto space-y-4">
+        <div className="flex-grow p-5 overflow-y-auto space-y-4 bg-gradient-to-b from-[#FDFAF8] via-[#FBF6F2] to-[#FAF3EF]">
           
           {messages.map((msg) => (
             <div
@@ -291,22 +309,33 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
                 msg.sender === 'user' ? 'items-end' : 'items-start'
               }`}
             >
-              <div
-                className={`max-w-[88%] p-4 text-xs leading-relaxed ${
-                  msg.sender === 'user'
-                    ? 'bg-[#0B0B0B] text-[#FAF9F6] border border-[#0B0B0B]'
-                    : 'bg-[#FAF9F6] text-[#121212] border border-[#E8D5A8]'
-                }`}
-              >
+              <div className={`flex items-end gap-2.5 max-w-[92%] ${msg.sender === 'user' ? 'flex-row-reverse' : ''}`}>
+                {msg.sender !== 'user' && (
+                  <span className="w-9 h-9 rounded-full shrink-0 bg-gradient-to-br from-[#2B1016] to-[#0B0B0B] ring-1 ring-[#C9972B]/50 flex items-center justify-center text-[#E3B84B] shadow-[0_3px_12px_rgba(201,151,43,0.3)]">
+                    <Sparkles className="w-4 h-4" />
+                  </span>
+                )}
+                <div
+                  className={`min-w-0 px-4 py-3.5 text-xs leading-relaxed ${
+                    msg.sender === 'user'
+                      ? 'bg-gradient-to-br from-[#2B1016] to-[#120A0C] text-[#FAF9F6] rounded-2xl rounded-br-md shadow-[0_12px_28px_rgba(43,16,22,0.28)]'
+                      : 'bg-white text-[#2A2024] border border-[#F2E6EA] rounded-2xl rounded-bl-md shadow-[0_12px_32px_rgba(43,16,22,0.09)]'
+                  }`}
+                >
+                {msg.sender !== 'user' && (
+                  <span className="mb-1.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-[#C9972B]">
+                    <span className="w-1 h-1 rounded-full bg-[#C9972B]" /> Consultant
+                  </span>
+                )}
                 <p>{msg.text}</p>
 
                 {/* Recommended Product Cards inside Conversation */}
                 {msg.recommendedProducts && msg.recommendedProducts.length > 0 && (
-                  <div className="mt-3 space-y-2 pt-2 border-t border-[#E8D5A8]">
+                  <div className="mt-3 space-y-2 pt-3 border-t border-[#EADFE3]">
                     {msg.recommendedProducts.map((rec, i) => (
                       <div
                         key={i}
-                        className="bg-[#FAF9F6] p-3 border border-[#E8D5A8] flex items-center justify-between gap-3 shadow-2xs"
+                        className="bg-[#FBF7F4] p-3 rounded-xl border border-[#EADFE3] flex items-center justify-between gap-3 shadow-[0_2px_8px_rgba(43,16,22,0.04)]"
                       >
                         <div className="flex items-center gap-2.5 overflow-hidden">
                           {rec.suggestedShade ? (
@@ -325,7 +354,7 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
                             <span className="font-serif text-[11.5px] text-[#121212] block truncate font-medium">
                               {rec.product.name}
                             </span>
-                            <span className="text-[10px] text-[#6B6B6B] block truncate">
+                            <span className="text-[10px] text-[#524C4C] block truncate">
                               {rec.reason || `₹${rec.product.price}`}
                             </span>
                           </div>
@@ -338,7 +367,7 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
                                 onClose();
                                 onOpenTryOn(rec.product, rec.suggestedShade);
                               }}
-                              className="px-2 py-1 bg-[#FAF9F6] border border-[#E8D5A8] text-[#121212] text-[9.5px] uppercase font-bold tracking-wider hover:bg-[#0B0B0B] hover:text-white transition-colors cursor-pointer"
+                              className="px-2.5 py-1.5 bg-white border border-[#EADFE3] rounded-full text-[#2B1016] text-[9.5px] uppercase font-bold tracking-wider hover:border-[#C9972B] hover:text-[#C9972B] transition-colors cursor-pointer"
                             >
                               Try On
                             </button>
@@ -347,7 +376,7 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
                             onClick={() => {
                               onAddToBag(rec.product, rec.suggestedShade, undefined, 1);
                             }}
-                            className="px-2 py-1 bg-[#0B0B0B] text-[#FAF9F6] text-[9.5px] uppercase font-bold tracking-wider hover:bg-[#0B0B0B] transition-colors cursor-pointer"
+                            className="px-2.5 py-1.5 bg-gradient-to-br from-[#2B1016] to-[#120A0C] text-[#FAF9F6] rounded-full text-[9.5px] uppercase font-bold tracking-wider hover:from-[#3a1420] transition-colors cursor-pointer"
                           >
                             + Bag
                           </button>
@@ -369,23 +398,24 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
                           onOpenShadeFinder();
                         }
                       }}
-                      className="w-full py-2 bg-[#0B0B0B] text-[#FAF9F6] text-[10.5px] uppercase tracking-widest font-semibold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer hover:bg-[#0B0B0B]"
+                      className="w-full py-2.5 bg-gradient-to-br from-[#2B1016] to-[#120A0C] text-[#FAF9F6] rounded-xl text-[10.5px] uppercase tracking-widest font-semibold flex items-center justify-center gap-1.5 shadow-[0_4px_14px_rgba(43,16,22,0.2)] cursor-pointer hover:from-[#3a1420] transition-colors"
                     >
-                      <Sparkles className="w-3 h-3 text-[#C9972B]" />
+                      <Sparkles className="w-3 h-3 text-[#E3B84B]" />
                       <span>{msg.actionPrompt.label}</span>
                     </button>
                   </div>
                 )}
+                </div>
               </div>
 
               {/* Quick Prompts below assistant replies */}
               {msg.suggestedPrompts && (
-                <div className="mt-2 flex flex-wrap gap-1.5 max-w-[90%]">
+                <div className="mt-2.5 flex flex-wrap gap-2 max-w-[92%] pl-11">
                   {msg.suggestedPrompts.map((prompt, idx) => (
                     <button
                       key={idx}
                       onClick={() => handleSendMessage(prompt)}
-                      className="px-2.5 py-1 bg-[#FAF9F6] border border-[#E8D5A8] text-[10px] text-[#6B6B6B] hover:border-[#0B0B0B] hover:text-[#121212] transition-colors cursor-pointer"
+                      className="px-3.5 py-1.5 bg-gradient-to-b from-white to-[#FDF5F7] border border-[#EADFE3] rounded-full text-[11px] text-[#5A4A50] hover:border-[#C9972B] hover:text-[#2B1016] hover:shadow-[0_4px_12px_rgba(201,151,43,0.16)] hover:-translate-y-0.5 transition-all cursor-pointer"
                     >
                       {prompt}
                     </button>
@@ -397,10 +427,15 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
 
           {/* Typing Indicator */}
           {isTyping && (
-            <div className="flex items-center gap-2 p-3 bg-[#FAF9F6] border border-[#E8D5A8] w-24">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#C9972B] animate-bounce" />
-              <span className="w-1.5 h-1.5 rounded-full bg-[#C9972B] animate-bounce [animation-delay:0.2s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-[#C9972B] animate-bounce [animation-delay:0.4s]" />
+            <div className="flex items-end gap-2.5">
+              <span className="w-9 h-9 rounded-full shrink-0 bg-gradient-to-br from-[#2B1016] to-[#0B0B0B] ring-1 ring-[#C9972B]/50 flex items-center justify-center text-[#E3B84B] shadow-[0_3px_12px_rgba(201,151,43,0.3)]">
+                <Sparkles className="w-4 h-4" />
+              </span>
+              <div className="flex items-center gap-1.5 px-4 py-3.5 bg-white border border-[#F2E6EA] rounded-2xl rounded-bl-md shadow-[0_12px_32px_rgba(43,16,22,0.09)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#C9972B] animate-bounce" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#C9972B] animate-bounce [animation-delay:0.2s]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#C9972B] animate-bounce [animation-delay:0.4s]" />
+              </div>
             </div>
           )}
 
@@ -408,32 +443,33 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
         </div>
 
         {/* Input Bar */}
-        <div className="p-4 bg-[#FAF9F6] border-t border-[#E8D5A8]">
+        <div className="p-4 bg-white/80 backdrop-blur border-t border-[#EADFE3]">
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleSendMessage();
             }}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2.5"
           >
             <input
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder="Ask about shades, undertones, or rituals..."
-              className="flex-grow px-4 py-3 bg-[#FAF9F6] border border-[#E8D5A8] text-xs text-[#121212] placeholder-[#6B6B6B] focus:outline-none focus:border-[#0B0B0B] transition-colors"
+              className="flex-grow px-5 py-3.5 bg-[#FBF7F4] border border-[#EADFE3] rounded-full text-xs text-[#2A2024] placeholder-[#9A8A90] focus:outline-none focus:border-[#C9972B] focus:ring-2 focus:ring-[#C9972B]/15 transition-all"
             />
             <button
               type="submit"
               disabled={!inputText.trim()}
-              className="p-3 bg-[#0B0B0B] text-[#FAF9F6] hover:bg-[#0B0B0B] disabled:opacity-40 transition-colors cursor-pointer shrink-0"
+              className="relative w-12 h-12 rounded-full bg-gradient-to-br from-[#E3B84B] via-[#C9972B] to-[#A86E1A] text-white flex items-center justify-center ring-1 ring-[#E3B84B]/50 shadow-[0_8px_20px_rgba(201,151,43,0.4)] hover:scale-105 active:scale-95 disabled:opacity-40 disabled:scale-100 disabled:shadow-none transition-all cursor-pointer shrink-0 overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-1/2 before:bg-white/20 before:rounded-t-full"
               aria-label="Send message"
             >
-              <Send className="w-4 h-4 text-[#C9972B]" />
+              <Send className="w-4 h-4" />
             </button>
           </form>
-          <p className="text-[10px] text-[#6B6B6B] text-center mt-2 font-light">
-            Glamirk Consultant calibrated with verified formulas & shade intelligence.
+          <p className="flex items-center justify-center gap-1.5 text-[10px] text-[#9A8A90] text-center mt-2.5 font-light tracking-wide">
+            <ShieldCheck className="w-3 h-3 text-[#C9972B]" />
+            Calibrated with verified formulas &amp; shade intelligence.
           </p>
         </div>
 

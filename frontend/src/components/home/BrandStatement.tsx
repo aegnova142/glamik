@@ -35,7 +35,7 @@ export const BrandStatement: React.FC = () => {
           </h2>
         </motion.div>
 
-        <p className="mt-6 sm:mt-8 text-xs sm:text-sm text-[#6B6B6B] max-w-lg mx-auto tracking-[0.14em] uppercase font-semibold">
+        <p className="mt-6 sm:mt-8 text-xs sm:text-sm text-[#524C4C] max-w-lg mx-auto tracking-[0.14em] uppercase font-semibold">
           Precision Formulations • Timeless Rituals • Bespoke Radiance
         </p>
 

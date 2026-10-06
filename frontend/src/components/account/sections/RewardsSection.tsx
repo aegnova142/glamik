@@ -127,7 +127,7 @@ export const RewardsSection: React.FC<RewardsSectionProps> = ({ onExploreShop, s
               className={`shrink-0 px-3.5 py-2 text-[10.5px] font-semibold tracking-[0.12em] uppercase rounded-full border transition-colors cursor-pointer ${
                 tab === t.id
                   ? 'bg-[#0B0B0B] text-white border-[#0B0B0B]'
-                  : 'bg-white text-[#6B6B6B] border-[#E8D5A8] hover:text-[#121212] hover:border-[#C9972B]'
+                  : 'bg-white text-[#524C4C] border-[#E8D5A8] hover:text-[#121212] hover:border-[#C9972B]'
               }`}
             >
               {t.label}
@@ -193,10 +193,10 @@ export const RewardsSection: React.FC<RewardsSectionProps> = ({ onExploreShop, s
                       </div>
 
                       {coupon.description && (
-                        <p className="text-[11.5px] text-[#6B6B6B] leading-relaxed">{coupon.description}</p>
+                        <p className="text-[11.5px] text-[#524C4C] leading-relaxed">{coupon.description}</p>
                       )}
 
-                      <ul className="text-[11px] text-[#6B6B6B] space-y-0.5 pt-0.5">
+                      <ul className="text-[11px] text-[#524C4C] space-y-0.5 pt-0.5">
                         {coupon.minOrderValue ? <li>Minimum order {formatMoney(coupon.minOrderValue)}</li> : <li>No minimum order</li>}
                         {coupon.endDate && coupon.availability !== 'used' && <li>Valid until {formatDate(coupon.endDate)}</li>}
                         {coupon.availability === 'used' && coupon.usedOn && <li>Used on {formatDate(coupon.usedOn)}</li>}
@@ -243,7 +243,7 @@ export const RewardsSection: React.FC<RewardsSectionProps> = ({ onExploreShop, s
               <li key={tx.id} className="px-5 py-3.5 flex items-center justify-between gap-4">
                 <div className="min-w-0">
                   <span className="text-[13px] text-[#121212] block truncate">{tx.description}</span>
-                  <span className="text-[11px] text-[#6B6B6B]">{formatDate(tx.createdAt)}</span>
+                  <span className="text-[11px] text-[#524C4C]">{formatDate(tx.createdAt)}</span>
                 </div>
                 <span
                   className={`font-mono text-[13px] font-semibold shrink-0 ${

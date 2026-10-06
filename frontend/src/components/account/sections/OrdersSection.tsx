@@ -112,7 +112,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
               className={`shrink-0 px-3.5 py-2 text-[10.5px] font-semibold tracking-[0.12em] uppercase rounded-full border transition-colors cursor-pointer ${
                 filter === tab.id
                   ? 'bg-[#0B0B0B] text-white border-[#0B0B0B]'
-                  : 'bg-white text-[#6B6B6B] border-[#E8D5A8] hover:text-[#121212] hover:border-[#C9972B]'
+                  : 'bg-white text-[#524C4C] border-[#E8D5A8] hover:text-[#121212] hover:border-[#C9972B]'
               }`}
             >
               {tab.label}
@@ -149,7 +149,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                     <span className="font-serif text-base text-[#121212]">#{order.orderNumber}</span>
                     <StatusBadge status={order.status} tone={orderStatusTone(order.status)} />
                   </div>
-                  <p className="text-[11.5px] text-[#6B6B6B] mt-1">
+                  <p className="text-[11.5px] text-[#524C4C] mt-1">
                     Placed {formatDate(order.createdAt)} · {getPaymentMethodLabel(order.payment.method)} ·{' '}
                     {getPaymentStatusLabel(order.payment.status)}
                   </p>
@@ -168,7 +168,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                     />
                     <div className="min-w-0 flex-1">
                       <h3 className="font-serif text-sm text-[#121212] leading-snug">{item.productName}</h3>
-                      <p className="text-[11.5px] text-[#6B6B6B] mt-0.5">
+                      <p className="text-[11.5px] text-[#524C4C] mt-0.5">
                         {item.shade ? `Shade: ${item.shade.name}` : item.size ? `Size: ${item.size}` : 'Standard'} · Qty{' '}
                         {item.quantity} · {formatMoney(item.price)}
                       </p>

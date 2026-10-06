@@ -262,7 +262,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full text-[#6B6B6B] hover:text-[#FAF9F6] hover:bg-[#0B0B0B] transition-colors cursor-pointer z-10"
+            className="absolute top-4 right-4 p-2 rounded-full text-[#524C4C] hover:text-[#FAF9F6] hover:bg-[#0B0B0B] transition-colors cursor-pointer z-10"
           >
             <X className="w-5 h-5" />
           </button>
@@ -275,7 +275,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <h2 className="font-serif text-2xl text-[#FAF9F6] mt-1 tracking-wider">
               {customerFormMode === 'forgot' ? 'Reset Your Password' : 'Customer Sign In'}
             </h2>
-            <p className="text-xs text-[#6B6B6B] mt-1">
+            <p className="text-xs text-[#524C4C] mt-1">
               {customerFormMode === 'forgot'
                 ? 'We’ll help you get back into your account'
                 : 'Access your beauty profile, saved shades, and Privé points'}
@@ -287,7 +287,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="space-y-4">
                 {forgotStep === 'request' && (
                   <form onSubmit={handleRequestReset} className="space-y-4">
-                    <p className="text-xs text-[#6B6B6B] leading-relaxed">
+                    <p className="text-xs text-[#524C4C] leading-relaxed">
                       Enter the email address on your account and we’ll get you a reset link.
                     </p>
 
@@ -302,7 +302,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         Email Address
                       </label>
                       <div className="relative">
-                        <Mail className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
+                        <Mail className="w-4 h-4 text-[#524C4C] absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                           type="email"
                           required
@@ -328,7 +328,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         setCustomerFormMode('login');
                         setForgotError(null);
                       }}
-                      className="w-full text-center text-[11px] text-[#6B6B6B] hover:text-[#FAF9F6] cursor-pointer"
+                      className="w-full text-center text-[11px] text-[#524C4C] hover:text-[#FAF9F6] cursor-pointer"
                     >
                       Back to Sign In
                     </button>
@@ -337,7 +337,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                 {forgotStep === 'reset' && (
                   <form onSubmit={handleResetPassword} className="space-y-4">
-                    <div className="p-2.5 rounded-lg bg-[#0B0B0B]/60 border border-[#E8D5A8]/15 text-[10.5px] text-[#6B6B6B] leading-relaxed">
+                    <div className="p-2.5 rounded-lg bg-[#0B0B0B]/60 border border-[#E8D5A8]/15 text-[10.5px] text-[#524C4C] leading-relaxed">
                       Email delivery isn’t configured in this environment, so instead of emailing your reset
                       link we’ve unlocked the next step right here — just set your new password below.
                     </div>
@@ -353,7 +353,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         New Password
                       </label>
                       <div className="relative">
-                        <Lock className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
+                        <Lock className="w-4 h-4 text-[#524C4C] absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                           type={showNewPassword ? 'text' : 'password'}
                           required
@@ -367,7 +367,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setShowNewPassword(!showNewPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B6B6B] hover:text-[#FAF9F6]"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#524C4C] hover:text-[#FAF9F6]"
                         >
                           {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
@@ -379,7 +379,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             <li
                               key={req.id}
                               className={`flex items-center gap-1.5 text-[10.5px] transition-colors ${
-                                req.met ? 'text-[#C9972B]' : 'text-[#6B6B6B]'
+                                req.met ? 'text-[#C9972B]' : 'text-[#524C4C]'
                               }`}
                             >
                               <CheckCircle className={`w-3 h-3 shrink-0 ${req.met ? 'opacity-100' : 'opacity-30'}`} />
@@ -395,7 +395,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         Confirm New Password
                       </label>
                       <div className="relative">
-                        <Lock className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
+                        <Lock className="w-4 h-4 text-[#524C4C] absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                           type={showNewPassword ? 'text' : 'password'}
                           required
@@ -427,7 +427,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <CheckCircle className="w-10 h-10 text-[#C9972B] mx-auto" />
                     <div>
                       <h3 className="font-serif text-lg text-[#FAF9F6]">Password Reset!</h3>
-                      <p className="text-xs text-[#6B6B6B] mt-1">
+                      <p className="text-xs text-[#524C4C] mt-1">
                         Your password has been updated and you’re signed in.
                       </p>
                     </div>
@@ -457,7 +457,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     className={`font-semibold pb-1 border-b-2 transition-all cursor-pointer ${
                       customerFormMode === 'login'
                         ? 'border-[#C9972B] text-[#C9972B]'
-                        : 'border-transparent text-[#6B6B6B]'
+                        : 'border-transparent text-[#524C4C]'
                     }`}
                   >
                     Sign In
@@ -471,7 +471,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     className={`font-semibold pb-1 border-b-2 transition-all cursor-pointer ${
                       customerFormMode === 'register'
                         ? 'border-[#C9972B] text-[#C9972B]'
-                        : 'border-transparent text-[#6B6B6B]'
+                        : 'border-transparent text-[#524C4C]'
                     }`}
                   >
                     Create Account
@@ -491,7 +491,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         Full Name
                       </label>
                       <div className="relative">
-                        <User className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
+                        <User className="w-4 h-4 text-[#524C4C] absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                           type="text"
                           required
@@ -509,7 +509,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       Email Address
                     </label>
                     <div className="relative">
-                      <Mail className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Mail className="w-4 h-4 text-[#524C4C] absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="email"
                         required
@@ -524,7 +524,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   {customerFormMode === 'register' && (
                     <div>
                       <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                        Mobile Number <span className="normal-case text-[#6B6B6B]">(optional)</span>
+                        Mobile Number <span className="normal-case text-[#524C4C]">(optional)</span>
                       </label>
                       <div className="flex gap-2">
                         <select
@@ -542,7 +542,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           ))}
                         </select>
                         <div className="relative flex-1">
-                          <Phone className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
+                          <Phone className="w-4 h-4 text-[#524C4C] absolute left-3 top-1/2 -translate-y-1/2" />
                           <input
                             type="tel"
                             inputMode="numeric"
@@ -553,7 +553,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           />
                         </div>
                       </div>
-                      <p className="text-[10px] text-[#6B6B6B] mt-1">
+                      <p className="text-[10px] text-[#524C4C] mt-1">
                         {activePhoneRule.minDigits === activePhoneRule.maxDigits
                           ? `${activePhoneRule.label}: exactly ${activePhoneRule.minDigits} digits, numbers only.`
                           : `${activePhoneRule.label}: ${activePhoneRule.minDigits}-${activePhoneRule.maxDigits} digits, numbers only.`}
@@ -566,7 +566,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       Password
                     </label>
                     <div className="relative">
-                      <Lock className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Lock className="w-4 h-4 text-[#524C4C] absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type={showPassword ? 'text' : 'password'}
                         required
@@ -580,7 +580,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B6B6B] hover:text-[#FAF9F6]"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#524C4C] hover:text-[#FAF9F6]"
                       >
                         {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                       </button>
@@ -592,7 +592,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           <li
                             key={req.id}
                             className={`flex items-center gap-1.5 text-[10.5px] transition-colors ${
-                              req.met ? 'text-[#C9972B]' : 'text-[#6B6B6B]'
+                              req.met ? 'text-[#C9972B]' : 'text-[#524C4C]'
                             }`}
                           >
                             <CheckCircle className={`w-3 h-3 shrink-0 ${req.met ? 'opacity-100' : 'opacity-30'}`} />
@@ -615,7 +615,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         >
                           {rememberMe && <Check className="w-3 h-3 text-[#0B0B0B]" />}
                         </button>
-                        <span className="text-[11px] text-[#6B6B6B]">Remember me</span>
+                        <span className="text-[11px] text-[#524C4C]">Remember me</span>
                       </label>
                       <button
                         type="button"
@@ -633,7 +633,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         Confirm Password
                       </label>
                       <div className="relative">
-                        <Lock className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
+                        <Lock className="w-4 h-4 text-[#524C4C] absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                           type={showConfirmPassword ? 'text' : 'password'}
                           required
@@ -649,7 +649,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B6B6B] hover:text-[#FAF9F6]"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#524C4C] hover:text-[#FAF9F6]"
                         >
                           {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
@@ -671,7 +671,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       >
                         {agreedToTerms && <Check className="w-3 h-3 text-[#0B0B0B]" />}
                       </button>
-                      <span className="text-[11px] text-[#6B6B6B] leading-snug">
+                      <span className="text-[11px] text-[#524C4C] leading-snug">
                         I agree to the <span className="text-[#E8D5A8] font-medium">Terms &amp; Privacy Policy</span>
                       </span>
                     </label>
@@ -698,7 +698,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {/* OR divider */}
                 <div className="flex items-center gap-3">
                   <span className="flex-1 h-px bg-[#E8D5A8]/15" />
-                  <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B]">Or</span>
+                  <span className="text-[10px] uppercase tracking-wider text-[#524C4C]">Or</span>
                   <span className="flex-1 h-px bg-[#E8D5A8]/15" />
                 </div>
 
@@ -717,13 +717,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <span>{googleLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
                 </button>
                 {googleComingSoon && (
-                  <p className="text-[10.5px] text-center text-[#6B6B6B]">Google sign-in is coming soon — please use email for now.</p>
+                  <p className="text-[10.5px] text-center text-[#524C4C]">Google sign-in is coming soon — please use email for now.</p>
                 )}
                 {googleError && (
                   <p className="text-[10.5px] text-center text-[#F05A7E]">{googleError}</p>
                 )}
 
-                <p className="text-center text-[11px] text-[#6B6B6B]">
+                <p className="text-center text-[11px] text-[#524C4C]">
                   {customerFormMode === 'login' ? "Don't have an account? " : 'Already have an account? '}
                   <button
                     type="button"

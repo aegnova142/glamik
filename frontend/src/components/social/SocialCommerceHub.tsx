@@ -65,7 +65,7 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
         <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl text-[#121212] tracking-tight mb-3">
           GLAMIRK ON YOU
         </h1>
-        <p className="font-serif italic text-lg sm:text-xl text-[#6B6B6B] max-w-xl mx-auto">
+        <p className="font-serif italic text-lg sm:text-xl text-[#524C4C] max-w-xl mx-auto">
           Real complexions. Iconic expressions. Tag @glamirkbeauty or #GlamirkBeauty.
         </p>
 
@@ -78,7 +78,7 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
               className={`px-5 py-2.5 text-xs font-semibold tracking-[0.18em] uppercase transition-all duration-300 rounded-none cursor-pointer ${
                 filter === tab
                   ? 'bg-[#0B0B0B] text-[#FAF9F6] shadow-md'
-                  : 'bg-[#FAF9F6] text-[#6B6B6B] hover:bg-[#E8D5A8] hover:text-[#121212]'
+                  : 'bg-[#FAF9F6] text-[#524C4C] hover:bg-[#E8D5A8] hover:text-[#121212]'
               }`}
             >
               {tab === 'ALL' ? 'ALL LOOKS' : tab === 'CREATORS' ? 'CREATOR EDITS' : 'COMMUNITY ATELIER'}
@@ -137,7 +137,7 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
 
               {/* Shoppable Footer Action */}
               <div className="p-4 bg-[#FAF9F6] border-t border-[#E8D5A8] flex items-center justify-between gap-2">
-                <div className="text-[11px] text-[#6B6B6B] truncate">
+                <div className="text-[11px] text-[#524C4C] truncate">
                   {post.taggedProducts[0]?.productName}
                 </div>
                 <button
@@ -244,7 +244,7 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
           <h3 className="font-serif text-2xl sm:text-3xl text-[#121212]">
             FEATURE YOUR GLAMIRK RITUAL
           </h3>
-          <p className="text-xs sm:text-sm text-[#6B6B6B] max-w-md mx-auto leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#524C4C] max-w-md mx-auto leading-relaxed">
             Tag @glamirkbeauty in your Instagram posts or submit your editorial look to be featured in our permanent Atelier gallery.
           </p>
 
@@ -284,7 +284,7 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
                   <Check className="w-6 h-6" />
                 </div>
                 <h4 className="font-serif text-2xl text-[#121212]">Thank You</h4>
-                <p className="text-xs text-[#6B6B6B]">
+                <p className="text-xs text-[#524C4C]">
                   Your look submission has been received by our editorial team. If approved, you will be notified and featured on Glamirk On You.
                 </p>
                 <button
@@ -302,7 +302,7 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
                 <h4 className="font-serif text-2xl text-[#121212]">
                   Submit Your Glamirk Look
                 </h4>
-                <p className="text-xs text-[#6B6B6B]">
+                <p className="text-xs text-[#524C4C]">
                   Share your Instagram handle or photo link wearing Glamirk formulations.
                 </p>
                 <form
@@ -313,7 +313,7 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
                   className="space-y-3 text-left"
                 >
                   <div>
-                    <label className="text-[10.5px] uppercase font-bold tracking-wider text-[#6B6B6B] block mb-1">
+                    <label className="text-[10.5px] uppercase font-bold tracking-wider text-[#524C4C] block mb-1">
                       Instagram Handle / Name
                     </label>
                     <input
@@ -324,7 +324,7 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="text-[10.5px] uppercase font-bold tracking-wider text-[#6B6B6B] block mb-1">
+                    <label className="text-[10.5px] uppercase font-bold tracking-wider text-[#524C4C] block mb-1">
                       Glamirk Shade / Product Worn
                     </label>
                     <input

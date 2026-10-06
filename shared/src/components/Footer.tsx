@@ -343,7 +343,7 @@ export const Footer: React.FC<FooterProps> = ({
                     <span>{col.title}</span>
                   </span>
                   <ChevronDown
-                    className={`w-4 h-4 text-[#6B6B6B] transition-transform duration-200 ${isOpen ? 'rotate-180 text-[#E3B84B]' : ''}`}
+                    className={`w-4 h-4 text-[#524C4C] transition-transform duration-200 ${isOpen ? 'rotate-180 text-[#E3B84B]' : ''}`}
                   />
                 </button>
                 {isOpen && (

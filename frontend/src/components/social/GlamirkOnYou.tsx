@@ -54,7 +54,7 @@ export const GlamirkOnYou: React.FC<GlamirkOnYouProps> = ({ onQuickView }) => {
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#121212] tracking-tight">
               Glamirk on You
             </h2>
-            <p className="text-sm sm:text-base text-[#6B6B6B] font-normal">
+            <p className="text-sm sm:text-base text-[#524C4C] font-normal">
               Beauty, styled your way. Tag <span className="font-semibold text-[#F05A7E]">@glamirkbeauty</span> to be featured in our community showcase.
             </p>
           </div>

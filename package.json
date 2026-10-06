@@ -19,6 +19,7 @@
     "clean": "rimraf frontend/dist admin/dist backend/dist"
   },
   "devDependencies": {
+    "sharp": "^0.35.5",
     "typescript": "~5.8.2"
   },
   "engines": {

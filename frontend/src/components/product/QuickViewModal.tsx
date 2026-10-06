@@ -149,7 +149,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     <span className="text-[10px] tracking-wider uppercase text-[#F05A7E] font-bold">
                       Shade Intelligence
                     </span>
-                    <p className="text-xs text-[#6B6B6B]">
+                    <p className="text-xs text-[#524C4C]">
                       Explore curated tones for Indian skin.
                     </p>
                   </div>
@@ -172,11 +172,11 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
               
               <div className="space-y-4">
                 <div>
-                  <div className="flex items-center justify-between text-[11px] tracking-wider uppercase text-[#6B6B6B] mb-1 font-semibold pr-12">
+                  <div className="flex items-center justify-between text-[11px] tracking-wider uppercase text-[#524C4C] mb-1 font-semibold pr-12">
                     <span>{product.subCategory}</span>
                     <button
                       onClick={() => onToggleWishlist(product.id)}
-                      className="flex items-center gap-1 text-[#6B6B6B] hover:text-[#F05A7E] cursor-pointer transition-colors"
+                      className="flex items-center gap-1 text-[#524C4C] hover:text-[#F05A7E] cursor-pointer transition-colors"
                     >
                       <Heart
                         className={`w-4 h-4 ${
@@ -193,7 +193,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     {product.name}
                   </h2>
 
-                  <p className="text-xs sm:text-sm text-[#6B6B6B] mt-1 leading-relaxed">
+                  <p className="text-xs sm:text-sm text-[#524C4C] mt-1 leading-relaxed">
                     {product.subtitle}
                   </p>
                 </div>
@@ -203,7 +203,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                   <span className="text-2xl text-[#121212] font-extrabold">
                     {product.currency}{currentPrice}
                   </span>
-                  <span className="text-xs text-[#6B6B6B]">
+                  <span className="text-xs text-[#524C4C]">
                     (Inclusive of all taxes & free shipping over ₹999)
                   </span>
                 </div>
@@ -212,7 +212,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                 {product.shades && (
                   <div className="space-y-2 pt-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-[#6B6B6B] font-semibold">
+                      <span className="text-[#524C4C] font-semibold">
                         Select Shade: <strong className="text-[#121212] font-bold">{selectedShade?.name}</strong>
                       </span>
                       <span className="text-[#F05A7E] font-bold text-[11px]">
@@ -241,7 +241,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     </div>
 
                     {selectedShade && (
-                      <p className="text-xs text-[#6B6B6B] bg-[#FCE8ED] p-2.5 rounded-xl border border-[#E8D5A8] mt-2">
+                      <p className="text-xs text-[#524C4C] bg-[#FCE8ED] p-2.5 rounded-xl border border-[#E8D5A8] mt-2">
                         {selectedShade.description}
                       </p>
                     )}
@@ -252,7 +252,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     it has any, else the shade-less product's own sizes. */}
                 {activeSizeOptions.length > 1 && (
                   <div className="space-y-2 pt-1">
-                    <label className="text-xs uppercase tracking-wider text-[#6B6B6B] font-bold block">
+                    <label className="text-xs uppercase tracking-wider text-[#524C4C] font-bold block">
                       Select Size:
                     </label>
                     <div className="grid grid-cols-2 gap-3">
@@ -263,11 +263,11 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                           className={`p-3 text-left rounded-2xl border transition-all cursor-pointer ${
                             selectedSize === opt.label
                               ? 'border-[#F05A7E] bg-[#FCE8ED] shadow-xs'
-                              : 'border-[#E8D5A8] bg-white text-[#6B6B6B] hover:border-[#F05A7E]/50'
+                              : 'border-[#E8D5A8] bg-white text-[#524C4C] hover:border-[#F05A7E]/50'
                           }`}
                         >
                           <span className="text-xs font-bold text-[#121212] block">{opt.label}</span>
-                          <span className="text-[10.5px] text-[#6B6B6B] block mt-0.5">
+                          <span className="text-[10.5px] text-[#524C4C] block mt-0.5">
                             {product.currency}{opt.price}
                           </span>
                         </button>
@@ -276,7 +276,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                   </div>
                 )}
                 {activeSizeOptions.length === 1 && (
-                  <p className="text-[11px] text-[#6B6B6B] pt-1">
+                  <p className="text-[11px] text-[#524C4C] pt-1">
                     Size: <span className="font-bold text-[#121212]">{activeSizeOptions[0].label}</span>
                   </p>
                 )}
@@ -289,7 +289,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       className={`pb-1 transition-colors cursor-pointer ${
                         activeTab === 'DESCRIPTION'
                           ? 'text-[#F05A7E] border-b-2 border-[#F05A7E]'
-                          : 'text-[#6B6B6B] hover:text-[#121212]'
+                          : 'text-[#524C4C] hover:text-[#121212]'
                       }`}
                     >
                       Description
@@ -299,7 +299,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       className={`pb-1 transition-colors cursor-pointer ${
                         activeTab === 'RITUAL'
                           ? 'text-[#F05A7E] border-b-2 border-[#F05A7E]'
-                          : 'text-[#6B6B6B] hover:text-[#121212]'
+                          : 'text-[#524C4C] hover:text-[#121212]'
                       }`}
                     >
                       The Ritual
@@ -309,14 +309,14 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       className={`pb-1 transition-colors cursor-pointer ${
                         activeTab === 'BENEFITS'
                           ? 'text-[#F05A7E] border-b-2 border-[#F05A7E]'
-                          : 'text-[#6B6B6B] hover:text-[#121212]'
+                          : 'text-[#524C4C] hover:text-[#121212]'
                       }`}
                     >
                       Benefits
                     </button>
                   </div>
 
-                  <div className="text-xs text-[#6B6B6B] leading-relaxed min-h-[50px]">
+                  <div className="text-xs text-[#524C4C] leading-relaxed min-h-[50px]">
                     {activeTab === 'DESCRIPTION' && (
                       <p>{product.description}</p>
                     )}
@@ -391,7 +391,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       onClose();
                       onViewDetails(product);
                     }}
-                    className="w-full py-2 text-center text-xs font-bold text-[#6B6B6B] hover:text-[#F05A7E] transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                    className="w-full py-2 text-center text-xs font-bold text-[#524C4C] hover:text-[#F05A7E] transition-colors flex items-center justify-center gap-1 cursor-pointer"
                   >
                     <span>View Complete Product Details & Ritual</span>
                     <ChevronRight className="w-3.5 h-3.5" />

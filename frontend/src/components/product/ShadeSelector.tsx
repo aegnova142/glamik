@@ -29,7 +29,7 @@ export const ShadeSelector: React.FC<ShadeSelectorProps> = ({
     <div className="space-y-3.5 py-4 border-t border-b border-[#E8D5A8]">
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
-          <span className="text-[11px] uppercase tracking-[0.2em] font-bold text-[#6B6B6B] block">
+          <span className="text-[11px] uppercase tracking-[0.2em] font-bold text-[#524C4C] block">
             CHOOSE YOUR SHADE
           </span>
           <div className="flex items-baseline gap-2">
@@ -74,7 +74,7 @@ export const ShadeSelector: React.FC<ShadeSelectorProps> = ({
       </div>
 
       {/* Shade description */}
-      <p className="text-xs text-[#6B6B6B] bg-[#FCE8ED] p-3 rounded-2xl border border-[#E8D5A8] leading-relaxed">
+      <p className="text-xs text-[#524C4C] bg-[#FCE8ED] p-3 rounded-2xl border border-[#E8D5A8] leading-relaxed">
         {selectedShade.description}
       </p>
 

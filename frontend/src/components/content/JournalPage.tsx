@@ -70,7 +70,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({
         <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl text-[#121212] tracking-tight mb-3">
           THE GLAMIRK JOURNAL
         </h1>
-        <p className="font-serif italic text-lg sm:text-xl text-[#6B6B6B] max-w-xl mx-auto">
+        <p className="font-serif italic text-lg sm:text-xl text-[#524C4C] max-w-xl mx-auto">
           Beauty, decoded. Looks, curated.
         </p>
 
@@ -85,7 +85,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({
                 className={`px-4 py-2 text-[11px] font-semibold tracking-[0.18em] uppercase transition-all duration-300 rounded-none cursor-pointer ${
                   isActive
                     ? 'bg-[#0B0B0B] text-[#FAF9F6] shadow-sm'
-                    : 'bg-[#FAF9F6] text-[#6B6B6B] hover:bg-[#E8D5A8] hover:text-[#121212]'
+                    : 'bg-[#FAF9F6] text-[#524C4C] hover:bg-[#E8D5A8] hover:text-[#121212]'
                 }`}
               >
                 {cat}
@@ -128,7 +128,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({
               </div>
 
               <div className="pt-8 sm:pt-12 space-y-4">
-                <div className="flex items-center gap-4 text-xs text-[#6B6B6B]">
+                <div className="flex items-center gap-4 text-xs text-[#524C4C]">
                   <span>By {heroArticle.author}</span>
                   <span>•</span>
                   <span>{heroArticle.date}</span>
@@ -167,7 +167,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({
             <h3 className="font-serif text-2xl sm:text-3xl text-[#121212]">
               WHAT’S YOUR GLAM?
             </h3>
-            <p className="text-xs sm:text-sm text-[#6B6B6B] max-w-md">
+            <p className="text-xs sm:text-sm text-[#524C4C] max-w-md">
               Take our 45-second interactive discovery quiz to reveal your curated cosmetic archetype, signature lip shade, and ritual guide.
             </p>
           </div>
@@ -224,7 +224,7 @@ export const JournalPage: React.FC<JournalPageProps> = ({
             <h2 className="font-serif text-2xl text-[#121212]">
               {selectedCategory === 'ALL' ? 'ALL JOURNAL STORIES & GUIDES' : `${selectedCategory} ARTICLES`}
             </h2>
-            <span className="text-xs text-[#6B6B6B]">
+            <span className="text-xs text-[#524C4C]">
               Showing {filteredArticles.length} stories
             </span>
           </div>

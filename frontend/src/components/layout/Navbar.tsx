@@ -44,7 +44,7 @@ const AccountMenuLink: React.FC<{ label: string; icon: React.ElementType; onClic
       <Icon className="w-4 h-4 text-[#C9972B]" />
       <span className="font-medium">{label}</span>
     </span>
-    <ArrowRight className="w-3 h-3 text-[#6B6B6B] group-hover:text-[#FAF9F6] transition-colors" />
+    <ArrowRight className="w-3 h-3 text-[#524C4C] group-hover:text-[#FAF9F6] transition-colors" />
   </button>
 );
 
@@ -203,7 +203,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <span className="text-xl sm:text-2xl font-bold tracking-tight text-[#121212] leading-none group-hover:text-[#F05A7E] transition-colors">
                       {globalSettings?.logoText || 'Glamirk'}
                     </span>
-                    <span className="text-[9px] font-medium tracking-[0.2em] text-[#6B6B6B] uppercase mt-0.5">
+                    <span className="text-[9px] font-medium tracking-[0.2em] text-[#524C4C] uppercase mt-0.5">
                       Luxury Beauty
                     </span>
                   </div>
@@ -320,7 +320,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               id="nav-search-bar-trigger"
               onClick={onOpenSearch}
-              className="hidden md:flex items-center justify-between w-44 lg:w-56 px-3.5 py-2 bg-[#FCE8ED] border border-[#E8D5A8] rounded-full text-xs text-[#6B6B6B] hover:border-[#F05A7E] hover:bg-white transition-all cursor-pointer shadow-xs"
+              className="hidden md:flex items-center justify-between w-44 lg:w-56 px-3.5 py-2 bg-[#FCE8ED] border border-[#E8D5A8] rounded-full text-xs text-[#524C4C] hover:border-[#F05A7E] hover:bg-white transition-all cursor-pointer shadow-xs"
               title="Search Glamirk products"
             >
               <span className="truncate">Search for products...</span>
@@ -746,7 +746,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <span className="text-base font-bold text-[#121212] leading-none">
                           {globalSettings?.logoText || 'Glamirk'}
                         </span>
-                        <span className="text-[8.5px] font-semibold tracking-[0.2em] text-[#6B6B6B] uppercase mt-0.5">
+                        <span className="text-[8.5px] font-semibold tracking-[0.2em] text-[#524C4C] uppercase mt-0.5">
                           Luxury Beauty
                         </span>
                       </div>
@@ -756,7 +756,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   id="close-mobile-menu-btn"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="w-8 h-8 flex items-center justify-center text-[#6B6B6B] hover:text-[#F05A7E] transition-colors rounded-full hover:bg-white bg-white/60 border border-[#E8D5A8]/60 cursor-pointer"
+                  className="w-8 h-8 flex items-center justify-center text-[#524C4C] hover:text-[#F05A7E] transition-colors rounded-full hover:bg-white bg-white/60 border border-[#E8D5A8]/60 cursor-pointer"
                   aria-label="Close menu"
                 >
                   <X className="w-4.5 h-4.5 stroke-[2]" />
@@ -784,21 +784,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                       className="w-full text-left font-medium text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white cursor-pointer"
                     >
                       <span>Lipstick &amp; Makeup</span>
-                      <span className="text-[11px] text-[#6B6B6B]">8 Shades</span>
+                      <span className="text-[11px] text-[#524C4C]">8 Shades</span>
                     </button>
                     <button
                       onClick={() => handleShopNavigation('Skin', 'Cleansing')}
                       className="w-full text-left font-medium text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white cursor-pointer"
                     >
                       <span>Skin &amp; Cleansers</span>
-                      <span className="text-[11px] text-[#6B6B6B]">Balm</span>
+                      <span className="text-[11px] text-[#524C4C]">Balm</span>
                     </button>
                     <button
                       onClick={() => handleShopNavigation('Makeup', 'Face')}
                       className="w-full text-left font-medium text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white cursor-pointer"
                     >
                       <span>Ceremonial Sindoor</span>
-                      <span className="text-[11px] text-[#6B6B6B]">Luxe</span>
+                      <span className="text-[11px] text-[#524C4C]">Luxe</span>
                     </button>
                     <button
                       onClick={() => {
@@ -845,7 +845,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <Sparkles className="w-4 h-4 text-[#F05A7E]" />
                         <span>Virtual Try-On Studio</span>
                       </div>
-                      <span className="text-[10px] text-[#6B6B6B]">Live AR</span>
+                      <span className="text-[10px] text-[#524C4C]">Live AR</span>
                     </button>
                     <button
                       onClick={() => {
@@ -858,7 +858,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <Sparkles className="w-4 h-4 text-[#F05A7E]" />
                         <span>Beauty Assistant Chat</span>
                       </div>
-                      <span className="text-[10px] text-[#6B6B6B]">AI 24/7</span>
+                      <span className="text-[10px] text-[#524C4C]">AI 24/7</span>
                     </button>
                   </div>
                 </div>
@@ -878,7 +878,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         className="w-full text-left font-medium text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white cursor-pointer"
                       >
                         <span>The Glamirk Journal</span>
-                        <span className="text-[11px] text-[#6B6B6B]">Editorial</span>
+                        <span className="text-[11px] text-[#524C4C]">Editorial</span>
                       </button>
                     )}
                     {onNavigateGuides && (
@@ -890,7 +890,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         className="w-full text-left font-medium text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white cursor-pointer"
                       >
                         <span>Beauty Guides</span>
-                        <span className="text-[11px] text-[#6B6B6B]">Masterclass</span>
+                        <span className="text-[11px] text-[#524C4C]">Masterclass</span>
                       </button>
                     )}
                     {onNavigateSocialCommerce && (
@@ -914,7 +914,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         className="w-full text-left font-medium text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white cursor-pointer"
                       >
                         <span>About Us</span>
-                        <span className="text-[11px] text-[#6B6B6B]">Our Story</span>
+                        <span className="text-[11px] text-[#524C4C]">Our Story</span>
                       </button>
                     )}
                   </div>
@@ -945,7 +945,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                             className="w-full text-left font-medium text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white cursor-pointer"
                           >
                             <span>{item.label}</span>
-                            <span className="text-[11px] text-[#6B6B6B]">{item.hint}</span>
+                            <span className="text-[11px] text-[#524C4C]">{item.hint}</span>
                           </button>
                         ))}
                         <button
@@ -996,7 +996,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                             className="w-full text-left font-medium text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white cursor-pointer"
                           >
                             <span>{item.label}</span>
-                            <span className="text-[11px] text-[#6B6B6B]">Sign in</span>
+                            <span className="text-[11px] text-[#524C4C]">Sign in</span>
                           </button>
                         ))}
                       </>

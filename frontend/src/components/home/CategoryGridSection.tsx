@@ -100,7 +100,7 @@ export const CategoryGridSection: React.FC<CategoryGridSectionProps> = ({
             <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-[#121212] tracking-tight">
               Shop by Category
             </h2>
-            <p className="text-xs sm:text-sm text-[#6B6B6B] mt-1 max-w-lg">
+            <p className="text-xs sm:text-sm text-[#524C4C] mt-1 max-w-lg">
               Explore thoughtfully formulated cosmetics and skincare tailored for daily radiance and celebratory rituals.
             </p>
           </div>
@@ -144,7 +144,7 @@ export const CategoryGridSection: React.FC<CategoryGridSectionProps> = ({
                 <h3 className="text-base font-bold text-[#121212] group-hover:text-[#F05A7E] transition-colors">
                   {cat.name}
                 </h3>
-                <p className="text-xs text-[#6B6B6B] line-clamp-2 leading-relaxed font-light">
+                <p className="text-xs text-[#524C4C] line-clamp-2 leading-relaxed font-light">
                   {cat.description}
                 </p>
               </div>

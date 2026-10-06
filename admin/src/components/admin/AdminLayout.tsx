@@ -34,6 +34,7 @@ import { AdminShadeFinder } from './AdminShadeFinder';
 import { AdminShadeIntelligence } from './AdminShadeIntelligence';
 import { AdminPersonalizedBeauty } from './AdminPersonalizedBeauty';
 import { AdminShopMegaMenu } from './AdminShopMegaMenu';
+import { AdminBackgroundManager } from './AdminBackgroundManager';
 import { AdminLooks } from './AdminLooks';
 import { AdminPages } from './AdminPages';
 import { AdminProducts } from './AdminProducts';
@@ -66,6 +67,7 @@ type AdminTab =
   | 'shadeIntelligence'
   | 'personalizedBeauty'
   | 'shopMegaMenu'
+  | 'backgroundManager'
   | 'looks'
   | 'pages'
   | 'products'
@@ -111,6 +113,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         { id: 'shadeIntelligence', label: 'Shade Intelligence (Home)', icon: Sparkles },
         { id: 'personalizedBeauty', label: 'Personalized Beauty (Home)', icon: Sparkles },
         { id: 'shopMegaMenu', label: 'Shop Mega-Menu', icon: Layers },
+        { id: 'backgroundManager', label: 'Background Manager', icon: ImageIcon },
         { id: 'looks', label: 'Shop The Look', icon: Sparkles },
         { id: 'blog', label: 'Journal & Guides', icon: BookOpen },
         { id: 'pages', label: 'Pages & Sections Builder', icon: FileText },
@@ -340,6 +343,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
             {activeTab === 'shadeIntelligence' && <AdminShadeIntelligence />}
             {activeTab === 'personalizedBeauty' && <AdminPersonalizedBeauty />}
             {activeTab === 'shopMegaMenu' && <AdminShopMegaMenu />}
+            {activeTab === 'backgroundManager' && <AdminBackgroundManager />}
             {activeTab === 'looks' && <AdminLooks />}
             {activeTab === 'tryOnModels' && <AdminTryOnModels />}
             {activeTab === 'pages' && <AdminPages />}

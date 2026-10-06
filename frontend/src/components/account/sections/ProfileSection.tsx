@@ -204,7 +204,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
           <div className="space-y-2 min-w-0">
             <div>
               <h2 className="font-serif text-lg text-[#121212]">{data?.name}</h2>
-              <p className="text-[11.5px] text-[#6B6B6B]">Member since {formatDate(data?.createdAt)}</p>
+              <p className="text-[11.5px] text-[#524C4C]">Member since {formatDate(data?.createdAt)}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <input
@@ -235,7 +235,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
           <div className="flex items-center gap-3 min-w-0">
             <Mail className="w-4 h-4 text-[#C9972B] shrink-0" />
             <div className="min-w-0">
-              <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#6B6B6B] block">Email</span>
+              <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#524C4C] block">Email</span>
               <span className="text-[13px] text-[#121212] truncate block">{data?.email}</span>
             </div>
           </div>
@@ -260,7 +260,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
           <div className="flex items-center gap-3 min-w-0">
             <Phone className="w-4 h-4 text-[#C9972B] shrink-0" />
             <div className="min-w-0">
-              <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#6B6B6B] block">Mobile</span>
+              <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#524C4C] block">Mobile</span>
               <span className="text-[13px] text-[#121212] truncate block">{data?.phone || 'Not added yet'}</span>
             </div>
           </div>
@@ -280,7 +280,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
         {phoneVerifyNotice && (
           <div className="px-5 py-3 flex gap-2.5 bg-[#FAF9F6]">
             <AlertTriangle className="w-4 h-4 text-[#C9972B] shrink-0 mt-0.5" />
-            <p className="text-[11.5px] text-[#6B6B6B] leading-relaxed">{phoneVerifyNotice}</p>
+            <p className="text-[11.5px] text-[#524C4C] leading-relaxed">{phoneVerifyNotice}</p>
           </div>
         )}
       </AccountCard>

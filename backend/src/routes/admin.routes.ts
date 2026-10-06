@@ -297,6 +297,7 @@ router.get('/cms/content', async (req: Request, res: Response) => {
             })),
         }
       : undefined,
+    homepageBackgrounds: db.homepageBackgrounds,
     journalSectionCopy: db.journalSectionCopy,
     findMyShadeResultsCopy: db.findMyShadeResultsCopy,
     findMyShadeHero: db.findMyShadeHero,
@@ -1245,6 +1246,25 @@ router.put('/admin/personalized-beauty', requireAdmin, async (req: Authenticated
   broadcastEvent('CMS_UPDATE', 'personalizedBeauty', db.personalizedBeauty);
 
   res.json(db.personalizedBeauty);
+});
+
+// [Glamik CMS] 2026-10-06 — admin-only save for homepage section backgrounds.
+router.put('/admin/homepage-backgrounds', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const incoming = req.body;
+  if (!incoming || typeof incoming !== 'object' || !Array.isArray(incoming.sections)) {
+    return res.status(400).json({ error: 'Invalid homepage backgrounds payload' });
+  }
+  for (const s of incoming.sections) {
+    if (!s.sectionKey || !Array.isArray(s.items)) {
+      return res.status(400).json({ error: 'Each section needs a sectionKey and an items array' });
+    }
+  }
+  db.homepageBackgrounds = incoming;
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_HOMEPAGE_BACKGROUNDS', 'HOMEPAGE_BACKGROUNDS', 'homepage-backgrounds-main', 'Homepage Section Backgrounds Updated');
+  broadcastEvent('CMS_UPDATE', 'homepageBackgrounds', db.homepageBackgrounds);
+  res.json(db.homepageBackgrounds);
 });
 
 // [Glamik CMS] 2026-10-03 — admin-only save for the header Shop mega-menu.

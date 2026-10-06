@@ -40,7 +40,7 @@ export const TrendingDiscovery: React.FC<TrendingDiscoveryProps> = ({
               Trending Now & Editor’s Picks
             </h2>
           </div>
-          <p className="text-xs sm:text-sm text-[#6B6B6B] max-w-sm">
+          <p className="text-xs sm:text-sm text-[#524C4C] max-w-sm">
             The season’s most explored formulations, editorial narratives, and beauty statements.
           </p>
         </div>
@@ -66,7 +66,7 @@ export const TrendingDiscovery: React.FC<TrendingDiscoveryProps> = ({
               <h3 className="text-lg font-bold text-[#121212] group-hover:text-[#F05A7E] transition-colors leading-snug">
                 {trendingProduct.name}
               </h3>
-              <p className="text-xs text-[#6B6B6B] line-clamp-2">
+              <p className="text-xs text-[#524C4C] line-clamp-2">
                 {trendingProduct.subtitle}
               </p>
             </div>
@@ -95,7 +95,7 @@ export const TrendingDiscovery: React.FC<TrendingDiscoveryProps> = ({
               <h3 className="text-lg font-bold text-[#121212] group-hover:text-[#F05A7E] transition-colors leading-snug">
                 {trendingLook.title}
               </h3>
-              <p className="text-xs text-[#6B6B6B] line-clamp-2">
+              <p className="text-xs text-[#524C4C] line-clamp-2">
                 {trendingLook.tagline}
               </p>
             </div>
@@ -124,7 +124,7 @@ export const TrendingDiscovery: React.FC<TrendingDiscoveryProps> = ({
               <h3 className="text-lg font-bold text-[#121212] group-hover:text-[#F05A7E] transition-colors leading-snug">
                 {trendingArticle.title}
               </h3>
-              <p className="text-xs text-[#6B6B6B] line-clamp-2">
+              <p className="text-xs text-[#524C4C] line-clamp-2">
                 {trendingArticle.excerpt}
               </p>
             </div>

@@ -51,7 +51,7 @@ const AccordionSection: React.FC<{
         )}
       </span>
       <ChevronDown
-        className={`h-3.5 w-3.5 text-[#6B6B6B] transition-transform duration-200 group-hover:text-[#121212] ${
+        className={`h-3.5 w-3.5 text-[#524C4C] transition-transform duration-200 group-hover:text-[#121212] ${
           isOpen ? 'rotate-180' : ''
         }`}
       />
@@ -77,7 +77,7 @@ const CheckboxRow: React.FC<{
   checked: boolean;
   onChange: () => void;
 }> = ({ label, checked, onChange }) => (
-  <label className="flex cursor-pointer items-center gap-2.5 py-1.5 text-xs text-[#6B6B6B] transition-colors hover:text-[#121212]">
+  <label className="flex cursor-pointer items-center gap-2.5 py-1.5 text-xs text-[#524C4C] transition-colors hover:text-[#121212]">
     <span
       className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors ${
         checked ? 'border-[#F05A7E] bg-[#F05A7E]' : 'border-[#E8D5A8] bg-white'
@@ -280,12 +280,12 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                 key={idx}
                 onClick={() => handleCategorySelect(cat.category, cat.subCategory)}
                 className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs transition-colors ${
-                  isSelected ? 'bg-[#FCE8ED] font-bold text-[#F05A7E]' : 'text-[#6B6B6B] hover:bg-[#FAF9F6] hover:text-[#121212]'
+                  isSelected ? 'bg-[#FCE8ED] font-bold text-[#F05A7E]' : 'text-[#524C4C] hover:bg-[#FAF9F6] hover:text-[#121212]'
                 }`}
               >
                 <span>{cat.label}</span>
                 <span className="flex items-center gap-1.5">
-                  <span className="font-mono text-[10px] text-[#6B6B6B]">{categoryCounts[idx]}</span>
+                  <span className="font-mono text-[10px] text-[#524C4C]">{categoryCounts[idx]}</span>
                   {isSelected && <Check className="h-3.5 w-3.5 text-[#F05A7E]" />}
                 </span>
               </button>
@@ -359,9 +359,9 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           {/* Min/Max numeric inputs */}
           <div className="flex items-center gap-2">
             <div className="flex-1">
-              <label className="mb-1 block text-[9.5px] font-semibold uppercase tracking-wider text-[#6B6B6B]">Min</label>
+              <label className="mb-1 block text-[9.5px] font-semibold uppercase tracking-wider text-[#524C4C]">Min</label>
               <div className="flex items-center gap-1 rounded-lg border border-[#E8D5A8] bg-white px-2 py-1.5">
-                <span className="text-[11px] text-[#6B6B6B]">₹</span>
+                <span className="text-[11px] text-[#524C4C]">₹</span>
                 <input
                   type="number"
                   value={priceMin}
@@ -374,9 +374,9 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
             </div>
             <span className="mt-4 text-[#E8D5A8]">—</span>
             <div className="flex-1">
-              <label className="mb-1 block text-[9.5px] font-semibold uppercase tracking-wider text-[#6B6B6B]">Max</label>
+              <label className="mb-1 block text-[9.5px] font-semibold uppercase tracking-wider text-[#524C4C]">Max</label>
               <div className="flex items-center gap-1 rounded-lg border border-[#E8D5A8] bg-white px-2 py-1.5">
-                <span className="text-[11px] text-[#6B6B6B]">₹</span>
+                <span className="text-[11px] text-[#524C4C]">₹</span>
                 <input
                   type="number"
                   value={priceMax}
@@ -400,7 +400,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
                   className={`cursor-pointer rounded-full border px-2.5 py-1 text-[10.5px] font-medium transition-colors ${
                     isActive
                       ? 'border-[#F05A7E] bg-[#FCE8ED] text-[#F05A7E]'
-                      : 'border-[#E8D5A8] bg-white text-[#6B6B6B] hover:border-[#C9972B] hover:text-[#121212]'
+                      : 'border-[#E8D5A8] bg-white text-[#524C4C] hover:border-[#C9972B] hover:text-[#121212]'
                   }`}
                 >
                   {preset.label}
@@ -604,7 +604,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           )}
         </div>
       </div>
-      <p className="mt-1 text-[10.5px] text-[#6B6B6B]">
+      <p className="mt-1 text-[10.5px] text-[#524C4C]">
         <strong className="font-semibold text-[#121212]">{totalFilteredCount}</strong> of {totalCount} products match
       </p>
     </div>

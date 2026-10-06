@@ -116,10 +116,10 @@ export const DeliveryCheck: React.FC = () => {
                 <CheckCircle2 className="w-4 h-4 text-[#F05A7E]" />
                 Delivery available to {result.pincode}
               </p>
-              <p className="text-[#6B6B6B]">
+              <p className="text-[#524C4C]">
                 Estimated delivery: <strong className="text-[#121212]">{result.estimateStart} – {result.estimateEnd}</strong>
               </p>
-              <div className="flex items-center gap-4 pt-1 text-[#6B6B6B]">
+              <div className="flex items-center gap-4 pt-1 text-[#524C4C]">
                 <span className="flex items-center gap-1.5">
                   <Truck className="w-3.5 h-3.5 text-[#F05A7E]" />
                   Free delivery

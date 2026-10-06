@@ -250,7 +250,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                   <span className="italic font-light">{hero.headingHighlight}</span>
                 </h1>
 
-                <p className="text-base sm:text-lg text-[#6B6B6B] font-light max-w-xl leading-relaxed">
+                <p className="text-base sm:text-lg text-[#524C4C] font-light max-w-xl leading-relaxed">
                   {hero.description}
                 </p>
 
@@ -273,7 +273,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                 </div>
 
                 {/* Consultation Assurance */}
-                <div className="pt-8 border-t border-[#E8D5A8] flex items-center gap-6 text-xs text-[#6B6B6B]">
+                <div className="pt-8 border-t border-[#E8D5A8] flex items-center gap-6 text-xs text-[#524C4C]">
                   <div className="flex items-center gap-1.5">
                     <Check className="w-4 h-4 text-[#C9972B]" />
                     <span>60-Second Consultation</span>
@@ -327,7 +327,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setCurrentStep(currentStep - 1)}
-                className="p-1.5 text-[#6B6B6B] hover:text-[#121212] hover:bg-[#E8D5A8] rounded-full transition-colors cursor-pointer"
+                className="p-1.5 text-[#524C4C] hover:text-[#121212] hover:bg-[#E8D5A8] rounded-full transition-colors cursor-pointer"
                 aria-label="Previous step"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -354,7 +354,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                 <h2 className="font-serif text-3xl sm:text-4xl text-[#121212]">
                   WHAT'S YOUR SKIN TONE?
                 </h2>
-                <p className="text-sm text-[#6B6B6B] font-light">
+                <p className="text-sm text-[#524C4C] font-light">
                   Select the tone that best reflects your surface complexion.
                 </p>
               </div>
@@ -378,7 +378,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                       <span className="text-sm font-bold uppercase tracking-wider text-[#121212] block">
                         {tone.label}
                       </span>
-                      <span className="text-xs text-[#6B6B6B] font-light block">
+                      <span className="text-xs text-[#524C4C] font-light block">
                         {tone.desc}
                       </span>
                     </div>
@@ -389,7 +389,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
               <div className="flex items-center justify-between pt-6 border-t border-[#E8D5A8]">
                 <button
                   onClick={() => setCurrentStep(2)}
-                  className="text-xs text-[#6B6B6B] hover:text-[#121212] uppercase tracking-wider font-medium cursor-pointer"
+                  className="text-xs text-[#524C4C] hover:text-[#121212] uppercase tracking-wider font-medium cursor-pointer"
                 >
                   Skip
                 </button>
@@ -418,7 +418,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                     WHAT'S YOUR UNDERTONE?
                   </h2>
                 </div>
-                <p className="text-sm text-[#6B6B6B] font-light">
+                <p className="text-sm text-[#524C4C] font-light">
                   Undertone is the subtle tone under your skin surface.
                 </p>
                 <button
@@ -444,7 +444,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                     <span className="text-sm font-bold uppercase tracking-wider text-[#121212] block">
                       {t}
                     </span>
-                    <p className="text-xs text-[#6B6B6B] font-light leading-relaxed">
+                    <p className="text-xs text-[#524C4C] font-light leading-relaxed">
                       {t === 'Warm' && 'Peachy, golden, yellow or olive nuances.'}
                       {t === 'Cool' && 'Pink, rose, berry or bluish nuances.'}
                       {t === 'Neutral' && 'Equally balanced between warm and cool tones.'}
@@ -456,7 +456,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
               <div className="flex items-center justify-between pt-6 border-t border-[#E8D5A8]">
                 <button
                   onClick={() => setCurrentStep(1)}
-                  className="text-xs text-[#6B6B6B] hover:text-[#121212] uppercase tracking-wider font-medium cursor-pointer"
+                  className="text-xs text-[#524C4C] hover:text-[#121212] uppercase tracking-wider font-medium cursor-pointer"
                 >
                   Back
                 </button>
@@ -483,7 +483,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                 <h2 className="font-serif text-3xl sm:text-4xl text-[#121212]">
                   WHAT'S YOUR SIGNATURE STYLE?
                 </h2>
-                <p className="text-sm text-[#6B6B6B] font-light">
+                <p className="text-sm text-[#524C4C] font-light">
                   Choose the aesthetic that best aligns with your daily and evening mood.
                 </p>
               </div>
@@ -502,7 +502,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                     <span className="text-sm font-bold uppercase tracking-wider text-[#121212] block">
                       {s}
                     </span>
-                    <span className="text-xs text-[#6B6B6B] font-light block">
+                    <span className="text-xs text-[#524C4C] font-light block">
                       {s === 'Natural' && 'Effortless terracotta & nude tones'}
                       {s === 'Minimal' && 'Understated, clean skin & subtle rose'}
                       {s === 'Bold' && 'High-impact crimson & statement lips'}
@@ -516,7 +516,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
               <div className="flex items-center justify-between pt-6 border-t border-[#E8D5A8]">
                 <button
                   onClick={() => setCurrentStep(2)}
-                  className="text-xs text-[#6B6B6B] hover:text-[#121212] uppercase tracking-wider font-medium cursor-pointer"
+                  className="text-xs text-[#524C4C] hover:text-[#121212] uppercase tracking-wider font-medium cursor-pointer"
                 >
                   Back
                 </button>
@@ -543,7 +543,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                 <h2 className="font-serif text-3xl sm:text-4xl text-[#121212]">
                   WHAT ARE YOU SHOPPING FOR?
                 </h2>
-                <p className="text-sm text-[#6B6B6B] font-light">
+                <p className="text-sm text-[#524C4C] font-light">
                   Tell us where you plan to wear your new Glamirk beauty creations.
                 </p>
               </div>
@@ -569,7 +569,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
               <div className="flex items-center justify-between pt-6 border-t border-[#E8D5A8]">
                 <button
                   onClick={() => setCurrentStep(3)}
-                  className="text-xs text-[#6B6B6B] hover:text-[#121212] uppercase tracking-wider font-medium cursor-pointer"
+                  className="text-xs text-[#524C4C] hover:text-[#121212] uppercase tracking-wider font-medium cursor-pointer"
                 >
                   Back
                 </button>
@@ -596,7 +596,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                 <h2 className="font-serif text-3xl sm:text-4xl text-[#121212]">
                   WHAT FINISH DO YOU LOVE?
                 </h2>
-                <p className="text-sm text-[#6B6B6B] font-light">
+                <p className="text-sm text-[#524C4C] font-light">
                   Choose your preferred lip and cosmetic texture.
                 </p>
               </div>
@@ -615,7 +615,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                     <span className="text-sm font-bold uppercase tracking-wider text-[#121212] block">
                       {f === 'Open' ? "I'm Open to Suggestions" : f}
                     </span>
-                    <span className="text-xs text-[#6B6B6B] font-light block">
+                    <span className="text-xs text-[#524C4C] font-light block">
                       {f === 'Matte' && 'Transfer-proof velvet matte with soft focus blur'}
                       {f === 'Glossy' && 'Radiant high-shine cushion finish'}
                       {f === 'Natural' && 'Lightweight melting comfort balm feel'}
@@ -628,7 +628,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
               <div className="flex items-center justify-between pt-6 border-t border-[#E8D5A8]">
                 <button
                   onClick={() => setCurrentStep(4)}
-                  className="text-xs text-[#6B6B6B] hover:text-[#121212] uppercase tracking-wider font-medium cursor-pointer"
+                  className="text-xs text-[#524C4C] hover:text-[#121212] uppercase tracking-wider font-medium cursor-pointer"
                 >
                   Back
                 </button>
@@ -657,7 +657,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
             <h2 className="font-serif text-3xl sm:text-4xl text-[#121212]">
               WANT A MORE PERSONAL MATCH?
             </h2>
-            <p className="text-xs sm:text-sm text-[#6B6B6B] font-light max-w-md mx-auto leading-relaxed">
+            <p className="text-xs sm:text-sm text-[#524C4C] font-light max-w-md mx-auto leading-relaxed">
               Capture a selfie or upload a photo to preview shades on your face.
             </p>
           </div>
@@ -665,7 +665,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
           {/* Privacy Notice Card */}
           <div className="p-4 bg-[#FAF9F6] border border-[#E8D5A8] flex items-start gap-3 text-left">
             <ShieldCheck className="w-5 h-5 text-[#C9972B] shrink-0 mt-0.5" />
-            <div className="text-xs text-[#6B6B6B] space-y-0.5">
+            <div className="text-xs text-[#524C4C] space-y-0.5">
               <strong className="text-[#121212] block">Your privacy matters.</strong>
               <p className="font-light">
                 Your photo is processed locally in your browser to help personalize your beauty match and is never uploaded or shared without permission.
@@ -776,7 +776,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
             />
           </div>
 
-          <p className="text-center text-[10.5px] text-[#6B6B6B] -mt-1">
+          <p className="text-center text-[10.5px] text-[#524C4C] -mt-1">
             Accepted formats: JPG, PNG, WEBP • Max file size 2MB
           </p>
 
@@ -790,7 +790,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
           <div className="pt-6 border-t border-[#E8D5A8] flex items-center justify-between">
             <button
               onClick={() => setCurrentStep(5)}
-              className="text-xs text-[#6B6B6B] hover:text-[#121212] uppercase tracking-wider font-medium cursor-pointer"
+              className="text-xs text-[#524C4C] hover:text-[#121212] uppercase tracking-wider font-medium cursor-pointer"
             >
               Back
             </button>
@@ -823,7 +823,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
             <h2 className="font-serif text-3xl text-[#121212]">
               CREATING YOUR GLAM EDIT...
             </h2>
-            <p className="text-xs sm:text-sm text-[#6B6B6B] font-light max-w-sm mx-auto">
+            <p className="text-xs sm:text-sm text-[#524C4C] font-light max-w-sm mx-auto">
               Finding formulations and shades calibrated for your {skinTone.toLowerCase()} skin tone with {undertone.toLowerCase()} undertones.
             </p>
           </div>
@@ -836,7 +836,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
       {currentStep === 8 && !matchResult && (
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24 text-center space-y-4">
           <h2 className="font-serif text-2xl text-[#121212]">No Shades Available Right Now</h2>
-          <p className="text-sm text-[#6B6B6B]">
+          <p className="text-sm text-[#524C4C]">
             We couldn't find any active shade formulations to match against. Please check back soon or explore the full shop.
           </p>
         </div>
@@ -855,7 +855,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
             <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl text-[#121212]">
               {resultsCopy.resultsHeading}
             </h2>
-            <p className="text-sm sm:text-base text-[#6B6B6B] font-light max-w-xl mx-auto">
+            <p className="text-sm sm:text-base text-[#524C4C] font-light max-w-xl mx-auto">
               {resultsCopy.resultsSubtitle}
             </p>
 
@@ -930,7 +930,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                   <h3 className="font-serif text-3xl text-[#121212]">
                     {matchResult.primaryProduct.name}
                   </h3>
-                  <p className="text-sm text-[#6B6B6B] font-light mt-1">
+                  <p className="text-sm text-[#524C4C] font-light mt-1">
                     Shade: <strong className="text-[#121212]">{matchResult.primaryShade.name}</strong> • {matchResult.primaryProduct.finish || 'Velvet Matte'}
                   </p>
                 </div>
@@ -939,7 +939,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                   <span className="font-serif text-2xl text-[#121212]">
                     {matchResult.primaryProduct.currency}{matchResult.primaryProduct.price}
                   </span>
-                  <span className="text-xs text-[#6B6B6B]">
+                  <span className="text-xs text-[#524C4C]">
                     (Inclusive of all taxes)
                   </span>
                 </div>
@@ -950,13 +950,13 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>WHY WE PICKED IT</span>
                   </span>
-                  <p className="text-xs text-[#6B6B6B] font-light leading-relaxed">
+                  <p className="text-xs text-[#524C4C] font-light leading-relaxed">
                     {matchResult.whyWePickedIt}
                   </p>
                 </div>
 
                 {/* Match Breakdown Formula */}
-                <div className="text-xs text-[#6B6B6B] space-y-1.5 border-l-2 border-[#C9972B] pl-3">
+                <div className="text-xs text-[#524C4C] space-y-1.5 border-l-2 border-[#C9972B] pl-3">
                   <p><strong className="text-[#121212]">{undertone} Undertone</strong> + <strong className="text-[#121212]">{skinTone} Skin Tone</strong></p>
                   <p><strong className="text-[#121212]">{style} Style</strong> for <strong className="text-[#121212]">{occasion}</strong></p>
                 </div>
@@ -1005,7 +1005,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
 
                   <button
                     onClick={() => setCurrentStep(1)}
-                    className="text-xs text-[#6B6B6B] hover:text-[#121212] uppercase tracking-wider font-light cursor-pointer"
+                    className="text-xs text-[#524C4C] hover:text-[#121212] uppercase tracking-wider font-light cursor-pointer"
                   >
                     Retake Quiz
                   </button>
@@ -1049,7 +1049,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
                       </span>
                     </div>
 
-                    <p className="text-xs text-[#6B6B6B] font-light leading-relaxed">
+                    <p className="text-xs text-[#524C4C] font-light leading-relaxed">
                       {alt.matchReason}
                     </p>
                   </div>

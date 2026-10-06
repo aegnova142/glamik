@@ -48,7 +48,7 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({
           LOST IN THE GLAM?
         </h1>
 
-        <p className="text-[#6B6B6B] text-base sm:text-lg max-w-lg mx-auto font-light leading-relaxed mb-10">
+        <p className="text-[#524C4C] text-base sm:text-lg max-w-lg mx-auto font-light leading-relaxed mb-10">
           The page you’re looking for isn’t here. Let’s get you back to the Glam and your bespoke beauty rituals.
         </p>
 

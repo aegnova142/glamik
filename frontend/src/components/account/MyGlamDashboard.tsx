@@ -322,7 +322,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
             <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl text-[#121212]">
               MY GLAM
             </h1>
-            <p className="text-xs sm:text-sm text-[#6B6B6B] font-light max-w-lg">
+            <p className="text-xs sm:text-sm text-[#524C4C] font-light max-w-lg">
               Your personalized consultation profile, orders, saved shades, Privé loyalty rewards, and addresses.
             </p>
           </div>
@@ -384,7 +384,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 className={`px-4 py-3 text-xs font-semibold tracking-wider uppercase transition-all flex items-center gap-2 border-b-2 whitespace-nowrap cursor-pointer ${
                   isActive
                     ? 'border-[#0B0B0B] text-[#121212] bg-[#FAF9F6]/70'
-                    : 'border-transparent text-[#6B6B6B] hover:text-[#121212] hover:bg-[#FAF9F6]'
+                    : 'border-transparent text-[#524C4C] hover:text-[#121212] hover:bg-[#FAF9F6]'
                 }`}
               >
                 <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#C9972B]' : ''}`} />
@@ -419,23 +419,23 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
 
                   <div className="space-y-3.5 text-xs">
                     <div className="flex justify-between py-2 border-b border-[#FAF9F6]">
-                      <span className="text-[#6B6B6B] uppercase">Skin Depth:</span>
+                      <span className="text-[#524C4C] uppercase">Skin Depth:</span>
                       <span className="font-medium text-[#121212]">{profile.skinTone} Complexion</span>
                     </div>
                     <div className="flex justify-between py-2 border-b border-[#FAF9F6]">
-                      <span className="text-[#6B6B6B] uppercase">Undertone:</span>
+                      <span className="text-[#524C4C] uppercase">Undertone:</span>
                       <span className="font-medium text-[#121212]">{profile.undertone} Hue</span>
                     </div>
                     <div className="flex justify-between py-2 border-b border-[#FAF9F6]">
-                      <span className="text-[#6B6B6B] uppercase">Signature Aesthetic:</span>
+                      <span className="text-[#524C4C] uppercase">Signature Aesthetic:</span>
                       <span className="font-medium text-[#121212]">{profile.style} Glam</span>
                     </div>
                     <div className="flex justify-between py-2 border-b border-[#FAF9F6]">
-                      <span className="text-[#6B6B6B] uppercase">Preferred Finish:</span>
+                      <span className="text-[#524C4C] uppercase">Preferred Finish:</span>
                       <span className="font-medium text-[#121212]">{profile.finish} Texture</span>
                     </div>
                     <div className="flex justify-between py-2 border-b border-[#FAF9F6]">
-                      <span className="text-[#6B6B6B] uppercase">Primary Occasion:</span>
+                      <span className="text-[#524C4C] uppercase">Primary Occasion:</span>
                       <span className="font-medium text-[#121212]">{profile.occasion}</span>
                     </div>
                   </div>
@@ -477,7 +477,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                         </div>
 
                         <div className="space-y-1">
-                          <span className="text-[9.5px] uppercase tracking-wider text-[#6B6B6B]">
+                          <span className="text-[9.5px] uppercase tracking-wider text-[#524C4C]">
                             {prod.subCategory}
                           </span>
                           <h4
@@ -526,7 +526,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                         <h3 className="font-serif text-2xl sm:text-3xl text-[#FAF9F6]">
                           Sign In to Unlock Your Glam Suite
                         </h3>
-                        <p className="text-[#6B6B6B] text-xs sm:text-[13px] leading-relaxed max-w-md">
+                        <p className="text-[#524C4C] text-xs sm:text-[13px] leading-relaxed max-w-md">
                           One account for everything Glamirk — track every order, revisit your shade quiz
                           results, manage saved addresses, and watch your Privé rewards grow with every purchase.
                         </p>
@@ -552,7 +552,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                           <div className="w-10 h-10 rounded-full bg-[#C9972B]/10 border border-[#C9972B]/30 flex items-center justify-center text-[#E3B84B]">
                             <item.icon className="w-4 h-4" />
                           </div>
-                          <span className="text-[10.5px] text-[#6B6B6B] leading-tight">{item.label}</span>
+                          <span className="text-[10.5px] text-[#524C4C] leading-tight">{item.label}</span>
                         </div>
                       ))}
                     </div>
@@ -564,7 +564,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   <h3 className="font-serif text-2xl text-[#121212]">
                     DISCOVER YOUR BEAUTY PROFILE
                   </h3>
-                  <p className="text-xs text-[#6B6B6B] leading-relaxed max-w-md mx-auto">
+                  <p className="text-xs text-[#524C4C] leading-relaxed max-w-md mx-auto">
                     Calibrate your skin depth, warm or cool undertones, and finish preferences to receive bespoke shade matches.
                   </p>
                   <button
@@ -590,7 +590,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
               <h2 className="font-serif text-2xl text-[#121212]">
                 ORDER HISTORY & RECEIPTS
               </h2>
-              <span className="text-xs text-[#6B6B6B]">
+              <span className="text-xs text-[#524C4C]">
                 {userOrders.length} Completed / In-Transit Orders
               </span>
             </div>
@@ -603,7 +603,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   className={`px-3.5 py-1.5 text-[11px] font-semibold tracking-wider uppercase cursor-pointer transition-colors ${
                     orderStatusFilter === tab.id
                       ? 'bg-[#0B0B0B] text-white'
-                      : 'bg-[#FAF9F6] text-[#6B6B6B] border border-[#E8D5A8] hover:text-[#121212]'
+                      : 'bg-[#FAF9F6] text-[#524C4C] border border-[#E8D5A8] hover:text-[#121212]'
                   }`}
                 >
                   {tab.label}
@@ -612,7 +612,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
             </div>
 
             {filteredOrders.length === 0 && (
-              <div className="p-10 text-center text-xs text-[#6B6B6B] bg-white border border-[#E8D5A8]">
+              <div className="p-10 text-center text-xs text-[#524C4C] bg-white border border-[#E8D5A8]">
                 No orders in this category yet.
               </div>
             )}
@@ -633,7 +633,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                           {order.status}
                         </span>
                       </div>
-                      <p className="text-xs text-[#6B6B6B] mt-1">
+                      <p className="text-xs text-[#524C4C] mt-1">
                         Placed on {order.createdAt} • Delivery to {order.deliveryAddress.city}
                       </p>
                     </div>
@@ -661,7 +661,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                             setReturnError(null);
                             setIsReturnModalOpen(true);
                           }}
-                          className="px-3.5 py-2 border border-[#E8D5A8] text-xs font-semibold tracking-wider uppercase hover:bg-[#FAF9F6] text-[#6B6B6B] cursor-pointer"
+                          className="px-3.5 py-2 border border-[#E8D5A8] text-xs font-semibold tracking-wider uppercase hover:bg-[#FAF9F6] text-[#524C4C] cursor-pointer"
                         >
                           RETURN / HELP
                         </button>
@@ -683,7 +683,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                             <h4 className="font-serif text-sm text-[#121212]">
                               {item.productName}
                             </h4>
-                            <p className="text-xs text-[#6B6B6B]">
+                            <p className="text-xs text-[#524C4C]">
                               {item.shade ? `Shade: ${item.shade.name}` : item.size ? `Size: ${item.size}` : ''} • Qty: {item.quantity}
                             </p>
                           </div>
@@ -706,7 +706,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                               setSelectedProductForReview(prod);
                               setIsReviewModalOpen(true);
                             }}
-                            className="px-3 py-1.5 bg-[#FAF9F6] border border-[#E8D5A8] text-[#6B6B6B] text-[11px] font-semibold tracking-wider uppercase hover:text-[#121212] cursor-pointer flex items-center gap-1"
+                            className="px-3 py-1.5 bg-[#FAF9F6] border border-[#E8D5A8] text-[#524C4C] text-[11px] font-semibold tracking-wider uppercase hover:text-[#121212] cursor-pointer flex items-center gap-1"
                           >
                             <Star className="w-3 h-3 text-[#C9972B]" />
                             <span>REVIEW</span>
@@ -717,7 +717,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   </div>
 
                   {/* Summary Total */}
-                  <div className="pt-2 border-t border-[#FAF9F6] flex justify-between items-end text-xs text-[#6B6B6B]">
+                  <div className="pt-2 border-t border-[#FAF9F6] flex justify-between items-end text-xs text-[#524C4C]">
                     <div className="space-y-0.5">
                       <p>Payment Method: {getPaymentMethodLabel(order.payment.method)}</p>
                       <p>Payment Status: {getPaymentStatusLabel(order.payment.status)}</p>
@@ -773,7 +773,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                       </span>
                     </div>
 
-                    <p className="text-xs text-[#6B6B6B] leading-relaxed">
+                    <p className="text-xs text-[#524C4C] leading-relaxed">
                       {shade.description}
                     </p>
                   </div>
@@ -817,7 +817,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 <h3 className="font-serif text-xl text-[#121212]">
                   YOUR BEAUTY EDIT IS WAITING
                 </h3>
-                <p className="text-xs text-[#6B6B6B]">
+                <p className="text-xs text-[#524C4C]">
                   Save your favorite lipstick shades, ceremonial sindoor, and skincare essentials.
                 </p>
                 <button
@@ -846,7 +846,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                     </div>
 
                     <div className="space-y-1">
-                      <span className="text-[9.5px] uppercase tracking-wider text-[#6B6B6B]">
+                      <span className="text-[9.5px] uppercase tracking-wider text-[#524C4C]">
                         {prod.subCategory}
                       </span>
                       <h4
@@ -926,14 +926,14 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                     <h4 className="font-serif text-base text-[#121212] font-medium">
                       {addr.name}
                     </h4>
-                    <p className="text-xs text-[#6B6B6B] leading-relaxed">
+                    <p className="text-xs text-[#524C4C] leading-relaxed">
                       {addr.addressLine1}
                       {addr.addressLine2 && `, ${addr.addressLine2}`}
                     </p>
-                    <p className="text-xs text-[#6B6B6B]">
+                    <p className="text-xs text-[#524C4C]">
                       {addr.city}, {addr.state} - {addr.pinCode}
                     </p>
-                    <p className="text-xs text-[#6B6B6B] font-mono pt-1">
+                    <p className="text-xs text-[#524C4C] font-mono pt-1">
                       {addr.phone}
                     </p>
                   </div>
@@ -950,13 +950,13 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                     <div className="flex items-center gap-3 ml-auto">
                       <button
                         onClick={() => handleOpenEditAddress(addr)}
-                        className="text-xs text-[#6B6B6B] hover:text-[#121212] uppercase tracking-wider font-semibold"
+                        className="text-xs text-[#524C4C] hover:text-[#121212] uppercase tracking-wider font-semibold"
                       >
                         EDIT
                       </button>
                       <button
                         onClick={() => handleDeleteAddress(addr.id)}
-                        className="text-xs text-[#6B6B6B] hover:text-[#F05A7E] flex items-center gap-1 uppercase tracking-wider font-semibold"
+                        className="text-xs text-[#524C4C] hover:text-[#F05A7E] flex items-center gap-1 uppercase tracking-wider font-semibold"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>DELETE</span>
@@ -1019,7 +1019,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 <h4 className="font-serif text-base text-[#121212]">
                   Complimentary Air Shipping
                 </h4>
-                <p className="text-xs text-[#6B6B6B]">
+                <p className="text-xs text-[#524C4C]">
                   Zero minimum order threshold on all luxury orders with priority air courier.
                 </p>
               </div>
@@ -1031,7 +1031,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 <h4 className="font-serif text-base text-[#121212]">
                   Pre-Launch Atelier Access
                 </h4>
-                <p className="text-xs text-[#6B6B6B]">
+                <p className="text-xs text-[#524C4C]">
                   48-hour exclusive reservation window before new shade drops & limited editions.
                 </p>
               </div>
@@ -1043,7 +1043,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 <h4 className="font-serif text-base text-[#121212]">
                   Bespoke Anniversary Gift
                 </h4>
-                <p className="text-xs text-[#6B6B6B]">
+                <p className="text-xs text-[#524C4C]">
                   Complimentary Discovery Cleanser jar or full-size velvet lipstick on your birthday.
                 </p>
               </div>
@@ -1059,7 +1059,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   <div key={h.id} className="py-3 flex items-center justify-between text-xs">
                     <div>
                       <p className="font-medium text-[#121212]">{h.description}</p>
-                      <span className="text-[11px] text-[#6B6B6B]">{h.date}</span>
+                      <span className="text-[11px] text-[#524C4C]">{h.date}</span>
                     </div>
                     <span className="font-mono font-semibold text-[#C9972B]">
                       +{h.points} PTS
@@ -1089,7 +1089,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
               <h2 className="font-serif text-3xl text-[#121212]">
                 Beauty is Better When Shared.
               </h2>
-              <p className="text-xs sm:text-sm text-[#6B6B6B] font-light leading-relaxed">
+              <p className="text-xs sm:text-sm text-[#524C4C] font-light leading-relaxed">
                 Gift your friends <strong>₹150 off</strong> their first Glamirk order, and receive <strong>200 Privé points</strong> credited to your suite upon their first checkout.
               </p>
             </div>
@@ -1152,7 +1152,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                       <h4 className="font-serif text-base text-[#121212]">
                         {rev.title}
                       </h4>
-                      <p className="text-xs text-[#6B6B6B]">
+                      <p className="text-xs text-[#524C4C]">
                         {rev.productName} {rev.shadeName ? `• Shade: ${rev.shadeName}` : ''}
                       </p>
                     </div>
@@ -1162,11 +1162,11 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                     </span>
                   </div>
 
-                  <p className="text-xs text-[#6B6B6B] leading-relaxed">
+                  <p className="text-xs text-[#524C4C] leading-relaxed">
                     "{rev.comment}"
                   </p>
 
-                  <div className="pt-2 border-t border-[#FAF9F6] flex justify-between text-[11px] text-[#6B6B6B]">
+                  <div className="pt-2 border-t border-[#FAF9F6] flex justify-between text-[11px] text-[#524C4C]">
                     <span>By {rev.customerName} ({rev.skinTone || 'Warm Tone'})</span>
                     <span>{rev.date}</span>
                   </div>
@@ -1195,7 +1195,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
               </button>
             </div>
 
-            <div className="p-4 bg-[#FAF9F6] border border-[#E8D5A8] text-xs text-[#6B6B6B] space-y-1">
+            <div className="p-4 bg-[#FAF9F6] border border-[#E8D5A8] text-xs text-[#524C4C] space-y-1">
               <p className="font-medium text-[#121212]">
                 Glamirk Luxury Hygiene & Replacement Guarantee
               </p>
@@ -1215,7 +1215,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                       <span className="font-serif text-lg text-[#121212]">
                         Order #{req.orderNumber}
                       </span>
-                      <p className="text-xs text-[#6B6B6B]">
+                      <p className="text-xs text-[#524C4C]">
                         {req.productName} • Reason: {req.reason}
                       </p>
                     </div>
@@ -1226,7 +1226,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   </div>
 
                   {req.comment && (
-                    <p className="text-xs text-[#6B6B6B] bg-[#FAF9F6] p-3 border border-[#E8D5A8]">
+                    <p className="text-xs text-[#524C4C] bg-[#FAF9F6] p-3 border border-[#E8D5A8]">
                       Concierge Note: {req.comment}
                     </p>
                   )}
@@ -1258,7 +1258,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   <h4 className="font-serif text-base text-[#121212]">
                     {faq.question}
                   </h4>
-                  <p className="text-xs text-[#6B6B6B] leading-relaxed">
+                  <p className="text-xs text-[#524C4C] leading-relaxed">
                     {faq.answer}
                   </p>
                 </div>
@@ -1281,7 +1281,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
             >
               <button
                 onClick={() => setIsReviewModalOpen(false)}
-                className="absolute top-5 right-5 text-[#6B6B6B] hover:text-[#121212]"
+                className="absolute top-5 right-5 text-[#524C4C] hover:text-[#121212]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1293,14 +1293,14 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 <h3 className="font-serif text-2xl text-[#121212] mt-0.5">
                   HOW WAS YOUR GLAM?
                 </h3>
-                <p className="text-xs text-[#6B6B6B]">
+                <p className="text-xs text-[#524C4C]">
                   Reviewing: {selectedProductForReview.name}
                 </p>
               </div>
 
               <form onSubmit={handleSubmitReview} className="space-y-4">
                 <div>
-                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1.5">
                     YOUR RATING
                   </label>
                   <div className="flex gap-2">
@@ -1322,7 +1322,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                     HEADLINE / TITLE
                   </label>
                   <input
@@ -1335,7 +1335,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                     WHAT DID YOU LOVE ABOUT THIS FORMULATION? *
                   </label>
                   <textarea
@@ -1375,7 +1375,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
             >
               <button
                 onClick={() => setIsReturnModalOpen(false)}
-                className="absolute top-5 right-5 text-[#6B6B6B] hover:text-[#121212]"
+                className="absolute top-5 right-5 text-[#524C4C] hover:text-[#121212]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1387,14 +1387,14 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 <h3 className="font-serif text-2xl text-[#121212] mt-0.5">
                   REQUEST REPLACEMENT / RETURN
                 </h3>
-                <p className="text-xs text-[#6B6B6B]">
+                <p className="text-xs text-[#524C4C]">
                   Order #{selectedOrderForReturn?.orderNumber}
                 </p>
               </div>
 
               <form onSubmit={handleSubmitReturn} className="space-y-4">
                 <div>
-                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                     PRIMARY REASON
                   </label>
                   <select
@@ -1410,7 +1410,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                     DETAILS / EXPLANATION
                   </label>
                   <textarea
@@ -1452,7 +1452,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                   setIsAddAddressOpen(false);
                   setEditingAddressId(null);
                 }}
-                className="absolute top-5 right-5 text-[#6B6B6B] hover:text-[#121212]"
+                className="absolute top-5 right-5 text-[#524C4C] hover:text-[#121212]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1469,7 +1469,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
               <form onSubmit={handleCreateAddress} className="space-y-3.5">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                    <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                       RECIPIENT NAME *
                     </label>
                     <input
@@ -1481,7 +1481,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                    <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                       PHONE NUMBER *
                     </label>
                     <input
@@ -1496,7 +1496,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                  <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                     ADDRESS TYPE
                   </label>
                   <select
@@ -1511,7 +1511,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                  <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                     STREET ADDRESS / RESIDENCE *
                   </label>
                   <input
@@ -1526,7 +1526,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
 
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                    <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                       PIN CODE *
                     </label>
                     <input
@@ -1540,7 +1540,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                    <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                       CITY *
                     </label>
                     <input
@@ -1553,7 +1553,7 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                    <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                       STATE *
                     </label>
                     <input

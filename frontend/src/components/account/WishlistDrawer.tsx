@@ -56,7 +56,7 @@ export const WishlistDrawer: React.FC<WishlistDrawerProps> = ({
                   <h3 className="text-lg font-bold text-[#121212]">
                     Saved Favorites
                   </h3>
-                  <span className="text-xs text-[#6B6B6B]">
+                  <span className="text-xs text-[#524C4C]">
                     {wishlistedProducts.length} {wishlistedProducts.length === 1 ? 'item' : 'items'}
                   </span>
                 </div>
@@ -80,7 +80,7 @@ export const WishlistDrawer: React.FC<WishlistDrawerProps> = ({
                   <h4 className="text-xl font-bold text-[#121212]">
                     Your wishlist is empty
                   </h4>
-                  <p className="text-xs text-[#6B6B6B] max-w-xs mx-auto leading-relaxed">
+                  <p className="text-xs text-[#524C4C] max-w-xs mx-auto leading-relaxed">
                     Save your desired liquid lipsticks, ritual cleansers, and ceremonial sindoor for effortless access.
                   </p>
                 </div>
@@ -118,13 +118,13 @@ export const WishlistDrawer: React.FC<WishlistDrawerProps> = ({
                           </h4>
                           <button
                             onClick={() => onRemoveFromWishlist(product.id)}
-                            className="text-[#6B6B6B] hover:text-[#F05A7E] transition-colors p-1 cursor-pointer"
+                            className="text-[#524C4C] hover:text-[#F05A7E] transition-colors p-1 cursor-pointer"
                             title="Remove"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        <span className="text-[11px] text-[#6B6B6B] block mt-0.5">
+                        <span className="text-[11px] text-[#524C4C] block mt-0.5">
                           {product.subtitle}
                         </span>
                       </div>

@@ -43,12 +43,12 @@ export const CategoryHeader: React.FC<CategoryHeaderProps> = ({
             {title}
           </h1>
 
-          <p className="text-xs sm:text-sm text-[#6B6B6B] max-w-xl leading-relaxed pt-1">
+          <p className="text-xs sm:text-sm text-[#524C4C] max-w-xl leading-relaxed pt-1">
             {subtitle}
           </p>
         </div>
 
-        <div className="flex items-baseline gap-2 text-xs text-[#6B6B6B] border-t md:border-t-0 md:border-l border-[#E8D5A8] pt-4 md:pt-0 md:pl-6">
+        <div className="flex items-baseline gap-2 text-xs text-[#524C4C] border-t md:border-t-0 md:border-l border-[#E8D5A8] pt-4 md:pt-0 md:pl-6">
           <span className="text-2xl text-[#121212] font-extrabold">{totalCount}</span>
           <span className="uppercase tracking-wider text-[10.5px] font-semibold">Creations Available</span>
         </div>

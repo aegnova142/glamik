@@ -99,7 +99,7 @@ export const BeautyQuizModal: React.FC<BeautyQuizModalProps> = ({
           {!isCompleted ? (
             <div className="p-6 sm:p-10 space-y-8">
               {/* Progress Indicator */}
-              <div className="flex items-center justify-between text-xs text-[#6B6B6B] border-b border-[#E8D5A8] pb-3">
+              <div className="flex items-center justify-between text-xs text-[#524C4C] border-b border-[#E8D5A8] pb-3">
                 <span className="font-serif italic">Question 0{currentStep + 1} of 0{GLAMIRK_QUIZ_QUESTIONS.length}</span>
                 <span className="uppercase tracking-widest text-[10px] font-semibold">
                   {Math.round(((currentStep + 1) / GLAMIRK_QUIZ_QUESTIONS.length) * 100)}% COMPLETED
@@ -111,7 +111,7 @@ export const BeautyQuizModal: React.FC<BeautyQuizModalProps> = ({
                 <h3 className="font-serif text-2xl sm:text-3xl text-[#121212] leading-tight">
                   {currentQ.question}
                 </h3>
-                <p className="text-xs sm:text-sm text-[#6B6B6B]">
+                <p className="text-xs sm:text-sm text-[#524C4C]">
                   {currentQ.subtitle}
                 </p>
               </div>
@@ -137,7 +137,7 @@ export const BeautyQuizModal: React.FC<BeautyQuizModalProps> = ({
                         {isSelected && <Check className="w-4 h-4 text-[#C9972B]" />}
                       </div>
                       {opt.description && (
-                        <p className={`text-xs ${isSelected ? 'text-[#C9972B]' : 'text-[#6B6B6B]'}`}>
+                        <p className={`text-xs ${isSelected ? 'text-[#C9972B]' : 'text-[#524C4C]'}`}>
                           {opt.description}
                         </p>
                       )}
@@ -151,7 +151,7 @@ export const BeautyQuizModal: React.FC<BeautyQuizModalProps> = ({
                 <div className="pt-2 flex justify-start">
                   <button
                     onClick={() => setCurrentStep(currentStep - 1)}
-                    className="flex items-center gap-1.5 text-xs text-[#6B6B6B] hover:text-[#121212] uppercase tracking-wider font-semibold"
+                    className="flex items-center gap-1.5 text-xs text-[#524C4C] hover:text-[#121212] uppercase tracking-wider font-semibold"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
                     <span>PREVIOUS QUESTION</span>
@@ -169,12 +169,12 @@ export const BeautyQuizModal: React.FC<BeautyQuizModalProps> = ({
                 <h3 className="font-serif text-3xl sm:text-4xl text-[#121212]">
                   {result.title}
                 </h3>
-                <p className="text-xs font-semibold tracking-wider uppercase text-[#6B6B6B]">
+                <p className="text-xs font-semibold tracking-wider uppercase text-[#524C4C]">
                   {result.archetype}
                 </p>
               </div>
 
-              <div className="p-5 bg-[#FAF9F6] border border-[#E8D5A8] text-xs text-[#6B6B6B] leading-relaxed font-light">
+              <div className="p-5 bg-[#FAF9F6] border border-[#E8D5A8] text-xs text-[#524C4C] leading-relaxed font-light">
                 {result.description}
               </div>
 
@@ -196,7 +196,7 @@ export const BeautyQuizModal: React.FC<BeautyQuizModalProps> = ({
                       {matchedProduct.name}
                     </h4>
                     {matchedShade && (
-                      <div className="flex items-center gap-1.5 text-xs text-[#6B6B6B]">
+                      <div className="flex items-center gap-1.5 text-xs text-[#524C4C]">
                         <span
                           className="w-3 h-3 rounded-full border border-[#0B0B0B]/10 inline-block"
                           style={{ backgroundColor: matchedShade.hex }}
@@ -247,7 +247,7 @@ export const BeautyQuizModal: React.FC<BeautyQuizModalProps> = ({
               <div className="pt-2 text-center">
                 <button
                   onClick={handleReset}
-                  className="text-xs text-[#6B6B6B] hover:text-[#121212] inline-flex items-center gap-1 uppercase tracking-wider"
+                  className="text-xs text-[#524C4C] hover:text-[#121212] inline-flex items-center gap-1 uppercase tracking-wider"
                 >
                   <RotateCcw className="w-3 h-3" />
                   <span>Retake Quiz</span>

@@ -50,7 +50,7 @@ export const WishlistPage: React.FC<WishlistPageProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
         {wishlistedProducts.length === 0 ? (
           <div className="py-20 text-center space-y-4 max-w-md mx-auto bg-[#FAF9F6] border border-[#E8D5A8] p-8 sm:p-12">
-            <div className="w-16 h-16 bg-[#FAF9F6] rounded-full flex items-center justify-center mx-auto text-[#6B6B6B]">
+            <div className="w-16 h-16 bg-[#FAF9F6] rounded-full flex items-center justify-center mx-auto text-[#524C4C]">
               <Heart className="w-8 h-8 stroke-[1.2]" />
             </div>
 
@@ -58,7 +58,7 @@ export const WishlistPage: React.FC<WishlistPageProps> = ({
               YOUR BEAUTY EDIT IS EMPTY.
             </h2>
 
-            <p className="text-xs sm:text-sm text-[#6B6B6B] leading-relaxed">
+            <p className="text-xs sm:text-sm text-[#524C4C] leading-relaxed">
               Your beauty edit is currently empty. Tap the heart icon on any liquid lipstick, ceremonial sindoor, or ritual cleanser to save it here.
             </p>
 
@@ -91,7 +91,7 @@ export const WishlistPage: React.FC<WishlistPageProps> = ({
 
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] block">
+                      <span className="text-[10px] uppercase tracking-wider text-[#524C4C] block">
                         {product.subCategory}
                       </span>
                       <h3
@@ -104,14 +104,14 @@ export const WishlistPage: React.FC<WishlistPageProps> = ({
 
                     <button
                       onClick={() => onRemoveFromWishlist(product.id)}
-                      className="p-1.5 text-[#6B6B6B] hover:text-[#F05A7E] transition-colors"
+                      className="p-1.5 text-[#524C4C] hover:text-[#F05A7E] transition-colors"
                       title="Remove from wishlist"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
 
-                  <p className="text-xs text-[#6B6B6B] line-clamp-1 font-light mt-1">
+                  <p className="text-xs text-[#524C4C] line-clamp-1 font-light mt-1">
                     {product.subtitle}
                   </p>
                 </div>

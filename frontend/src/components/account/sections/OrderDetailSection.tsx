@@ -95,10 +95,10 @@ export const OrderDetailSection: React.FC<OrderDetailSectionProps> = ({
               <span className="font-serif text-lg text-[#121212]">#{order.orderNumber}</span>
               <StatusBadge status={order.status} tone={orderStatusTone(order.status)} />
             </div>
-            <p className="text-[11.5px] text-[#6B6B6B] mt-1">Placed {formatDateTime(order.createdAt)}</p>
+            <p className="text-[11.5px] text-[#524C4C] mt-1">Placed {formatDateTime(order.createdAt)}</p>
           </div>
           <div className="text-right">
-            <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#6B6B6B] block">Order Total</span>
+            <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#524C4C] block">Order Total</span>
             <span className="font-serif text-xl text-[#121212]">{formatMoney(order.total)}</span>
           </div>
         </div>
@@ -156,7 +156,7 @@ export const OrderDetailSection: React.FC<OrderDetailSectionProps> = ({
                 <span className={`text-[13px] block ${stage.complete ? 'text-[#121212] font-semibold' : 'text-[#9C9689]'}`}>
                   {stage.label}
                 </span>
-                <span className="text-[11px] text-[#6B6B6B]">
+                <span className="text-[11px] text-[#524C4C]">
                   {stage.reachedAt ? formatDateTime(stage.reachedAt) : 'Pending'}
                 </span>
               </div>
@@ -176,10 +176,10 @@ export const OrderDetailSection: React.FC<OrderDetailSectionProps> = ({
               <ProductImage src={item.productImage} alt="" className="w-16 h-20 object-cover border border-[#E8D5A8] rounded shrink-0" />
               <div className="min-w-0 flex-1">
                 <h3 className="font-serif text-sm text-[#121212]">{item.productName}</h3>
-                <p className="text-[11.5px] text-[#6B6B6B] mt-0.5">
+                <p className="text-[11.5px] text-[#524C4C] mt-0.5">
                   {item.shade ? `Shade: ${item.shade.name}` : item.size ? `Size: ${item.size}` : 'Standard'}
                 </p>
-                <p className="text-[11.5px] text-[#6B6B6B]">
+                <p className="text-[11.5px] text-[#524C4C]">
                   Qty {item.quantity} × {formatMoney(item.price)}
                 </p>
                 <button
@@ -201,17 +201,17 @@ export const OrderDetailSection: React.FC<OrderDetailSectionProps> = ({
           <h2 className="font-serif text-base text-[#121212] mb-4">Payment Summary</h2>
           <dl className="space-y-2.5 text-[13px]">
             <div className="flex justify-between">
-              <dt className="text-[#6B6B6B]">Subtotal</dt>
+              <dt className="text-[#524C4C]">Subtotal</dt>
               <dd className="text-[#121212]">{formatMoney(order.subtotal)}</dd>
             </div>
             {order.discount > 0 && (
               <div className="flex justify-between">
-                <dt className="text-[#6B6B6B]">Discount</dt>
+                <dt className="text-[#524C4C]">Discount</dt>
                 <dd className="text-[#2E7D32]">−{formatMoney(order.discount)}</dd>
               </div>
             )}
             <div className="flex justify-between">
-              <dt className="text-[#6B6B6B]">Shipping</dt>
+              <dt className="text-[#524C4C]">Shipping</dt>
               <dd className="text-[#121212]">{order.shipping > 0 ? formatMoney(order.shipping) : 'Free'}</dd>
             </div>
             {/* Tax is only listed when the order actually carries one — the
@@ -219,7 +219,7 @@ export const OrderDetailSection: React.FC<OrderDetailSectionProps> = ({
                 would be misleading. */}
             {order.tax > 0 && (
               <div className="flex justify-between">
-                <dt className="text-[#6B6B6B]">Tax / GST</dt>
+                <dt className="text-[#524C4C]">Tax / GST</dt>
                 <dd className="text-[#121212]">{formatMoney(order.tax)}</dd>
               </div>
             )}
@@ -228,7 +228,7 @@ export const OrderDetailSection: React.FC<OrderDetailSectionProps> = ({
               <dd className="font-serif text-base text-[#121212]">{formatMoney(order.total)}</dd>
             </div>
           </dl>
-          <div className="mt-4 pt-4 border-t border-[#F1EBDD] space-y-1 text-[11.5px] text-[#6B6B6B]">
+          <div className="mt-4 pt-4 border-t border-[#F1EBDD] space-y-1 text-[11.5px] text-[#524C4C]">
             <p>Payment method: {getPaymentMethodLabel(order.payment.method)}</p>
             <p>Payment status: {getPaymentStatusLabel(order.payment.status)}</p>
             {order.discount > 0 && <p className="text-[#2E7D32]">Prices are inclusive of all applicable taxes.</p>}
@@ -241,20 +241,20 @@ export const OrderDetailSection: React.FC<OrderDetailSectionProps> = ({
           {address?.addressLine1 ? (
             <address className="not-italic text-[13px] text-[#121212] leading-relaxed space-y-0.5">
               <p className="font-semibold">{address.name}</p>
-              <p className="text-[#6B6B6B]">
+              <p className="text-[#524C4C]">
                 {address.addressLine1}
                 {address.addressLine2 ? `, ${address.addressLine2}` : ''}
               </p>
-              {address.area && <p className="text-[#6B6B6B]">{address.area}</p>}
-              <p className="text-[#6B6B6B]">
+              {address.area && <p className="text-[#524C4C]">{address.area}</p>}
+              <p className="text-[#524C4C]">
                 {address.city}, {address.state} — {address.pinCode}
               </p>
-              {address.landmark && <p className="text-[#6B6B6B]">Landmark: {address.landmark}</p>}
-              <p className="text-[#6B6B6B] pt-2">{address.phone}</p>
-              {address.email && <p className="text-[#6B6B6B]">{address.email}</p>}
+              {address.landmark && <p className="text-[#524C4C]">Landmark: {address.landmark}</p>}
+              <p className="text-[#524C4C] pt-2">{address.phone}</p>
+              {address.email && <p className="text-[#524C4C]">{address.email}</p>}
             </address>
           ) : (
-            <p className="text-xs text-[#6B6B6B]">No delivery address was recorded for this order.</p>
+            <p className="text-xs text-[#524C4C]">No delivery address was recorded for this order.</p>
           )}
         </AccountCard>
       </div>

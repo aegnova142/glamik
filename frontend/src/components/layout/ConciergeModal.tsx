@@ -28,7 +28,7 @@ export const ConciergeModal: React.FC<ConciergeModalProps> = ({ isOpen, onClose,
       >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 text-[#6B6B6B] hover:text-[#121212] transition-colors cursor-pointer"
+          className="absolute top-4 right-4 p-1.5 text-[#524C4C] hover:text-[#121212] transition-colors cursor-pointer"
           aria-label="Close"
         >
           <X className="w-5 h-5" />
@@ -41,7 +41,7 @@ export const ConciergeModal: React.FC<ConciergeModalProps> = ({ isOpen, onClose,
             <Sparkles className="w-3.5 h-3.5" />
             <span className="w-8 h-px bg-[#E8D5A8]" />
           </div>
-          <p className="text-xs sm:text-sm text-[#6B6B6B] font-light max-w-md mx-auto leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#524C4C] font-light max-w-md mx-auto leading-relaxed">
             Here to help you with personalized beauty advice, orders, and everything in between.
           </p>
         </div>
@@ -53,7 +53,7 @@ export const ConciergeModal: React.FC<ConciergeModalProps> = ({ isOpen, onClose,
                 <Sparkles className="w-4 h-4" />
               </div>
               <h3 className="font-serif text-sm text-[#121212]">AI Beauty & Order Concierge</h3>
-              <p className="text-[11px] text-[#6B6B6B] leading-relaxed">
+              <p className="text-[11px] text-[#524C4C] leading-relaxed">
                 Instant shade advice, formulation matching, and order status in real time.
               </p>
             </div>
@@ -74,7 +74,7 @@ export const ConciergeModal: React.FC<ConciergeModalProps> = ({ isOpen, onClose,
                 <Mail className="w-4 h-4" />
               </div>
               <h3 className="font-serif text-sm text-[#121212]">Email Atelier Concierge</h3>
-              <p className="text-[11px] text-[#6B6B6B] leading-relaxed">
+              <p className="text-[11px] text-[#524C4C] leading-relaxed">
                 Written inquiries, bespoke bridal pairings, and order support answered in 2 hours.
               </p>
             </div>
@@ -92,7 +92,7 @@ export const ConciergeModal: React.FC<ConciergeModalProps> = ({ isOpen, onClose,
                 <Phone className="w-4 h-4" />
               </div>
               <h3 className="font-serif text-sm text-[#121212]">Atelier Client Line</h3>
-              <p className="text-[11px] text-[#6B6B6B] leading-relaxed">
+              <p className="text-[11px] text-[#524C4C] leading-relaxed">
                 Mon - Sat, 10:00 AM - 7:00 PM IST across all Indian regions.
               </p>
             </div>

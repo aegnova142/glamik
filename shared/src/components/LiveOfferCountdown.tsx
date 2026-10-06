@@ -90,7 +90,7 @@ export const LiveOfferCountdown: React.FC<LiveOfferCountdownProps> = ({
       ? 'bg-[#FAF9F6] border border-[#E8D5A8] text-[#121212]'
       : 'bg-[#171717] border border-[#E8D5A8]/20 text-[#FAF9F6]';
 
-  const labelColor = theme === 'light' ? 'text-[#6B6B6B]' : 'text-[#E8D5A8]';
+  const labelColor = theme === 'light' ? 'text-[#524C4C]' : 'text-[#E8D5A8]';
 
   return (
     <div className="flex flex-col items-center gap-2">

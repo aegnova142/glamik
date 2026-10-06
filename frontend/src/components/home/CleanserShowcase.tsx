@@ -73,7 +73,7 @@ export const CleanserShowcase: React.FC<CleanserShowcaseProps> = ({ onDiscoverCl
                     {steps[activeStep].stateLabel}
                   </span>
                 </div>
-                <span className="text-xs font-bold text-[#6B6B6B]">
+                <span className="text-xs font-bold text-[#524C4C]">
                   {steps[activeStep].number} / 03
                 </span>
               </div>
@@ -124,13 +124,13 @@ export const CleanserShowcase: React.FC<CleanserShowcaseProps> = ({ onDiscoverCl
               An artisanal multi-phase cleansing balm that melts from a solid into a silken oil, and transforms into a purifying milky water on contact with moisture.
             </p>
 
-            <p className="text-sm text-[#6B6B6B] leading-relaxed">
+            <p className="text-sm text-[#524C4C] leading-relaxed">
               Dissolves stubborn waterproof makeup, sunscreen, and daily pollutants without stripping moisture or leaving any greasy film. Formulated for everyday purity.
             </p>
 
             {/* Size Selector */}
             <div className="bg-white p-5 rounded-3xl border border-[#E8D5A8] space-y-3 shadow-xs">
-              <div className="flex items-center justify-between text-xs text-[#6B6B6B] uppercase tracking-wider font-semibold">
+              <div className="flex items-center justify-between text-xs text-[#524C4C] uppercase tracking-wider font-semibold">
                 <span>Select Ritual Size:</span>
                 <span className="text-[#F05A7E] font-bold text-base">
                   ₹{cleanserProduct.price}
@@ -147,7 +147,7 @@ export const CleanserShowcase: React.FC<CleanserShowcaseProps> = ({ onDiscoverCl
                   }`}
                 >
                   <span className="text-xs font-bold text-[#121212] block">30g Discovery Jar</span>
-                  <span className="text-[10.5px] text-[#6B6B6B] block mt-0.5">
+                  <span className="text-[10.5px] text-[#524C4C] block mt-0.5">
                     {cleanser30.currency}{cleanser30.price} • Travel Size
                   </span>
                 </button>
@@ -164,7 +164,7 @@ export const CleanserShowcase: React.FC<CleanserShowcaseProps> = ({ onDiscoverCl
                     <span className="text-xs font-bold text-[#121212] block">50g Ritual Jar</span>
                     <span className="text-[9px] bg-[#F05A7E] text-white font-bold px-2 py-0.5 rounded-full uppercase">BESTSELLER</span>
                   </div>
-                  <span className="text-[10.5px] text-[#6B6B6B] block mt-0.5">
+                  <span className="text-[10.5px] text-[#524C4C] block mt-0.5">
                     {cleanser50.currency}{cleanser50.price} • Full Vanity Jar
                   </span>
                 </button>
@@ -172,7 +172,7 @@ export const CleanserShowcase: React.FC<CleanserShowcaseProps> = ({ onDiscoverCl
             </div>
 
             {/* Benefits Checklist */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-[#6B6B6B] font-medium">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs text-[#524C4C] font-medium">
               <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-[#F05A7E] flex-shrink-0" />
                 <span>Dissolves Waterproof Makeup</span>

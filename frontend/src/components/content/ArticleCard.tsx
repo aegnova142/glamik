@@ -40,7 +40,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({ article, onOpen }) => 
 
         <p
           ref={descRef}
-          className={`mt-2 text-xs text-[#6B6B6B] leading-relaxed ${expanded ? '' : 'line-clamp-2 sm:line-clamp-3'}`}
+          className={`mt-2 text-xs text-[#524C4C] leading-relaxed ${expanded ? '' : 'line-clamp-2 sm:line-clamp-3'}`}
         >
           {article.excerpt}
         </p>
@@ -61,7 +61,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({ article, onOpen }) => 
         )}
 
         <div className="mt-auto pt-5 flex items-center justify-between border-t border-[#E8D5A8] mt-5">
-          <span className="text-xs text-[#6B6B6B]">{article.date}</span>
+          <span className="text-xs text-[#524C4C]">{article.date}</span>
           <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-[#F05A7E] group-hover:gap-1.5 transition-all">
             Open
             <ArrowUpRight className="w-3.5 h-3.5" />

@@ -1,5 +1,6 @@
+// [Glamik] 2026-10-06 — premium branded fallback (soft blush + scalable Glamirk
+// monogram) in place of the old "IMAGE UNAVAILABLE" block.
 import React, { useEffect, useState } from 'react';
-import { ImageOff } from 'lucide-react';
 
 interface ProductImageProps {
   src?: string;
@@ -44,16 +45,23 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   const isBroken = !src || failedSrc === src;
 
   if (isBroken) {
+    // Tasteful luxury placeholder: soft blush wash + champagne framing + a
+    // scalable serif Glamirk monogram. No harsh text; reads as intentional
+    // brand decoration at any card size (full cards down to tiny thumbnails).
     return (
       <div
-        className={`flex flex-col items-center justify-center gap-1.5 bg-[#FCE8ED] text-[#C8899B] ${className}`}
+        className={`relative overflow-hidden bg-gradient-to-br from-[#FFF7F8] via-[#FCE7EC] to-[#F9DCE4] ${className}`}
         role="img"
-        aria-label={`${alt} — image unavailable`}
+        aria-label={alt}
       >
-        <ImageOff className="h-5 w-5 shrink-0" strokeWidth={1.5} aria-hidden="true" />
-        <span className="px-2 text-center text-[9px] font-semibold uppercase tracking-wider leading-tight">
-          Image unavailable
-        </span>
+        <div className="pointer-events-none absolute -right-5 -top-5 h-20 w-20 rounded-full border border-[#E7C98D]/40" aria-hidden="true" />
+        <div className="pointer-events-none absolute -left-7 bottom-0 h-24 w-24 rounded-full bg-[#F34F78]/5 blur-2xl" aria-hidden="true" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <svg viewBox="0 0 100 100" className="w-[36%] min-w-[16px] max-w-[60px]" aria-hidden="true">
+            <circle cx="50" cy="50" r="46" fill="none" stroke="#E7C98D" strokeWidth="2.5" opacity="0.45" />
+            <text x="50" y="52" textAnchor="middle" dominantBaseline="central" fontFamily="Georgia, 'Times New Roman', serif" fontSize="48" fill="#C9365D" opacity="0.5">G</text>
+          </svg>
+        </div>
       </div>
     );
   }

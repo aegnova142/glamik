@@ -159,7 +159,7 @@ export const AccountLayout: React.FC<AccountLayoutProps> = ({
                         className={`w-full text-left px-5 py-2.5 text-[12.5px] flex items-center gap-3 transition-colors cursor-pointer border-l-2 ${
                           isActive
                             ? 'border-[#C9972B] bg-[#FAF9F6] text-[#121212] font-semibold'
-                            : 'border-transparent text-[#6B6B6B] hover:text-[#121212] hover:bg-[#FAF9F6]'
+                            : 'border-transparent text-[#524C4C] hover:text-[#121212] hover:bg-[#FAF9F6]'
                         }`}
                       >
                         <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#C9972B]' : ''}`} />
@@ -203,7 +203,7 @@ export const AccountLayout: React.FC<AccountLayoutProps> = ({
                 </span>
               </span>
               <ChevronDown
-                className={`w-4 h-4 text-[#6B6B6B] shrink-0 transition-transform ${mobileNavOpen ? 'rotate-180' : ''}`}
+                className={`w-4 h-4 text-[#524C4C] shrink-0 transition-transform ${mobileNavOpen ? 'rotate-180' : ''}`}
               />
             </button>
 
@@ -223,7 +223,7 @@ export const AccountLayout: React.FC<AccountLayoutProps> = ({
                       <button
                         onClick={() => handleNavigate(item.id)}
                         className={`w-full text-left px-4 py-3 text-[13px] flex items-center gap-3 transition-colors cursor-pointer ${
-                          isActive ? 'bg-[#FAF9F6] text-[#121212] font-semibold' : 'text-[#6B6B6B]'
+                          isActive ? 'bg-[#FAF9F6] text-[#121212] font-semibold' : 'text-[#524C4C]'
                         }`}
                       >
                         <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#C9972B]' : ''}`} />

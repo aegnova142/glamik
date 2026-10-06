@@ -101,7 +101,7 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
                         <BadgeCheck className="w-4 h-4 text-[#C9972B] fill-[#C9972B]/20" />
                       )}
                     </div>
-                    <span className="text-[11px] text-[#6B6B6B] font-mono">
+                    <span className="text-[11px] text-[#524C4C] font-mono">
                       {post.creatorHandle}
                     </span>
                   </div>
@@ -109,7 +109,7 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
 
                 <button
                   onClick={onClose}
-                  className="hidden md:block p-1 text-[#6B6B6B] hover:text-[#121212] transition-colors"
+                  className="hidden md:block p-1 text-[#524C4C] hover:text-[#121212] transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -120,7 +120,7 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
                 <p className="text-xs sm:text-sm text-[#171717] leading-relaxed font-light">
                   {post.caption}
                 </p>
-                <div className="flex items-center justify-between text-[11px] text-[#6B6B6B] pt-2">
+                <div className="flex items-center justify-between text-[11px] text-[#524C4C] pt-2">
                   <span>{post.date}</span>
                   <span className="uppercase tracking-wider">{post.platform || 'Instagram'}</span>
                 </div>
@@ -159,7 +159,7 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
                               {tp.productName}
                             </h5>
                             {tp.shadeName && (
-                              <span className="text-[10px] text-[#6B6B6B] block">
+                              <span className="text-[10px] text-[#524C4C] block">
                                 Shade: {tp.shadeName}
                               </span>
                             )}
@@ -200,7 +200,7 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
 
               <button
                 onClick={handleShare}
-                className="text-xs text-[#6B6B6B] hover:text-[#121212] flex items-center gap-1.5 ml-auto"
+                className="text-xs text-[#524C4C] hover:text-[#121212] flex items-center gap-1.5 ml-auto"
               >
                 {isCopied ? (
                   <span className="text-[#C9972B] font-medium flex items-center gap-1">

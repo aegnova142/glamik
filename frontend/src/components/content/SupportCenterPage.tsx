@@ -64,7 +64,7 @@ export const SupportCenterPage: React.FC<SupportCenterPageProps> = ({
         <div className="mb-6">
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-xs text-[#6B6B6B] hover:text-[#121212] font-medium transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 text-xs text-[#524C4C] hover:text-[#121212] font-medium transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>BACK</span>
@@ -79,7 +79,7 @@ export const SupportCenterPage: React.FC<SupportCenterPageProps> = ({
           <h1 className="font-serif text-3xl sm:text-4xl md:text-5xl text-[#121212]">
             HOW CAN WE HELP?
           </h1>
-          <p className="text-xs sm:text-sm text-[#6B6B6B] font-light leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#524C4C] font-light leading-relaxed">
             Direct assistance, delivery timelines, shade pairing guidance, and returns for your Glamirk creations.
           </p>
         </div>
@@ -87,7 +87,7 @@ export const SupportCenterPage: React.FC<SupportCenterPageProps> = ({
         {/* Search Bar */}
         <div className="max-w-2xl mx-auto mb-10">
           <div className="relative">
-            <Search className="w-5 h-5 text-[#6B6B6B] absolute left-4 top-1/2 -translate-y-1/2" />
+            <Search className="w-5 h-5 text-[#524C4C] absolute left-4 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
@@ -109,7 +109,7 @@ export const SupportCenterPage: React.FC<SupportCenterPageProps> = ({
               <h3 className="font-serif text-base text-[#121212]">
                 AI Beauty & Order Concierge
               </h3>
-              <p className="text-xs text-[#6B6B6B] leading-relaxed">
+              <p className="text-xs text-[#524C4C] leading-relaxed">
                 Instant shade advice, formulation matching, and order status in real time.
               </p>
             </div>
@@ -130,7 +130,7 @@ export const SupportCenterPage: React.FC<SupportCenterPageProps> = ({
               <h3 className="font-serif text-base text-[#121212]">
                 Email Atelier Concierge
               </h3>
-              <p className="text-xs text-[#6B6B6B] leading-relaxed">
+              <p className="text-xs text-[#524C4C] leading-relaxed">
                 Written inquiries, bespoke bridal pairings, and order support answered in 2 hours.
               </p>
             </div>
@@ -151,7 +151,7 @@ export const SupportCenterPage: React.FC<SupportCenterPageProps> = ({
               <h3 className="font-serif text-base text-[#121212]">
                 Atelier Client Line
               </h3>
-              <p className="text-xs text-[#6B6B6B] leading-relaxed">
+              <p className="text-xs text-[#524C4C] leading-relaxed">
                 Mon - Sat, 10:00 AM - 7:00 PM IST across all Indian regions.
               </p>
             </div>
@@ -166,7 +166,7 @@ export const SupportCenterPage: React.FC<SupportCenterPageProps> = ({
 
         {/* Category Pills */}
         <div className="mb-8 space-y-2">
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
+          <span className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block">
             BROWSE BY SUBJECT:
           </span>
           <div className="flex flex-wrap gap-2">
@@ -177,7 +177,7 @@ export const SupportCenterPage: React.FC<SupportCenterPageProps> = ({
                 className={`px-3.5 py-2 text-xs font-semibold tracking-wider uppercase border transition-all cursor-pointer ${
                   selectedCategory === cat
                     ? 'bg-[#0B0B0B] text-white border-[#0B0B0B]'
-                    : 'bg-white text-[#6B6B6B] border-[#E8D5A8] hover:border-[#0B0B0B]'
+                    : 'bg-white text-[#524C4C] border-[#E8D5A8] hover:border-[#0B0B0B]'
                 }`}
               >
                 {cat}
@@ -194,7 +194,7 @@ export const SupportCenterPage: React.FC<SupportCenterPageProps> = ({
               <p className="font-serif text-base text-[#121212]">
                 No answers matched "{searchQuery}".
               </p>
-              <p className="text-xs text-[#6B6B6B]">
+              <p className="text-xs text-[#524C4C]">
                 Try searching for 'order', 'delivery', 'shade', or tap "Chat Now" to speak with our concierge.
               </p>
             </div>
@@ -221,7 +221,7 @@ export const SupportCenterPage: React.FC<SupportCenterPageProps> = ({
                     {isOpen ? (
                       <ChevronUp className="w-5 h-5 text-[#121212] flex-shrink-0" />
                     ) : (
-                      <ChevronDown className="w-5 h-5 text-[#6B6B6B] flex-shrink-0" />
+                      <ChevronDown className="w-5 h-5 text-[#524C4C] flex-shrink-0" />
                     )}
                   </button>
 
@@ -229,7 +229,7 @@ export const SupportCenterPage: React.FC<SupportCenterPageProps> = ({
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
-                      className="px-5 sm:px-6 pb-6 pt-2 text-xs sm:text-sm text-[#6B6B6B] font-light leading-relaxed border-t border-[#FAF9F6]"
+                      className="px-5 sm:px-6 pb-6 pt-2 text-xs sm:text-sm text-[#524C4C] font-light leading-relaxed border-t border-[#FAF9F6]"
                     >
                       <p>{faq.answer}</p>
                     </motion.div>

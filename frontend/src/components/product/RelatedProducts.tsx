@@ -38,7 +38,7 @@ export const RelatedProducts: React.FC<RelatedProductsProps> = ({
   return (
     <section className="my-16">
       <div className="text-center space-y-2 mb-10">
-        <span className="text-[10.5px] uppercase tracking-[0.24em] font-semibold text-[#6B6B6B]">
+        <span className="text-[10.5px] uppercase tracking-[0.24em] font-semibold text-[#524C4C]">
           CURATED HARMONY
         </span>
         <h3 className="font-serif text-2xl sm:text-3xl text-[#121212]">

@@ -64,7 +64,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onOpenOrder 
 
             <div className="max-h-96 overflow-y-auto divide-y divide-[#FAF9F6]">
               {notifications.length === 0 ? (
-                <div className="p-6 text-center text-xs text-[#6B6B6B]">No notifications yet.</div>
+                <div className="p-6 text-center text-xs text-[#524C4C]">No notifications yet.</div>
               ) : (
                 notifications.map((n) => (
                   <button
@@ -83,8 +83,8 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onOpenOrder 
                     {!n.isRead && <span className="w-1.5 h-1.5 rounded-full bg-[#F05A7E] mt-1.5 flex-shrink-0" />}
                     <div className={n.isRead ? 'pl-[14px]' : ''}>
                       <p className="text-xs font-semibold text-[#121212]">{n.title}</p>
-                      <p className="text-[11px] text-[#6B6B6B] mt-0.5">{n.body}</p>
-                      <p className="text-[10px] text-[#6B6B6B] mt-1">
+                      <p className="text-[11px] text-[#524C4C] mt-0.5">{n.body}</p>
+                      <p className="text-[10px] text-[#524C4C] mt-1">
                         {formatDateTime(n.createdAt)}
                       </p>
                     </div>

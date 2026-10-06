@@ -151,7 +151,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                 </span>
                 <button
                   onClick={onClose}
-                  className="p-1 text-[#6B6B6B] hover:text-[#121212] transition-colors rounded-full"
+                  className="p-1 text-[#524C4C] hover:text-[#121212] transition-colors rounded-full"
                   aria-label="Close search"
                 >
                   <X className="w-5 h-5" />
@@ -163,7 +163,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
               </h2>
 
               <div className="relative flex items-center border-b-2 border-[#0B0B0B] pb-2">
-                <Search className="w-5 h-5 text-[#6B6B6B] mr-3 flex-shrink-0" />
+                <Search className="w-5 h-5 text-[#524C4C] mr-3 flex-shrink-0" />
                 <input
                   type="text"
                   autoFocus
@@ -175,7 +175,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                 {query && (
                   <button
                     onClick={() => setQuery('')}
-                    className="p-1 text-[#6B6B6B] hover:text-[#121212]"
+                    className="p-1 text-[#524C4C] hover:text-[#121212]"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -192,7 +192,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                       className={`px-3 py-1 text-[10px] font-semibold tracking-widest uppercase transition-colors whitespace-nowrap ${
                         activeTab === tab
                           ? 'bg-[#0B0B0B] text-[#FAF9F6]'
-                          : 'bg-[#FAF9F6] text-[#6B6B6B] hover:bg-[#E8D5A8]'
+                          : 'bg-[#FAF9F6] text-[#524C4C] hover:bg-[#E8D5A8]'
                       }`}
                     >
                       {tab}
@@ -208,7 +208,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                 <div className="space-y-6">
                   {/* Trending searches */}
                   <div className="space-y-3">
-                    <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-[#6B6B6B] block">
+                    <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-[#524C4C] block">
                       TRENDING DISCOVERY:
                     </span>
                     <div className="flex flex-wrap gap-2">
@@ -226,7 +226,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
 
                   {/* Explore Categories */}
                   <div className="space-y-3 pt-4 border-t border-[#E8D5A8]">
-                    <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-[#6B6B6B] block">
+                    <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-[#524C4C] block">
                       EXPLORE BY ATELIER CATEGORY:
                     </span>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -240,7 +240,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                           className="p-3 bg-[#FAF9F6] hover:bg-[#FAF9F6] border border-[#E8D5A8] text-left text-xs font-semibold text-[#121212] transition-colors flex items-center justify-between"
                         >
                           <span>{cat.label}</span>
-                          <ArrowRight className="w-3.5 h-3.5 text-[#6B6B6B]" />
+                          <ArrowRight className="w-3.5 h-3.5 text-[#524C4C]" />
                         </button>
                       ))}
                     </div>
@@ -254,7 +254,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                   <h3 className="font-serif text-2xl sm:text-3xl text-[#121212]">
                     WE COULDN’T FIND THAT
                   </h3>
-                  <p className="text-xs sm:text-sm text-[#6B6B6B] max-w-md mx-auto font-light leading-relaxed">
+                  <p className="text-xs sm:text-sm text-[#524C4C] max-w-md mx-auto font-light leading-relaxed">
                     No formulation matched &ldquo;{query}&rdquo;. Explore our curated beauty edit or try searching by category, undertone, or finish.
                   </p>
 
@@ -273,7 +273,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                           className="p-3 bg-[#FAF9F6] hover:bg-[#FAF9F6] border border-[#E8D5A8] text-left text-xs font-medium text-[#121212] transition-colors flex items-center justify-between group"
                         >
                           <span>{cat.label}</span>
-                          <ArrowRight className="w-3.5 h-3.5 text-[#6B6B6B] group-hover:text-[#C9972B] transition-colors" />
+                          <ArrowRight className="w-3.5 h-3.5 text-[#524C4C] group-hover:text-[#C9972B] transition-colors" />
                         </button>
                       ))}
                     </div>
@@ -281,7 +281,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                 </div>
               ) : (
                 <div className="space-y-8">
-                  <div className="text-xs text-[#6B6B6B] uppercase tracking-wider flex items-center justify-between">
+                  <div className="text-xs text-[#524C4C] uppercase tracking-wider flex items-center justify-between">
                     <span>
                       RESULTS FOR &ldquo;<strong className="text-[#121212]">{query}</strong>&rdquo;
                     </span>
@@ -314,7 +314,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                                 <h4 className="font-serif text-sm font-medium text-[#121212] group-hover:text-[#C9972B] transition-colors">
                                   {p.name}
                                 </h4>
-                                <span className="text-[11px] text-[#6B6B6B] block">
+                                <span className="text-[11px] text-[#524C4C] block">
                                   {p.subCategory} • ₹{p.price}
                                 </span>
                               </div>
@@ -356,11 +356,11 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                               <h4 className="font-serif text-sm font-medium text-[#121212]">
                                 {g.title}
                               </h4>
-                              <span className="text-[11px] text-[#6B6B6B] line-clamp-1">
+                              <span className="text-[11px] text-[#524C4C] line-clamp-1">
                                 {g.subtitle}
                               </span>
                             </div>
-                            <ArrowRight className="w-4 h-4 text-[#6B6B6B] flex-shrink-0 ml-2" />
+                            <ArrowRight className="w-4 h-4 text-[#524C4C] flex-shrink-0 ml-2" />
                           </div>
                         ))}
                       </div>
@@ -387,11 +387,11 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                               <h4 className="font-serif text-sm font-medium text-[#121212]">
                                 {a.title}
                               </h4>
-                              <span className="text-[11px] text-[#6B6B6B]">
+                              <span className="text-[11px] text-[#524C4C]">
                                 {a.readTime} • {a.category}
                               </span>
                             </div>
-                            <ArrowRight className="w-4 h-4 text-[#6B6B6B] flex-shrink-0 ml-2" />
+                            <ArrowRight className="w-4 h-4 text-[#524C4C] flex-shrink-0 ml-2" />
                           </div>
                         ))}
                       </div>
@@ -418,11 +418,11 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                               <h4 className="font-serif text-sm font-medium text-[#121212]">
                                 {l.title}
                               </h4>
-                              <span className="text-[11px] text-[#6B6B6B]">
+                              <span className="text-[11px] text-[#524C4C]">
                                 {l.tagline}
                               </span>
                             </div>
-                            <ArrowRight className="w-4 h-4 text-[#6B6B6B] flex-shrink-0 ml-2" />
+                            <ArrowRight className="w-4 h-4 text-[#524C4C] flex-shrink-0 ml-2" />
                           </div>
                         ))}
                       </div>

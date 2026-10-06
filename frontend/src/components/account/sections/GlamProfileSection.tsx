@@ -61,7 +61,7 @@ const ChipGroup: React.FC<{
           className={`px-3.5 py-2 rounded-full border text-[11.5px] transition-colors cursor-pointer ${
             active
               ? 'bg-[#0B0B0B] text-white border-[#0B0B0B]'
-              : 'bg-white text-[#6B6B6B] border-[#E8D5A8] hover:border-[#C9972B] hover:text-[#121212]'
+              : 'bg-white text-[#524C4C] border-[#E8D5A8] hover:border-[#C9972B] hover:text-[#121212]'
           }`}
         >
           {option}
@@ -93,7 +93,7 @@ const OptionRow: React.FC<{
           className={`px-3.5 py-2 rounded-full border text-[11.5px] transition-colors cursor-pointer ${
             active
               ? 'bg-[#C9972B] text-[#0B0B0B] border-[#C9972B] font-semibold'
-              : 'bg-white text-[#6B6B6B] border-[#E8D5A8] hover:border-[#C9972B] hover:text-[#121212]'
+              : 'bg-white text-[#524C4C] border-[#E8D5A8] hover:border-[#C9972B] hover:text-[#121212]'
           }`}
         >
           {option}
@@ -182,7 +182,7 @@ export const GlamProfileSection: React.FC<GlamProfileSectionProps> = ({ onOpenSh
       />
 
       {glamProfile.data?.updatedAt && (
-        <p className="text-[11px] text-[#6B6B6B]">Last updated {formatDate(glamProfile.data.updatedAt)}</p>
+        <p className="text-[11px] text-[#524C4C]">Last updated {formatDate(glamProfile.data.updatedAt)}</p>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">

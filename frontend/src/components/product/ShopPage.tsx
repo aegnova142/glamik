@@ -289,7 +289,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({
                   className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer ${
                     isActive
                       ? 'bg-[#0B0B0B] text-[#FAF9F6] shadow-sm'
-                      : 'border border-[#E8D5A8] bg-white text-[#6B6B6B] hover:border-[#C9972B] hover:text-[#121212]'
+                      : 'border border-[#E8D5A8] bg-white text-[#524C4C] hover:border-[#C9972B] hover:text-[#121212]'
                   }`}
                 >
                   {pill.label}
@@ -298,7 +298,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({
             })}
           </div>
 
-          <div className="hidden flex-shrink-0 items-center gap-2 text-xs text-[#6B6B6B] md:flex">
+          <div className="hidden flex-shrink-0 items-center gap-2 text-xs text-[#524C4C] md:flex">
             <Sparkles className="h-3.5 w-3.5 text-[#C9972B]" />
             <span className="text-[10.5px] uppercase tracking-widest">Authentic Formulations</span>
           </div>
@@ -310,7 +310,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({
         {/* Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
           <div>
-            <p className="text-xs text-[#6B6B6B]">
+            <p className="text-xs text-[#524C4C]">
               Showing <strong className="font-semibold text-[#121212]">{sortedProducts.length}</strong> of {allProducts.length} products
             </p>
           </div>
@@ -336,7 +336,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({
                 onClick={() => setViewMode('grid')}
                 aria-label="Grid view"
                 className={`cursor-pointer rounded-md p-1.5 transition-colors ${
-                  viewMode === 'grid' ? 'bg-[#FCE8ED] text-[#F05A7E]' : 'text-[#6B6B6B] hover:text-[#121212]'
+                  viewMode === 'grid' ? 'bg-[#FCE8ED] text-[#F05A7E]' : 'text-[#524C4C] hover:text-[#121212]'
                 }`}
               >
                 <LayoutGrid className="h-4 w-4" />
@@ -345,7 +345,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({
                 onClick={() => setViewMode('list')}
                 aria-label="List view"
                 className={`cursor-pointer rounded-md p-1.5 transition-colors ${
-                  viewMode === 'list' ? 'bg-[#FCE8ED] text-[#F05A7E]' : 'text-[#6B6B6B] hover:text-[#121212]'
+                  viewMode === 'list' ? 'bg-[#FCE8ED] text-[#F05A7E]' : 'text-[#524C4C] hover:text-[#121212]'
                 }`}
               >
                 <List className="h-4 w-4" />

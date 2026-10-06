@@ -82,7 +82,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const isLowStock = product.inStock && typeof product.stock === 'number' && product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD;
 
   const ImageArea = (
-    <div className={`relative shrink-0 overflow-hidden rounded-lg bg-[#FCE8ED] ${viewMode === 'list' ? 'aspect-square w-28 sm:w-40' : 'aspect-[4/3] w-full'}`}>
+    <div className={`relative shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-[#FFF7F8] to-[#FCE7EC] ${viewMode === 'list' ? 'aspect-square w-28 sm:w-40' : 'aspect-[4/3] w-full'}`}>
       <ProductImage
         src={displayImage}
         alt={product.name}
@@ -117,7 +117,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       >
         <Heart
           className={`h-3.5 w-3.5 transition-colors sm:h-4 sm:w-4 ${
-            isWishlisted ? 'fill-[#F05A7E] text-[#F05A7E]' : 'text-[#6B6B6B] hover:text-[#F05A7E]'
+            isWishlisted ? 'fill-[#F05A7E] text-[#F05A7E]' : 'text-[#524C4C] hover:text-[#F05A7E]'
           }`}
         />
       </button>
@@ -142,7 +142,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   );
 
   const RatingRow = RATINGS_ENABLED && (product.rating || product.reviewCount) && (
-    <div className="flex items-center gap-1 text-[11px] text-[#6B6B6B]">
+    <div className="flex items-center gap-1 text-[11px] text-[#524C4C]">
       <Star className="h-3 w-3 fill-[#C9972B] text-[#C9972B]" />
       <span className="font-semibold text-[#121212]">{(product.rating ?? 0).toFixed(1)}</span>
       {typeof product.reviewCount === 'number' && <span>({product.reviewCount})</span>}
@@ -169,7 +169,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         />
       ))}
       {product.shades.length > 6 && (
-        <span className="text-[10px] font-medium text-[#6B6B6B]">+{product.shades.length - 6}</span>
+        <span className="text-[10px] font-medium text-[#524C4C]">+{product.shades.length - 6}</span>
       )}
     </div>
   );
@@ -181,7 +181,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       </span>
       {discountPercent > 0 && (
         <>
-          <span className="text-xs text-[#6B6B6B] line-through">
+          <span className="text-xs text-[#524C4C] line-through">
             {product.currency}{product.originalPrice}
           </span>
           <span className="text-[10.5px] font-bold text-[#F05A7E]">{discountPercent}% OFF</span>
@@ -206,7 +206,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       }
       className={`flex items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold shadow-sm transition-all active:scale-95 ${
         !product.inStock
-          ? 'cursor-not-allowed bg-[#E8D5A8]/50 text-[#6B6B6B]'
+          ? 'cursor-not-allowed bg-[#E8D5A8]/50 text-[#524C4C]'
           : isInCart
           ? 'cursor-pointer border border-[#0B0B0B] bg-white text-[#121212] hover:bg-[#FAF9F6]'
           : 'cursor-pointer bg-[#F05A7E] text-white hover:bg-[#e0496c]'
@@ -248,7 +248,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <div
         id={`product-card-${product.id}`}
         onClick={() => onSelectProduct(product)}
-        className="group relative flex cursor-pointer gap-4 rounded-xl border border-[#E8D5A8] bg-white p-3.5 shadow-[0_1px_6px_rgba(11,11,11,0.03)] transition-all duration-300 hover:border-[#FCE8ED] hover:shadow-[0_8px_20px_rgba(240,90,126,0.10)] sm:p-4"
+        className="group relative flex cursor-pointer gap-4 rounded-2xl border border-[#EFE1D4] bg-white p-3.5 shadow-[0_2px_10px_rgba(201,54,93,0.04)] transition-all duration-300 hover:border-[#E7C98D]/60 hover:shadow-[0_14px_32px_rgba(201,54,93,0.11)] sm:p-4"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -258,14 +258,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <div>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-[10.5px] font-medium text-[#6B6B6B]">{product.subCategory}</p>
+                <p className="text-[10.5px] font-medium text-[#524C4C]">{product.subCategory}</p>
                 <h3 className="mt-0.5 line-clamp-2 text-sm font-bold leading-snug text-[#121212] transition-colors group-hover:text-[#F05A7E] sm:text-base">
                   {product.name}
                 </h3>
               </div>
               {RatingRow}
             </div>
-            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#6B6B6B]">{product.description || product.subtitle}</p>
+            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#524C4C]">{product.description || product.subtitle}</p>
             {ShadeRow}
             {isLowStock && (
               <p className="mt-1.5 text-[10.5px] font-semibold text-[#F05A7E]">Only {product.stock} left</p>
@@ -288,7 +288,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     <div
       id={`product-card-${product.id}`}
       onClick={() => onSelectProduct(product)}
-      className="group relative flex h-full cursor-pointer flex-col rounded-xl border border-[#E8D5A8] bg-white p-4 shadow-[0_1px_6px_rgba(11,11,11,0.03)] transition-all duration-300 hover:-translate-y-0.5 hover:border-[#FCE8ED] hover:shadow-[0_10px_24px_rgba(240,90,126,0.10)] sm:p-5"
+      className="group relative flex h-full cursor-pointer flex-col rounded-2xl border border-[#EFE1D4] bg-white p-4 shadow-[0_2px_10px_rgba(201,54,93,0.04)] transition-all duration-300 hover:-translate-y-1 hover:border-[#E7C98D]/60 hover:shadow-[0_16px_38px_rgba(201,54,93,0.12)] sm:p-5"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -297,7 +297,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <div className="flex flex-1 flex-col justify-between pt-3.5">
         <div>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[10.5px] font-medium text-[#6B6B6B]">{product.subCategory}</span>
+            <span className="text-[10.5px] font-medium text-[#524C4C]">{product.subCategory}</span>
             {RatingRow}
           </div>
 
@@ -305,14 +305,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             {product.name}
           </h3>
 
-          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-[#6B6B6B]">
+          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-[#524C4C]">
             {product.subtitle}
           </p>
 
           {ShadeRow}
 
           {product.sizes && !product.shades && (
-            <div className="flex items-center gap-1.5 pt-1.5 text-[11px] text-[#6B6B6B]">
+            <div className="flex items-center gap-1.5 pt-1.5 text-[11px] text-[#524C4C]">
               <span className="rounded-full border border-[#E8D5A8] bg-[#FCE8ED] px-2 py-0.5 text-[10px] font-bold text-[#F05A7E]">
                 {product.selectedSize || '30g & 50g'}
               </span>

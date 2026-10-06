@@ -26,10 +26,10 @@ export const BrandIntro: React.FC<BrandIntroProps> = ({ onDiscoverClick }) => {
               <span className="text-[#F05A7E]">Made Personal.</span>
             </h2>
             <div className="w-12 h-1 bg-[#F05A7E] rounded-full" />
-            <p className="text-base sm:text-lg text-[#6B6B6B] font-normal leading-relaxed">
+            <p className="text-base sm:text-lg text-[#524C4C] font-normal leading-relaxed">
               Glamirk brings together modern beauty, thoughtful formulations and intelligent shade technology to create a more personal beauty experience.
             </p>
-            <p className="text-sm text-[#6B6B6B] leading-relaxed">
+            <p className="text-sm text-[#524C4C] leading-relaxed">
               Rooted in the richness of Indian skin undertones and contemporary cosmetics innovation, our collections are created to empower your personal ritual with effortless grace.
             </p>
             <div className="pt-2">
@@ -73,7 +73,7 @@ export const BrandIntro: React.FC<BrandIntroProps> = ({ onDiscoverClick }) => {
                 <h4 className="text-base font-bold text-[#121212]">
                   Indian Skin Intelligence
                 </h4>
-                <p className="text-xs text-[#6B6B6B] leading-relaxed">
+                <p className="text-xs text-[#524C4C] leading-relaxed">
                   Every pigment density and emulsion viscosity is calibrated to enhance Indian complexions without chalkiness or oxidation.
                 </p>
               </div>

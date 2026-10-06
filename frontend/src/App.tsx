@@ -1240,7 +1240,7 @@ function AppContent() {
                   <h1 className="font-serif text-2xl text-[#121212]">
                     {customerLoading ? 'Checking your session…' : 'Sign in to view your account'}
                   </h1>
-                  <p className="text-xs text-[#6B6B6B] leading-relaxed">
+                  <p className="text-xs text-[#524C4C] leading-relaxed">
                     {customerLoading
                       ? 'One moment while we restore your session.'
                       : 'Your orders, wishlist, addresses and rewards are private to your account.'}
@@ -1499,7 +1499,7 @@ function AppContent() {
                 return (
                   <div className="text-center py-20 space-y-4">
                     <h2 className="font-serif text-3xl text-[#121212]">Page Not Found</h2>
-                    <p className="text-sm text-[#6B6B6B]">This atelier page is either in draft or unavailable.</p>
+                    <p className="text-sm text-[#524C4C]">This atelier page is either in draft or unavailable.</p>
                     <button
                       onClick={navigateToHome}
                       className="px-6 py-2.5 bg-[#F05A7E] text-white rounded-full text-xs font-semibold uppercase tracking-wider"
@@ -1514,7 +1514,7 @@ function AppContent() {
                 <div className="space-y-10">
                   <div className="text-center max-w-2xl mx-auto space-y-2">
                     <h1 className="font-serif text-3xl sm:text-4xl text-[#121212]">{activePage.title}</h1>
-                    <p className="text-sm text-[#6B6B6B]">{activePage.seoDescription}</p>
+                    <p className="text-sm text-[#524C4C]">{activePage.seoDescription}</p>
                   </div>
 
                   <div className="space-y-8">

@@ -137,7 +137,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
               </div>
               <button
                 onClick={onClose}
-                className="p-1.5 text-[#6B6B6B] hover:text-[#121212] transition-colors rounded-full"
+                className="p-1.5 text-[#524C4C] hover:text-[#121212] transition-colors rounded-full"
                 aria-label="Close"
               >
                 <X className="w-5 h-5" />
@@ -150,7 +150,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
               {/* Progress Tracker */}
               {step < 4 && (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-[#6B6B6B] uppercase tracking-wider">
+                  <div className="flex items-center justify-between text-xs text-[#524C4C] uppercase tracking-wider">
                     <span>Step {step} of 3</span>
                     <span>
                       {step === 1 && 'Skin Depth'}
@@ -178,7 +178,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                     <h3 className="font-serif text-2xl text-[#121212]">
                       Select Your Complexion Depth
                     </h3>
-                    <p className="text-xs text-[#6B6B6B]">
+                    <p className="text-xs text-[#524C4C]">
                       Formulated to respect and illuminate the natural depth of Indian complexions.
                     </p>
                   </div>
@@ -197,7 +197,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                         <span className="font-serif text-base text-[#121212] font-medium block">
                           {opt.label}
                         </span>
-                        <span className="text-[11.5px] text-[#6B6B6B] block mt-1">
+                        <span className="text-[11.5px] text-[#524C4C] block mt-1">
                           {opt.desc}
                         </span>
                       </button>
@@ -227,7 +227,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                     <h3 className="font-serif text-2xl text-[#121212]">
                       Identify Your Undertone
                     </h3>
-                    <p className="text-xs text-[#6B6B6B]">
+                    <p className="text-xs text-[#524C4C]">
                       The secret to lipsticks and sindoor that never look ashy or washed out.
                     </p>
                   </div>
@@ -246,7 +246,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                         <span className="font-serif text-base text-[#121212] font-medium block">
                           {opt.title}
                         </span>
-                        <span className="text-[11.5px] text-[#6B6B6B] block mt-1">
+                        <span className="text-[11.5px] text-[#524C4C] block mt-1">
                           {opt.desc}
                         </span>
                       </button>
@@ -256,7 +256,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                   <div className="pt-4 flex justify-between">
                     <button
                       onClick={() => setStep(1)}
-                      className="px-4 py-2 text-xs text-[#6B6B6B] hover:text-[#121212] uppercase tracking-wider"
+                      className="px-4 py-2 text-xs text-[#524C4C] hover:text-[#121212] uppercase tracking-wider"
                     >
                       BACK
                     </button>
@@ -282,7 +282,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                     <h3 className="font-serif text-2xl text-[#121212]">
                       Choose Your Primary Ritual
                     </h3>
-                    <p className="text-xs text-[#6B6B6B]">
+                    <p className="text-xs text-[#524C4C]">
                       How do you intend to express your signature Glamirk look?
                     </p>
                   </div>
@@ -301,7 +301,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                         <span className="font-serif text-base text-[#121212] font-medium block">
                           {opt.label}
                         </span>
-                        <span className="text-[11.5px] text-[#6B6B6B] block mt-0.5">
+                        <span className="text-[11.5px] text-[#524C4C] block mt-0.5">
                           {opt.desc}
                         </span>
                       </button>
@@ -311,7 +311,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                   <div className="pt-4 flex justify-between">
                     <button
                       onClick={() => setStep(2)}
-                      className="px-4 py-2 text-xs text-[#6B6B6B] hover:text-[#121212] uppercase tracking-wider"
+                      className="px-4 py-2 text-xs text-[#524C4C] hover:text-[#121212] uppercase tracking-wider"
                     >
                       BACK
                     </button>
@@ -340,7 +340,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                     <h3 className="font-serif text-2xl sm:text-3xl text-[#121212]">
                       {skinDepth} • {undertone} Undertone
                     </h3>
-                    <p className="text-xs text-[#6B6B6B]">
+                    <p className="text-xs text-[#524C4C]">
                       Calibrated for {occasion}. Here are your signature formulations:
                     </p>
                   </div>
@@ -362,7 +362,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                           <h4 className="font-serif text-base text-[#121212] font-medium">
                             Matte Liquid — {matched.matchedLipShade.name}
                           </h4>
-                          <p className="text-[11px] text-[#6B6B6B]">
+                          <p className="text-[11px] text-[#524C4C]">
                             {matched.matchedLipShade.description}
                           </p>
                         </div>
@@ -390,7 +390,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                           <h4 className="font-serif text-base text-[#121212] font-medium">
                             Luxury Sindoor — {matched.matchedSindoorShade.name}
                           </h4>
-                          <p className="text-[11px] text-[#6B6B6B]">
+                          <p className="text-[11px] text-[#524C4C]">
                             Precision applicator for smudge-resistant ceremonial elegance.
                           </p>
                         </div>
@@ -417,7 +417,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                           <h4 className="font-serif text-base text-[#121212] font-medium">
                             Balm To Water Cleanser (50g Ritual Jar)
                           </h4>
-                          <p className="text-[11px] text-[#6B6B6B]">
+                          <p className="text-[11px] text-[#524C4C]">
                             Solid balm to milky water transformation for clean, supple skin.
                           </p>
                         </div>
@@ -437,7 +437,7 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                   <div className="pt-3 border-t border-[#E8D5A8] flex items-center justify-between">
                     <button
                       onClick={resetQuiz}
-                      className="text-xs text-[#6B6B6B] hover:text-[#121212] flex items-center gap-1.5 uppercase tracking-wider"
+                      className="text-xs text-[#524C4C] hover:text-[#121212] flex items-center gap-1.5 uppercase tracking-wider"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
                       <span>RETAKE MATCH</span>

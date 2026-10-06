@@ -31,7 +31,7 @@ export const AccountSectionHeader: React.FC<{
         <span className="text-[10px] font-semibold tracking-[0.24em] uppercase text-[#C9972B] block">{kicker}</span>
       )}
       <h1 className="font-serif text-2xl sm:text-3xl text-[#121212] leading-tight">{title}</h1>
-      {description && <p className="text-xs sm:text-[13px] text-[#6B6B6B] leading-relaxed max-w-xl">{description}</p>}
+      {description && <p className="text-xs sm:text-[13px] text-[#524C4C] leading-relaxed max-w-xl">{description}</p>}
     </div>
     {action && <div className="shrink-0">{action}</div>}
   </div>
@@ -43,7 +43,7 @@ export const AccountCard: React.FC<{ children: React.ReactNode; className?: stri
 
 export const AccountLoading: React.FC<{ label?: string; rows?: number }> = ({ label = 'Loading…', rows = 3 }) => (
   <div className="space-y-4" role="status" aria-live="polite">
-    <div className="flex items-center gap-2.5 text-xs text-[#6B6B6B]">
+    <div className="flex items-center gap-2.5 text-xs text-[#524C4C]">
       <Loader2 className="w-4 h-4 animate-spin text-[#C9972B]" />
       <span className="uppercase tracking-wider font-semibold">{label}</span>
     </div>
@@ -62,7 +62,7 @@ export const AccountError: React.FC<{ message?: string; onRetry?: () => void }> 
     <AlertCircle className="w-9 h-9 text-[#F05A7E] mx-auto stroke-[1.4]" />
     <div className="space-y-1">
       <h3 className="font-serif text-lg text-[#121212]">Something went wrong</h3>
-      <p className="text-xs text-[#6B6B6B] max-w-sm mx-auto leading-relaxed">
+      <p className="text-xs text-[#524C4C] max-w-sm mx-auto leading-relaxed">
         {message || 'Something went wrong. Please try again.'}
       </p>
     </div>
@@ -93,7 +93,7 @@ export const AccountEmpty: React.FC<{
     </div>
     <div className="space-y-1.5">
       <h3 className="font-serif text-xl text-[#121212]">{title}</h3>
-      {description && <p className="text-xs text-[#6B6B6B] max-w-sm mx-auto leading-relaxed">{description}</p>}
+      {description && <p className="text-xs text-[#524C4C] max-w-sm mx-auto leading-relaxed">{description}</p>}
     </div>
     {(actionLabel || secondaryLabel) && (
       <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
@@ -123,7 +123,7 @@ type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 const BUTTON_STYLES: Record<ButtonVariant, string> = {
   primary: 'bg-[#0B0B0B] text-white border border-[#0B0B0B] hover:bg-[#171717]',
   secondary: 'bg-white text-[#121212] border border-[#0B0B0B] hover:bg-[#0B0B0B] hover:text-white',
-  ghost: 'bg-white text-[#6B6B6B] border border-[#E8D5A8] hover:text-[#121212] hover:border-[#C9972B]',
+  ghost: 'bg-white text-[#524C4C] border border-[#E8D5A8] hover:text-[#121212] hover:border-[#C9972B]',
   danger: 'bg-white text-[#C0392B] border border-[#C0392B]/40 hover:bg-[#C0392B] hover:text-white',
 };
 
@@ -180,16 +180,16 @@ export const AccountField: React.FC<{
   className?: string;
 }> = ({ label, htmlFor, hint, required, children, className = '' }) => (
   <div className={`space-y-1.5 ${className}`}>
-    <label htmlFor={htmlFor} className="text-[10px] font-semibold tracking-[0.16em] uppercase text-[#6B6B6B] block">
+    <label htmlFor={htmlFor} className="text-[10px] font-semibold tracking-[0.16em] uppercase text-[#524C4C] block">
       {label} {required && <span className="text-[#C0392B]">*</span>}
     </label>
     {children}
-    {hint && <p className="text-[10.5px] text-[#6B6B6B]">{hint}</p>}
+    {hint && <p className="text-[10.5px] text-[#524C4C]">{hint}</p>}
   </div>
 );
 
 export const inputClass =
-  'w-full px-3.5 py-2.5 bg-white border border-[#E8D5A8] rounded-lg text-[13px] text-[#121212] placeholder:text-[#B9B2A2] focus:outline-none focus:border-[#C9972B] focus:ring-1 focus:ring-[#C9972B]/30 transition-colors disabled:bg-[#FAF9F6] disabled:text-[#6B6B6B]';
+  'w-full px-3.5 py-2.5 bg-white border border-[#E8D5A8] rounded-lg text-[13px] text-[#121212] placeholder:text-[#B9B2A2] focus:outline-none focus:border-[#C9972B] focus:ring-1 focus:ring-[#C9972B]/30 transition-colors disabled:bg-[#FAF9F6] disabled:text-[#524C4C]';
 
 export const AccountToggle: React.FC<{
   checked: boolean;
@@ -222,7 +222,7 @@ export const StatusBadge: React.FC<{ status: string; tone?: 'neutral' | 'positiv
   tone = 'neutral',
 }) => {
   const tones: Record<string, string> = {
-    neutral: 'bg-[#FAF9F6] text-[#6B6B6B] border-[#E8D5A8]',
+    neutral: 'bg-[#FAF9F6] text-[#524C4C] border-[#E8D5A8]',
     positive: 'bg-[#F3F8F3] text-[#2E7D32] border-[#2E7D32]/25',
     negative: 'bg-[#FDF3F2] text-[#C0392B] border-[#C0392B]/25',
     progress: 'bg-[#0B0B0B] text-[#E3B84B] border-[#0B0B0B]',

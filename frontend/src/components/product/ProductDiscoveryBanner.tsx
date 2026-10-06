@@ -20,7 +20,7 @@ export const ProductDiscoveryBanner: React.FC<ProductDiscoveryBannerProps> = ({
         <h3 className="text-2xl sm:text-3xl font-extrabold text-[#121212]">
           Find Your Signature Shade
         </h3>
-        <p className="text-xs sm:text-sm text-[#6B6B6B] max-w-lg leading-relaxed">
+        <p className="text-xs sm:text-sm text-[#524C4C] max-w-lg leading-relaxed">
           Not sure where to start? Discover velvet lipsticks and ceremonial formulations calibrated precisely for your undertone.
         </p>
       </div>

@@ -36,13 +36,13 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
   if (products.length === 0) {
     return (
       <div className="space-y-4 rounded-xl border border-[#E8D5A8] bg-white/60 p-8 py-20 text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E8D5A8] text-[#6B6B6B]">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E8D5A8] text-[#524C4C]">
           <Sparkles className="h-6 w-6 stroke-[1.2]" />
         </div>
         <h3 className="font-serif text-2xl text-[#121212]">
           WE COULDN&apos;T FIND THAT
         </h3>
-        <p className="mx-auto max-w-md text-xs leading-relaxed text-[#6B6B6B]">
+        <p className="mx-auto max-w-md text-xs leading-relaxed text-[#524C4C]">
           No Glamirk creations currently match your selected filters. Try adjusting price, undertone, or finish preferences.
         </p>
         <button

@@ -142,14 +142,14 @@ const Accordion: React.FC<{ items: AccordionItem[]; defaultOpenId?: string; visi
               {isOpen ? (
                 <ChevronUp className="w-5 h-5 text-[#F05A7E] flex-shrink-0" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-[#6B6B6B] flex-shrink-0" />
+                <ChevronDown className="w-5 h-5 text-[#524C4C] flex-shrink-0" />
               )}
             </button>
             {isOpen && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
-                className="px-5 sm:px-6 pb-6 pt-1 text-xs sm:text-sm text-[#6B6B6B] font-light leading-relaxed border-t border-[#FAF9F6]"
+                className="px-5 sm:px-6 pb-6 pt-1 text-xs sm:text-sm text-[#524C4C] font-light leading-relaxed border-t border-[#FAF9F6]"
               >
                 <p>{item.content}</p>
               </motion.div>
@@ -207,13 +207,13 @@ const StoryCard: React.FC<{ label: string; content: string; html?: boolean; icon
       {html ? (
         <p
           ref={textRef}
-          className={`text-xs text-[#6B6B6B] leading-relaxed flex-1 ${expanded ? '' : 'line-clamp-5'}`}
+          className={`text-xs text-[#524C4C] leading-relaxed flex-1 ${expanded ? '' : 'line-clamp-5'}`}
           dangerouslySetInnerHTML={{ __html: content }}
         />
       ) : (
         <p
           ref={textRef}
-          className={`text-xs text-[#6B6B6B] leading-relaxed flex-1 ${expanded ? '' : 'line-clamp-5'}`}
+          className={`text-xs text-[#524C4C] leading-relaxed flex-1 ${expanded ? '' : 'line-clamp-5'}`}
         >
           {content}
         </p>
@@ -291,7 +291,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onExploreShop, onNavigateS
         <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl text-[#121212] tracking-tight mb-3">
           ABOUT US
         </h1>
-        <p className="font-serif italic text-lg sm:text-xl text-[#6B6B6B] max-w-2xl mx-auto">
+        <p className="font-serif italic text-lg sm:text-xl text-[#524C4C] max-w-2xl mx-auto">
           Radiance without compromise&mdash;high-performance, clean beauty crafted to elevate your natural glow.
         </p>
       </div>
@@ -300,7 +300,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onExploreShop, onNavigateS
         {/* About Us Statement */}
         <section className="max-w-3xl mx-auto text-center space-y-4">
           {about.statementParagraphs.map((para, idx) => (
-            <p key={idx} className="text-sm sm:text-base text-[#6B6B6B] leading-relaxed">
+            <p key={idx} className="text-sm sm:text-base text-[#524C4C] leading-relaxed">
               {para}
             </p>
           ))}
@@ -327,7 +327,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onExploreShop, onNavigateS
                 <div className="p-7 space-y-2">
                   <h3 className="text-lg font-bold text-[#121212] leading-snug">{founder.name}</h3>
                   <p className="text-xs text-[#F05A7E] font-semibold uppercase tracking-wider">{founder.title}</p>
-                  <p className="text-sm text-[#6B6B6B] leading-relaxed pt-1">{founder.focus}</p>
+                  <p className="text-sm text-[#524C4C] leading-relaxed pt-1">{founder.focus}</p>
                 </div>
               </div>
             )}
@@ -417,7 +417,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onExploreShop, onNavigateS
               THE PREMIUM STANDARD
             </span>
             <h2 className="font-serif text-2xl sm:text-3xl text-[#121212]">Product Integrity, Safety &amp; Sustainability</h2>
-            <p className="text-sm text-[#6B6B6B] leading-relaxed">{about.premiumStandardIntro}</p>
+            <p className="text-sm text-[#524C4C] leading-relaxed">{about.premiumStandardIntro}</p>
           </div>
           <ExpandableGrid
             items={about.premiumStandardCards}
@@ -436,19 +436,19 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onExploreShop, onNavigateS
               {about.differentiators.map((item) => (
                 <li key={item.id}>
                   <span className="text-xs font-bold text-[#121212] block">{item.title}</span>
-                  <span className="text-xs text-[#6B6B6B] leading-relaxed">{item.description}</span>
+                  <span className="text-xs text-[#524C4C] leading-relaxed">{item.description}</span>
                 </li>
               ))}
             </ul>
           </CardShell>
           <CardShell>
             <div className="flex items-center gap-2 mb-4">
-              <XCircle className="w-5 h-5 text-[#6B6B6B]" />
+              <XCircle className="w-5 h-5 text-[#524C4C]" />
               <h3 className="font-serif text-lg text-[#121212]">What Glamirk Should Never Become</h3>
             </div>
             <ul className="space-y-3">
               {about.neverBecome.map((point) => (
-                <li key={point.id} className="text-xs text-[#6B6B6B] leading-relaxed flex items-start gap-2">
+                <li key={point.id} className="text-xs text-[#524C4C] leading-relaxed flex items-start gap-2">
                   <span className="w-1 h-1 rounded-full bg-[#F05A7E] mt-1.5 flex-shrink-0" />
                   {point.text}
                 </li>

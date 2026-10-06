@@ -91,7 +91,7 @@ export const OrderTrackSection: React.FC<OrderTrackSectionProps> = ({
               <span className="font-serif text-lg text-[#121212]">#{orderNumber}</span>
               <StatusBadge status={status} tone={orderStatusTone(status)} />
             </div>
-            <p className="text-[11.5px] text-[#6B6B6B] mt-1">
+            <p className="text-[11.5px] text-[#524C4C] mt-1">
               {status === 'DELIVERED'
                 ? 'Delivered'
                 : status === 'CANCELLED'
@@ -116,10 +116,10 @@ export const OrderTrackSection: React.FC<OrderTrackSectionProps> = ({
         <div className="flex gap-3 bg-[#FAF9F6] border border-[#E8D5A8] rounded-xl p-4">
           <Info className="w-4 h-4 text-[#C9972B] shrink-0 mt-0.5" />
           <div className="min-w-0 space-y-2">
-            <p className="text-[11.5px] text-[#6B6B6B] leading-relaxed">{tracking.sourceNote}</p>
+            <p className="text-[11.5px] text-[#524C4C] leading-relaxed">{tracking.sourceNote}</p>
             {tracking.trackingNumber && (
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#6B6B6B]">
+                <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#524C4C]">
                   {tracking.courierPartner || 'Courier'} AWB
                 </span>
                 <code className="text-[12px] font-mono text-[#121212] bg-white border border-[#E8D5A8] rounded px-2 py-1">
@@ -175,7 +175,7 @@ export const OrderTrackSection: React.FC<OrderTrackSectionProps> = ({
                 <span className={`text-[13px] block ${stage.complete ? 'text-[#121212] font-semibold' : 'text-[#9C9689]'}`}>
                   {stage.label || ORDER_STATUS_LABEL[stage.status]}
                 </span>
-                <span className="text-[11px] text-[#6B6B6B]">
+                <span className="text-[11px] text-[#524C4C]">
                   {stage.reachedAt ? formatDateTime(stage.reachedAt) : 'Pending'}
                 </span>
               </div>

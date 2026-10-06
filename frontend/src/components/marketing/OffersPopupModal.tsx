@@ -45,7 +45,7 @@ export const OffersPopupModal: React.FC<OffersPopupModalProps> = ({ isOpen, onCl
                 type="button"
                 onClick={onClose}
                 aria-label="Close offers popup"
-                className="p-1.5 text-[#6B6B6B] hover:text-[#F05A7E] transition-colors cursor-pointer"
+                className="p-1.5 text-[#524C4C] hover:text-[#F05A7E] transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -80,9 +80,9 @@ export const OffersPopupModal: React.FC<OffersPopupModalProps> = ({ isOpen, onCl
                   <h3 className="font-serif text-base text-[#121212] mt-2">
                     {offer.publicTitle || offer.name}
                   </h3>
-                  <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">{offer.description}</p>
+                  <p className="text-xs text-[#524C4C] mt-1 leading-relaxed">{offer.description}</p>
                   {offer.minOrderValue > 0 && (
-                    <p className="text-[10.5px] text-[#6B6B6B] mt-1.5 font-mono">
+                    <p className="text-[10.5px] text-[#524C4C] mt-1.5 font-mono">
                       Minimum bag value: ₹{offer.minOrderValue}
                     </p>
                   )}

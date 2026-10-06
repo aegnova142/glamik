@@ -112,7 +112,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
         </button>
 
         <div className="flex items-center gap-3">
-          <span className="hidden sm:inline-block text-[11px] text-[#6B6B6B] font-serif italic truncate max-w-xs">
+          <span className="hidden sm:inline-block text-[11px] text-[#524C4C] font-serif italic truncate max-w-xs">
             {article.title}
           </span>
           <button
@@ -144,7 +144,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
           <span className="px-3 py-1 bg-[#FAF9F6] text-[#C9972B] text-[10.5px] font-semibold tracking-[0.22em] uppercase border border-[#E8D5A8]">
             {article.category}
           </span>
-          <span className="text-xs text-[#6B6B6B] flex items-center gap-1">
+          <span className="text-xs text-[#524C4C] flex items-center gap-1">
             <Clock className="w-3.5 h-3.5" />
             {article.readTime}
           </span>
@@ -155,12 +155,12 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
         </h1>
 
         {article.subtitle && (
-          <p className="font-serif italic text-lg sm:text-xl text-[#6B6B6B] max-w-2xl mx-auto">
+          <p className="font-serif italic text-lg sm:text-xl text-[#524C4C] max-w-2xl mx-auto">
             {article.subtitle}
           </p>
         )}
 
-        <div className="pt-4 flex items-center justify-center gap-4 text-xs text-[#6B6B6B] border-t border-[#E8D5A8] max-w-md mx-auto">
+        <div className="pt-4 flex items-center justify-center gap-4 text-xs text-[#524C4C] border-t border-[#E8D5A8] max-w-md mx-auto">
           <span>Words by <strong className="text-[#121212] font-medium">{article.author}</strong></span>
           <span>•</span>
           <span>{article.date}</span>
@@ -189,7 +189,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
               <span className="text-[10px] font-bold tracking-[0.24em] uppercase text-[#C9972B] block border-b border-[#E8D5A8] pb-2">
                 INDEX
               </span>
-              <ul className="space-y-3 text-xs text-[#6B6B6B]">
+              <ul className="space-y-3 text-xs text-[#524C4C]">
                 {article.tableOfContents.map((item) => (
                   <li key={item.id}>
                     <a
@@ -207,7 +207,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
                   <span className="text-[9.5px] font-bold tracking-widest uppercase text-[#121212] block">
                     IN THIS STORY
                   </span>
-                  <div className="text-[11px] text-[#6B6B6B]">
+                  <div className="text-[11px] text-[#524C4C]">
                     {shoppableProducts.map((p) => p.name).join(', ')}
                   </div>
                 </div>
@@ -283,7 +283,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
                         />
                       </div>
                       {section.imageCaption && (
-                        <figcaption className="text-center text-xs text-[#6B6B6B] italic">
+                        <figcaption className="text-center text-xs text-[#524C4C] italic">
                           {section.imageCaption}
                         </figcaption>
                       )}
@@ -297,7 +297,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
                         <Sparkles className="w-4 h-4 text-[#C9972B]" />
                         <span>{section.tipBox.title}</span>
                       </div>
-                      <p className="text-xs sm:text-sm text-[#6B6B6B] leading-relaxed">
+                      <p className="text-xs sm:text-sm text-[#524C4C] leading-relaxed">
                         {section.tipBox.text}
                       </p>
                     </div>
@@ -322,7 +322,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
                           {matchingProduct.name}
                         </h4>
                         {matchingShade && (
-                          <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-[#6B6B6B]">
+                          <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs text-[#524C4C]">
                             <span
                               className="w-3 h-3 rounded-full border border-[#0B0B0B]/10 inline-block"
                               style={{ backgroundColor: matchingShade.hex }}
@@ -330,7 +330,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
                             <span>Featured Shade: <strong>{matchingShade.name}</strong></span>
                           </div>
                         )}
-                        <p className="text-xs text-[#6B6B6B] line-clamp-1">
+                        <p className="text-xs text-[#524C4C] line-clamp-1">
                           {matchingProduct.subtitle}
                         </p>
                         <span className="font-serif text-sm font-medium text-[#121212] block pt-1">
@@ -393,9 +393,9 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
                       <img src={look.image} alt={look.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     </div>
                     <div className="space-y-1">
-                      <span className="text-[9px] uppercase tracking-wider text-[#6B6B6B] font-semibold">{look.category}</span>
+                      <span className="text-[9px] uppercase tracking-wider text-[#524C4C] font-semibold">{look.category}</span>
                       <h4 className="font-serif text-base text-[#121212] group-hover:text-[#C9972B] transition-colors">{look.title}</h4>
-                      <p className="text-xs text-[#6B6B6B] line-clamp-1">{look.tagline}</p>
+                      <p className="text-xs text-[#524C4C] line-clamp-1">{look.tagline}</p>
                       <span className="text-[10px] font-bold uppercase tracking-widest text-[#121212] block pt-1">SHOP THE LOOK →</span>
                     </div>
                   </div>

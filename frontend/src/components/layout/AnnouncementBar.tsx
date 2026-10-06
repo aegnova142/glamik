@@ -43,7 +43,7 @@ export const AnnouncementBar: React.FC = () => {
             {activeOffers.length > 0 ? `CODE: ${activeOffers[0].couponCode || 'GLAMIRK'}` : 'USE CODE: GLAMFIRST'}
           </span>
         </div>
-        <span className="hidden md:inline text-[#6B6B6B] text-[10.5px] tracking-[0.14em]">
+        <span className="hidden md:inline text-[#524C4C] text-[10.5px] tracking-[0.14em]">
           PERSONALIZED SHADE MATCH
         </span>
       </div>

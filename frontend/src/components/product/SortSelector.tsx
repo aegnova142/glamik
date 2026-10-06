@@ -29,7 +29,7 @@ export const SortSelector: React.FC<SortSelectorProps> = ({ currentSort, onSortC
 
   return (
     <div ref={containerRef} className="relative inline-flex items-center">
-      <label className="mr-2 hidden text-[10.5px] font-semibold uppercase tracking-[0.2em] text-[#6B6B6B] sm:inline">
+      <label className="mr-2 hidden text-[10.5px] font-semibold uppercase tracking-[0.2em] text-[#524C4C] sm:inline">
         Sort By
       </label>
       <button
@@ -41,7 +41,7 @@ export const SortSelector: React.FC<SortSelectorProps> = ({ currentSort, onSortC
       >
         <ArrowUpDown className="h-3.5 w-3.5 text-[#C9972B]" />
         <span>{currentLabel}</span>
-        <ChevronDown className={`h-3.5 w-3.5 text-[#6B6B6B] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-3.5 w-3.5 text-[#524C4C] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       <AnimatePresence>

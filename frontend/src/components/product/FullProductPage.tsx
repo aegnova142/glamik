@@ -153,7 +153,7 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
     <div className="bg-[#FCE8ED]/40 min-h-screen pb-12">
       {/* Breadcrumb Navigation Bar */}
       <div className="border-b border-[#E8D5A8] bg-white/90 sticky top-16 z-20 backdrop-blur-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between text-xs text-[#6B6B6B]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between text-xs text-[#524C4C]">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar whitespace-nowrap">
             <button onClick={onBackToShop} className="hover:text-[#F05A7E] transition-colors flex items-center gap-1 cursor-pointer">
               <ArrowLeft className="w-3.5 h-3.5" />
@@ -212,12 +212,12 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
             
             {/* Header / Titles */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between text-[11px] tracking-[0.2em] uppercase text-[#6B6B6B]">
+              <div className="flex items-center justify-between text-[11px] tracking-[0.2em] uppercase text-[#524C4C]">
                 <span className="font-bold text-[#F05A7E]">{product.subCategory}</span>
                 {product.rating && (
                   <span className="flex items-center gap-1 text-[#F05A7E] font-bold">
                     ★ {product.rating}{' '}
-                    <span className="text-[10px] text-[#6B6B6B] font-normal">({product.reviewCount} reviews)</span>
+                    <span className="text-[10px] text-[#524C4C] font-normal">({product.reviewCount} reviews)</span>
                   </span>
                 )}
               </div>
@@ -226,7 +226,7 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                 {product.name}
               </h1>
 
-              <p className="text-xs sm:text-sm text-[#6B6B6B] leading-relaxed">
+              <p className="text-xs sm:text-sm text-[#524C4C] leading-relaxed">
                 {product.subtitle}
               </p>
             </div>
@@ -237,11 +237,11 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                 {product.currency}{currentPrice}
               </span>
               {currentCompareAtPrice && currentCompareAtPrice > currentPrice && (
-                <span className="text-sm text-[#6B6B6B] line-through">
+                <span className="text-sm text-[#524C4C] line-through">
                   {product.currency}{currentCompareAtPrice}
                 </span>
               )}
-              <span className="text-[11px] text-[#6B6B6B] ml-auto">
+              <span className="text-[11px] text-[#524C4C] ml-auto">
                 Inclusive of all taxes
               </span>
             </div>
@@ -273,7 +273,7 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                       className={`p-3.5 text-left rounded-2xl border transition-all cursor-pointer ${
                         selectedSize === opt.label
                           ? 'border-[#F05A7E] bg-[#FCE8ED] ring-2 ring-[#F05A7E]/30 shadow-xs'
-                          : 'border-[#E8D5A8] bg-white text-[#6B6B6B] hover:border-[#F05A7E]'
+                          : 'border-[#E8D5A8] bg-white text-[#524C4C] hover:border-[#F05A7E]'
                       }`}
                     >
                       <span className="text-xs font-bold text-[#121212] block">{opt.label}</span>
@@ -286,7 +286,7 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
               </div>
             )}
             {activeSizeOptions.length === 1 && (
-              <p className="text-[11px] text-[#6B6B6B] pt-1">
+              <p className="text-[11px] text-[#524C4C] pt-1">
                 Size: <span className="font-bold text-[#121212]">{activeSizeOptions[0].label}</span>
               </p>
             )}
@@ -359,7 +359,7 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
             </div>
 
             {/* Trust Assurances */}
-            <div className="p-4 bg-[#FCE8ED] rounded-2xl border border-[#E8D5A8] space-y-2 text-xs text-[#6B6B6B]">
+            <div className="p-4 bg-[#FCE8ED] rounded-2xl border border-[#E8D5A8] space-y-2 text-xs text-[#524C4C]">
               <div className="flex items-center gap-2.5">
                 <Truck className="w-4 h-4 text-[#F05A7E] flex-shrink-0" />
                 <span>Complimentary delivery across India on orders above ₹999</span>
@@ -381,10 +381,10 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                     className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
                   >
                     <span>PRODUCT OVERVIEW</span>
-                    {openAccordions.overview ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
+                    {openAccordions.overview ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#524C4C]" />}
                   </button>
                   {openAccordions.overview && (
-                    <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3 space-y-3">
+                    <div className="px-4 pb-4 text-xs text-[#524C4C] leading-relaxed border-t border-[#E8D5A8]/60 pt-3 space-y-3">
                       {product.details.overview && <p>{product.details.overview}</p>}
                       <ul className="space-y-1.5 pt-1">
                         {product.benefits.map((b, i) => (
@@ -407,13 +407,13 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                     className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
                   >
                     <span>DETAILS &amp; ATTRIBUTES</span>
-                    {openAccordions.details ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
+                    {openAccordions.details ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#524C4C]" />}
                   </button>
                   {openAccordions.details && (
-                    <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3 space-y-2">
+                    <div className="px-4 pb-4 text-xs text-[#524C4C] leading-relaxed border-t border-[#E8D5A8]/60 pt-3 space-y-2">
                       {displayAttributes.map((row, i) => (
                         <div key={i} className="flex justify-between py-1 border-b border-[#E8D5A8]/40 last:border-b-0">
-                          <span className="text-[#6B6B6B] uppercase tracking-wider text-[11px]">{row.name}:</span>
+                          <span className="text-[#524C4C] uppercase tracking-wider text-[11px]">{row.name}:</span>
                           <span className="font-bold text-[#121212]">{row.value}</span>
                         </div>
                       ))}
@@ -430,10 +430,10 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                     className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
                   >
                     <span>HOW TO USE / THE RITUAL</span>
-                    {openAccordions.howToUse ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
+                    {openAccordions.howToUse ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#524C4C]" />}
                   </button>
                   {openAccordions.howToUse && (
-                    <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3">
+                    <div className="px-4 pb-4 text-xs text-[#524C4C] leading-relaxed border-t border-[#E8D5A8]/60 pt-3">
                       {usageStepsSorted ? (
                         <ol className="space-y-3">
                           {usageStepsSorted.map((step, i) => (
@@ -466,10 +466,10 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                     className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
                   >
                     <span>CLEAN INGREDIENTS LIST</span>
-                    {openAccordions.ingredients ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
+                    {openAccordions.ingredients ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#524C4C]" />}
                   </button>
                   {openAccordions.ingredients && (
-                    <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3">
+                    <div className="px-4 pb-4 text-xs text-[#524C4C] leading-relaxed border-t border-[#E8D5A8]/60 pt-3">
                       {displayIngredients ? (
                         <div className="flex flex-wrap gap-1.5">
                           {displayIngredients.map((ing, i) => (
@@ -493,10 +493,10 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                   className="w-full p-3.5 flex items-center justify-between text-left text-xs font-bold tracking-wider uppercase text-[#121212] cursor-pointer"
                 >
                   <span>SHIPPING &amp; RETURNS</span>
-                  {openAccordions.shipping ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#6B6B6B]" />}
+                  {openAccordions.shipping ? <ChevronUp className="w-4 h-4 text-[#F05A7E]" /> : <ChevronDown className="w-4 h-4 text-[#524C4C]" />}
                 </button>
                 {openAccordions.shipping && (
-                  <div className="px-4 pb-4 text-xs text-[#6B6B6B] leading-relaxed border-t border-[#E8D5A8]/60 pt-3">
+                  <div className="px-4 pb-4 text-xs text-[#524C4C] leading-relaxed border-t border-[#E8D5A8]/60 pt-3">
                     <p>{shippingReturnsText}</p>
                   </div>
                 )}
@@ -554,7 +554,7 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                     <h4 className="text-sm font-bold text-[#121212] group-hover:text-[#F05A7E] transition-colors leading-snug">
                       {art.title}
                     </h4>
-                    <p className="text-xs text-[#6B6B6B] line-clamp-1">
+                    <p className="text-xs text-[#524C4C] line-clamp-1">
                       {art.excerpt}
                     </p>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[#F05A7E] block pt-1">

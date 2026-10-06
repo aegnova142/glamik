@@ -153,12 +153,12 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
         <div className="mb-6 flex items-center justify-between">
           <button
             onClick={onContinueShopping}
-            className="flex items-center gap-1.5 text-xs text-[#6B6B6B] hover:text-[#121212] font-medium transition-colors"
+            className="flex items-center gap-1.5 text-xs text-[#524C4C] hover:text-[#121212] font-medium transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>CONTINUE SHOPPING</span>
           </button>
-          <span className="text-xs text-[#6B6B6B] font-mono">
+          <span className="text-xs text-[#524C4C] font-mono">
             BAG SUMMARY ({cartItems.reduce((sum, item) => sum + item.quantity, 0)} ITEMS)
           </span>
         </div>
@@ -171,7 +171,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
           <h1 className="font-serif text-3xl sm:text-4xl text-[#121212] mt-1">
             YOUR GLAM
           </h1>
-          <p className="text-xs text-[#6B6B6B] font-light mt-1">
+          <p className="text-xs text-[#524C4C] font-light mt-1">
             Carefully curated formulations reserved in your bag.
           </p>
         </div>
@@ -184,7 +184,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
               <h2 className="font-serif text-2xl text-[#121212]">
                 YOUR SHOPPING BAG IS WAITING
               </h2>
-              <p className="text-xs text-[#6B6B6B] font-light leading-relaxed">
+              <p className="text-xs text-[#524C4C] font-light leading-relaxed">
                 Discover velvet pigments, ceremonial formulations, and sensorial cleansing rituals formulated for Indian skin.
               </p>
             </div>
@@ -219,7 +219,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                       )}
                     </span>
                   </div>
-                  <span className="text-[11px] text-[#6B6B6B] font-mono">
+                  <span className="text-[11px] text-[#524C4C] font-mono">
                     ₹{subtotal} / ₹{FREE_SHIPPING_THRESHOLD}
                   </span>
                 </div>
@@ -232,7 +232,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                   />
                 </div>
                 {!isShippingFree && (
-                  <p className="text-[11px] text-[#6B6B6B] mt-2 font-light">
+                  <p className="text-[11px] text-[#524C4C] mt-2 font-light">
                     Add ₹{remainingForFreeShipping} more to unlock complimentary air courier across India.
                   </p>
                 )}
@@ -272,7 +272,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                       <div className="flex-1 min-w-0 space-y-2">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <span className="text-[10px] tracking-[0.2em] uppercase text-[#6B6B6B] font-semibold">
+                            <span className="text-[10px] tracking-[0.2em] uppercase text-[#524C4C] font-semibold">
                               {item.product.subCategory}
                             </span>
                             <h3
@@ -289,7 +289,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                         </div>
 
                         {/* Shade / Size Indicator */}
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-[#6B6B6B]">
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-[#524C4C]">
                           {item.selectedShade && (
                             <div className="flex items-center gap-1.5 bg-[#FAF9F6] px-2.5 py-1 border border-[#E8D5A8]">
                               <span
@@ -299,7 +299,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                               <span className="font-medium text-[#121212]">
                                 Shade: {item.selectedShade.name}
                               </span>
-                              <span className="text-[10px] text-[#6B6B6B]">
+                              <span className="text-[10px] text-[#524C4C]">
                                 ({item.selectedShade.undertone})
                               </span>
                             </div>
@@ -311,7 +311,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                             </div>
                           )}
 
-                          <span className="text-[11px] text-[#6B6B6B] font-mono">
+                          <span className="text-[11px] text-[#524C4C] font-mono">
                             ₹{itemPrice} each
                           </span>
                         </div>
@@ -344,7 +344,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                           <div className="flex items-center gap-4 text-xs font-medium tracking-wider uppercase">
                             <button
                               onClick={() => onSaveForLater(index)}
-                              className="text-[#6B6B6B] hover:text-[#C9972B] flex items-center gap-1 transition-colors cursor-pointer"
+                              className="text-[#524C4C] hover:text-[#C9972B] flex items-center gap-1 transition-colors cursor-pointer"
                             >
                               <Bookmark className="w-3.5 h-3.5" />
                               <span>SAVE FOR LATER</span>
@@ -352,7 +352,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
 
                             <button
                               onClick={() => onMoveToWishlist(index, item.product)}
-                              className="text-[#6B6B6B] hover:text-[#C9972B] flex items-center gap-1 transition-colors cursor-pointer"
+                              className="text-[#524C4C] hover:text-[#C9972B] flex items-center gap-1 transition-colors cursor-pointer"
                             >
                               <Heart className={`w-3.5 h-3.5 ${isWishlisted ? 'fill-[#C9972B] text-[#C9972B]' : ''}`} />
                               <span>MOVE TO WISHLIST</span>
@@ -360,7 +360,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
 
                             <button
                               onClick={() => onRemoveItem(index)}
-                              className="text-[#6B6B6B] hover:text-[#F05A7E] flex items-center gap-1 transition-colors cursor-pointer"
+                              className="text-[#524C4C] hover:text-[#F05A7E] flex items-center gap-1 transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                               <span>REMOVE</span>
@@ -377,7 +377,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
               {/* 2b. Saved for Later */}
               {savedItems.length > 0 && (
                 <div className="space-y-3 pt-2">
-                  <div className="flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-[#6B6B6B]">
+                  <div className="flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-[#524C4C]">
                     <Bookmark className="w-3.5 h-3.5 text-[#C9972B]" />
                     <span>SAVED FOR LATER ({savedItems.length})</span>
                   </div>
@@ -400,7 +400,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                           >
                             {item.product.name}
                           </h4>
-                          <p className="text-xs text-[#6B6B6B] mt-0.5">
+                          <p className="text-xs text-[#524C4C] mt-0.5">
                             {item.selectedShade ? `Shade: ${item.selectedShade.name}` : item.selectedSize ? `Size: ${item.selectedSize}` : ''} • ₹{getCurrentPrice(item.product, item.selectedShade, item.selectedSize)} • Qty: {item.quantity}
                           </p>
                           <div className="flex items-center gap-4 mt-2 text-[11px] font-medium tracking-wider uppercase">
@@ -413,7 +413,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                             </button>
                             <button
                               onClick={() => onRemoveSavedItem(index)}
-                              className="text-[#6B6B6B] hover:text-[#F05A7E] flex items-center gap-1 cursor-pointer"
+                              className="text-[#524C4C] hover:text-[#F05A7E] flex items-center gap-1 cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                               <span>REMOVE</span>
@@ -452,7 +452,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                     animate={{ opacity: 1, height: 'auto' }}
                     className="pt-3 border-t border-[#FAF9F6] space-y-2"
                   >
-                    <label className="text-[11px] text-[#6B6B6B] block">
+                    <label className="text-[11px] text-[#524C4C] block">
                       Include a handwritten calligraphy gift message (max 180 characters):
                     </label>
                     <textarea
@@ -463,7 +463,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                       placeholder="e.g. For Dearest Diya, celebrating your graceful radiance..."
                       className="w-full p-3 text-xs bg-[#FAF9F6] border border-[#E8D5A8] focus:border-[#0B0B0B] focus:outline-hidden"
                     />
-                    <p className="text-[10px] text-[#6B6B6B]">
+                    <p className="text-[10px] text-[#524C4C]">
                       Includes signature Glamirk matte black box with champagne wax seal and omitted price tags.
                     </p>
                   </motion.div>
@@ -478,7 +478,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                     <h4 className="font-serif text-sm text-[#121212]">
                       ✨ ASK GLAMIRK BEAUTY ASSISTANT
                     </h4>
-                    <p className="text-xs text-[#6B6B6B] mt-0.5">
+                    <p className="text-xs text-[#524C4C] mt-0.5">
                       Need shade harmony, undertone guidance, or look pairing advice for your current bag?
                     </p>
                   </div>
@@ -526,7 +526,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                           </div>
 
                           <div className="space-y-1">
-                            <span className="text-[9px] tracking-widest uppercase text-[#6B6B6B]">
+                            <span className="text-[9px] tracking-widest uppercase text-[#524C4C]">
                               {rec.subCategory}
                             </span>
                             <h4
@@ -566,7 +566,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
 
                 {/* Promo Code Input & Available Offers */}
                 <div className="space-y-2">
-                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
+                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block">
                     HAVE A PROMO CODE?
                   </label>
                   
@@ -626,7 +626,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                 </div>
 
                 {/* Price Breakdown */}
-                <div className="space-y-2.5 pt-3 border-t border-[#E8D5A8] text-xs text-[#6B6B6B]">
+                <div className="space-y-2.5 pt-3 border-t border-[#E8D5A8] text-xs text-[#524C4C]">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
                     <span className="text-[#121212] font-medium font-mono">₹{subtotal}</span>
@@ -650,7 +650,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex justify-between text-[11px] text-[#6B6B6B]">
+                  <div className="flex justify-between text-[11px] text-[#524C4C]">
                     <span>Taxes & GST</span>
                     <span>Included in prices</span>
                   </div>
@@ -678,7 +678,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                 </button>
 
                 {/* Trust & Guarantee Strip */}
-                <div className="pt-3 space-y-2 border-t border-[#FAF9F6] text-[11px] text-[#6B6B6B]">
+                <div className="pt-3 space-y-2 border-t border-[#FAF9F6] text-[11px] text-[#524C4C]">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-3.5 h-3.5 text-[#C9972B] flex-shrink-0" />
                     <span>100% Authentic formulations crafted for Indian skin</span>
@@ -709,7 +709,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                 <badge.icon className="w-5 h-5 text-[#C9972B] shrink-0" />
                 <div>
                   <p className="text-xs font-semibold text-[#121212]">{badge.title}</p>
-                  <p className="text-[10px] text-[#6B6B6B]">{badge.subtitle}</p>
+                  <p className="text-[10px] text-[#524C4C]">{badge.subtitle}</p>
                 </div>
               </div>
             ))}
@@ -722,7 +722,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
       {cartItems.length > 0 && (
         <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-[#E8D5A8] p-4 shadow-2xl z-30 flex items-center justify-between gap-4">
           <div>
-            <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] block">
+            <span className="text-[10px] uppercase tracking-wider text-[#524C4C] block">
               TOTAL PAYABLE
             </span>
             <span className="font-serif text-xl font-semibold text-[#121212]">

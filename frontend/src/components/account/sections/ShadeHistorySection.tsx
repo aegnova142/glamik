@@ -106,12 +106,12 @@ export const ShadeHistorySection: React.FC<ShadeHistorySectionProps> = ({
             return (
               <AccountCard key={entry.id} className="overflow-hidden">
                 <div className="px-5 py-3.5 bg-[#FAF9F6] border-b border-[#E8D5A8] flex items-center justify-between gap-3">
-                  <span className="text-[11.5px] text-[#6B6B6B]">{formatDateTime(entry.createdAt)}</span>
+                  <span className="text-[11.5px] text-[#524C4C]">{formatDateTime(entry.createdAt)}</span>
                   <button
                     onClick={() => handleRemove(entry.id)}
                     disabled={removingId === entry.id}
                     aria-label="Remove this result"
-                    className="p-1.5 text-[#6B6B6B] hover:text-[#C0392B] transition-colors cursor-pointer disabled:opacity-50"
+                    className="p-1.5 text-[#524C4C] hover:text-[#C0392B] transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -134,7 +134,7 @@ export const ShadeHistorySection: React.FC<ShadeHistorySectionProps> = ({
                             key={chip.label}
                             className="px-2.5 py-1 bg-[#FAF9F6] border border-[#E8D5A8] rounded-full text-[10.5px] text-[#121212]"
                           >
-                            <span className="text-[#6B6B6B]">{chip.label}:</span> {chip.value}
+                            <span className="text-[#524C4C]">{chip.label}:</span> {chip.value}
                           </span>
                         ))}
                     </div>
@@ -143,7 +143,7 @@ export const ShadeHistorySection: React.FC<ShadeHistorySectionProps> = ({
                       <dl className="space-y-1.5 text-[11.5px]">
                         {answers.map(([question, answer]) => (
                           <div key={question} className="flex gap-2">
-                            <dt className="text-[#6B6B6B] shrink-0">{question}:</dt>
+                            <dt className="text-[#524C4C] shrink-0">{question}:</dt>
                             <dd className="text-[#121212]">{answer}</dd>
                           </div>
                         ))}
@@ -151,7 +151,7 @@ export const ShadeHistorySection: React.FC<ShadeHistorySectionProps> = ({
                     )}
 
                     {entry.matchReason && (
-                      <p className="text-[12px] text-[#6B6B6B] leading-relaxed bg-[#FAF9F6] border border-[#E8D5A8] rounded-lg p-3.5">
+                      <p className="text-[12px] text-[#524C4C] leading-relaxed bg-[#FAF9F6] border border-[#E8D5A8] rounded-lg p-3.5">
                         {entry.matchReason}
                       </p>
                     )}
@@ -192,7 +192,7 @@ export const ShadeHistorySection: React.FC<ShadeHistorySectionProps> = ({
                             <span className="font-serif text-[13.5px] text-[#121212] group-hover:text-[#C9972B] transition-colors block leading-snug">
                               {product.name}
                             </span>
-                            <span className="text-[12px] text-[#6B6B6B]">{formatMoney(product.price)}</span>
+                            <span className="text-[12px] text-[#524C4C]">{formatMoney(product.price)}</span>
                           </div>
                         </button>
 
@@ -215,7 +215,7 @@ export const ShadeHistorySection: React.FC<ShadeHistorySectionProps> = ({
                         </div>
                       </div>
                     ) : (
-                      <p className="text-[11.5px] text-[#6B6B6B]">
+                      <p className="text-[11.5px] text-[#524C4C]">
                         {entry.recommendedProductId
                           ? 'The matched product is no longer available in our catalogue.'
                           : 'No product was matched for this result.'}

@@ -95,7 +95,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           >
             {/* Input Bar */}
             <div className="p-4 sm:p-6 border-b border-[#E8D5A8] flex items-center gap-3">
-              <Search className="w-5 h-5 text-[#6B6B6B] stroke-[1.5]" />
+              <Search className="w-5 h-5 text-[#524C4C] stroke-[1.5]" />
               <input
                 type="text"
                 autoFocus
@@ -107,14 +107,14 @@ export const SearchModal: React.FC<SearchModalProps> = ({
               {query && (
                 <button
                   onClick={() => setQuery('')}
-                  className="p-1 text-[#6B6B6B] hover:text-[#121212]"
+                  className="p-1 text-[#524C4C] hover:text-[#121212]"
                 >
                   <X className="w-4 h-4" />
                 </button>
               )}
               <button
                 onClick={onClose}
-                className="text-xs tracking-wider uppercase text-[#6B6B6B] hover:text-[#121212] ml-2 font-medium"
+                className="text-xs tracking-wider uppercase text-[#524C4C] hover:text-[#121212] ml-2 font-medium"
               >
                 ESC
               </button>
@@ -140,7 +140,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                   </div>
                 </div>
               ) : !hasResults ? (
-                <div className="text-center py-10 text-[#6B6B6B]">
+                <div className="text-center py-10 text-[#524C4C]">
                   <p className="font-serif text-lg text-[#121212]">No results found for &ldquo;{query}&rdquo;</p>
                   <p className="text-xs mt-1">Try searching for &quot;Lipstick&quot;, &quot;Sindoor&quot;, &quot;Cleanser&quot;, or &quot;Undertone&quot;</p>
                 </div>
@@ -172,12 +172,12 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                                 <h4 className="font-serif text-sm font-medium text-[#121212]">
                                   {p.name}
                                 </h4>
-                                <span className="text-[11px] text-[#6B6B6B]">
+                                <span className="text-[11px] text-[#524C4C]">
                                   {p.subCategory} • ₹{p.price}
                                 </span>
                               </div>
                             </div>
-                            <ArrowRight className="w-4 h-4 text-[#6B6B6B]" />
+                            <ArrowRight className="w-4 h-4 text-[#524C4C]" />
                           </div>
                         ))}
                       </div>
@@ -204,11 +204,11 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                               <h4 className="font-serif text-sm font-medium text-[#121212]">
                                 {l.title}
                               </h4>
-                              <span className="text-[11px] text-[#6B6B6B]">
+                              <span className="text-[11px] text-[#524C4C]">
                                 {l.tagline}
                               </span>
                             </div>
-                            <ArrowRight className="w-4 h-4 text-[#6B6B6B]" />
+                            <ArrowRight className="w-4 h-4 text-[#524C4C]" />
                           </div>
                         ))}
                       </div>
@@ -235,11 +235,11 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                               <h4 className="font-serif text-sm font-medium text-[#121212]">
                                 {a.title}
                               </h4>
-                              <span className="text-[11px] text-[#6B6B6B]">
+                              <span className="text-[11px] text-[#524C4C]">
                                 {a.readTime} • {a.category}
                               </span>
                             </div>
-                            <ArrowRight className="w-4 h-4 text-[#6B6B6B]" />
+                            <ArrowRight className="w-4 h-4 text-[#524C4C]" />
                           </div>
                         ))}
                       </div>

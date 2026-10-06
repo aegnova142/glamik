@@ -32,7 +32,7 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({ onSelectLook }) => {
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#121212] tracking-tight">
             Shop the Look
           </h2>
-          <p className="text-sm sm:text-base text-[#6B6B6B] font-normal leading-relaxed">
+          <p className="text-sm sm:text-base text-[#524C4C] font-normal leading-relaxed">
             Curated cosmetic pairings designed for distinct moments, from morning minimalism to festive celebratory radiance.
           </p>
         </div>

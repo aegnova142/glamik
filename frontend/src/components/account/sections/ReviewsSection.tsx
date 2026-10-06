@@ -113,7 +113,7 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
                     <ProductImage src={item.productImage} alt="" className="w-16 h-20 object-cover border border-[#E8D5A8] rounded shrink-0" />
                     <div className="min-w-0 flex-1 flex flex-col">
                       <h3 className="font-serif text-sm text-[#121212] leading-snug">{item.productName}</h3>
-                      <p className="text-[11px] text-[#6B6B6B] mt-0.5">
+                      <p className="text-[11px] text-[#524C4C] mt-0.5">
                         Delivered · Order #{item.orderNumber}
                       </p>
                       <div className="mt-auto pt-3">
@@ -148,7 +148,7 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
                               <h3 className="font-serif text-sm text-[#121212]">{item.productName}</h3>
                               <div className="flex items-center gap-2 mt-1">
                                 <Stars rating={review.rating} />
-                                <span className="text-[11px] text-[#6B6B6B]">{formatDate(review.date)}</span>
+                                <span className="text-[11px] text-[#524C4C]">{formatDate(review.date)}</span>
                               </div>
                             </div>
                             {review.isVerifiedPurchase && (
@@ -160,7 +160,7 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
                           </div>
 
                           {review.title && <p className="font-serif text-[14px] text-[#121212]">{review.title}</p>}
-                          <p className="text-[12.5px] text-[#6B6B6B] leading-relaxed">{review.comment}</p>
+                          <p className="text-[12.5px] text-[#524C4C] leading-relaxed">{review.comment}</p>
 
                           <div className="flex flex-wrap gap-2 pt-2">
                             <AccountButton variant="ghost" onClick={() => setEditing({ item, review })}>

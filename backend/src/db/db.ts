@@ -25,6 +25,7 @@ import {
   CMSFindMyShadeHero,
   CMSPersonalizedBeauty,
   CMSShopMegaMenu,
+  CMSHomepageBackgrounds,
   Product,
   JournalArticle,
   SupportFaq,
@@ -806,6 +807,14 @@ export function getInitialDatabase(): InternalCMSDatabaseSchema {
       { id: 'tb-2', icon: 'Sparkles', title: 'Expert Approved', subtitle: 'Dermatologically safe' },
       { id: 'tb-3', icon: 'Truck', title: 'Fast Delivery', subtitle: 'Express pan-India transit' },
     ],
+    // [Glamik] 2026-10-06 — default decorative background carousel behind the
+    // hero. Admin can replace/add/reorder these (Hero Section → Hero Backgrounds).
+    backgrounds: [
+      { id: 'bg-1', image: 'https://images.unsplash.com/photo-1557682250-33bd709cbe85?auto=format&fit=crop&w=1800&q=80', isActive: true },
+      { id: 'bg-2', image: 'https://images.unsplash.com/photo-1557682224-5b8590cd9ec5?auto=format&fit=crop&w=1800&q=80', isActive: true },
+      { id: 'bg-3', image: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=1800&q=80', isActive: true },
+    ],
+    backgroundIntervalMs: 5000,
   };
 
   const initialAboutContent: CMSAboutContent = {
@@ -1277,6 +1286,22 @@ export function getInitialDatabase(): InternalCMSDatabaseSchema {
     },
   };
 
+  // [Glamik CMS] 2026-10-06 — homepage section background manager seed.
+  // Sections start empty (no uploaded artwork) so the existing designs show
+  // until an admin configures backgrounds. Rotation off by default (Hero on).
+  const initialHomepageBackgrounds: CMSHomepageBackgrounds = {
+    sections: [
+      { sectionKey: 'hero', displayName: 'Hero', rotationEnabled: true, rotationIntervalMs: 6000, transition: 'crossfade', items: [] },
+      { sectionKey: 'best-sellers', displayName: 'Best Sellers', rotationEnabled: false, rotationIntervalMs: 6000, transition: 'crossfade', items: [] },
+      { sectionKey: 'shop-the-look', displayName: 'Shop the Look', rotationEnabled: false, rotationIntervalMs: 6000, transition: 'crossfade', items: [] },
+      { sectionKey: 'shop-by-category', displayName: 'Shop by Category', rotationEnabled: false, rotationIntervalMs: 6000, transition: 'crossfade', items: [] },
+      { sectionKey: 'find-your-match', displayName: 'Find Your Perfect Match', rotationEnabled: false, rotationIntervalMs: 8000, transition: 'crossfade', items: [] },
+      { sectionKey: 'faq', displayName: 'How Can We Help You?', rotationEnabled: false, rotationIntervalMs: 6000, transition: 'crossfade', items: [] },
+      { sectionKey: 'personalized-beauty', displayName: 'Personalized Beauty', rotationEnabled: false, rotationIntervalMs: 6000, transition: 'crossfade', items: [] },
+      { sectionKey: 'bottom-cta', displayName: 'Bottom Shade CTA', rotationEnabled: false, rotationIntervalMs: 6000, transition: 'crossfade', items: [] },
+    ],
+  };
+
   const initialAuditLogs: CMSAuditLog[] = [
     {
       id: 'log-1',
@@ -1318,6 +1343,7 @@ export function getInitialDatabase(): InternalCMSDatabaseSchema {
     findMyShadeHero: initialFindMyShadeHero,
     personalizedBeauty: initialPersonalizedBeauty,
     shopMegaMenu: initialShopMegaMenu,
+    homepageBackgrounds: initialHomepageBackgrounds,
   };
 }
 
@@ -1351,6 +1377,13 @@ export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
       }
       if (!cachedDb.heroContent) {
         cachedDb.heroContent = initial.heroContent;
+      } else if (!cachedDb.heroContent.backgrounds || cachedDb.heroContent.backgrounds.length === 0) {
+        // [Glamik] 2026-10-06 — backfill the hero decorative background carousel
+        // onto hero content saved before the feature existed (no DB migration).
+        cachedDb.heroContent.backgrounds = initial.heroContent.backgrounds;
+        if (cachedDb.heroContent.backgroundIntervalMs == null) {
+          cachedDb.heroContent.backgroundIntervalMs = initial.heroContent.backgroundIntervalMs;
+        }
       }
       if (!cachedDb.aboutContent) {
         cachedDb.aboutContent = initial.aboutContent;
@@ -1403,6 +1436,15 @@ export async function loadDatabase(): Promise<InternalCMSDatabaseSchema> {
       }
       if (!cachedDb.shopMegaMenu || !cachedDb.shopMegaMenu.columns?.length) {
         cachedDb.shopMegaMenu = initial.shopMegaMenu;
+      }
+      if (!cachedDb.homepageBackgrounds || !cachedDb.homepageBackgrounds.sections?.length) {
+        cachedDb.homepageBackgrounds = initial.homepageBackgrounds;
+      } else {
+        // Add any newly-introduced sections without disturbing saved ones.
+        const have = new Set(cachedDb.homepageBackgrounds.sections.map((s) => s.sectionKey));
+        for (const s of initial.homepageBackgrounds.sections) {
+          if (!have.has(s.sectionKey)) cachedDb.homepageBackgrounds.sections.push(s);
+        }
       }
       if (!cachedDb.globalSettings.codRules) {
         cachedDb.globalSettings.codRules = initial.globalSettings.codRules;

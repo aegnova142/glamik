@@ -163,7 +163,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
             <AlertTriangle className="w-5 h-5 text-[#C0392B] shrink-0 mt-0.5" />
             <div className="min-w-0">
               <h3 className="text-[13.5px] font-semibold text-[#C0392B]">Your account is scheduled to close</h3>
-              <p className="text-[11.5px] text-[#6B6B6B] mt-0.5 leading-relaxed">
+              <p className="text-[11.5px] text-[#524C4C] mt-0.5 leading-relaxed">
                 Requested on {formatDateTime(deletionRequested)}. Your account stays fully usable until the grace period
                 ends — you can cancel any time before then.
               </p>
@@ -189,7 +189,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
                   <Icon className="w-4 h-4 text-[#C9972B] shrink-0" />
                   <div className="min-w-0 flex-1">
                     <span className="text-[13px] text-[#121212] block">{item.label}</span>
-                    <span className="text-[11px] text-[#6B6B6B]">{item.description}</span>
+                    <span className="text-[11px] text-[#524C4C]">{item.description}</span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-[#D6CEBC] shrink-0" />
                 </button>
@@ -239,7 +239,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
             </AccountField>
           </div>
 
-          <p className="text-[11px] text-[#6B6B6B]">
+          <p className="text-[11px] text-[#524C4C]">
             Changing your password signs you out everywhere else — this device stays signed in.
           </p>
 
@@ -271,7 +271,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
           </div>
         ) : (sessions.data || []).length === 0 ? (
           <div className="p-5">
-            <p className="text-xs text-[#6B6B6B]">No other devices are signed in to this account.</p>
+            <p className="text-xs text-[#524C4C]">No other devices are signed in to this account.</p>
           </div>
         ) : (
           <ul className="divide-y divide-[#F1EBDD]">
@@ -286,7 +286,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
                       </span>
                     )}
                   </div>
-                  <span className="text-[11px] text-[#6B6B6B]">
+                  <span className="text-[11px] text-[#524C4C]">
                     Last active {formatDateTime(session.lastSeenAt)}
                     {session.ipAddress ? ` · ${session.ipAddress}` : ''}
                   </span>
@@ -309,7 +309,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
       {/* Privacy */}
       <AccountCard className="p-5 space-y-3">
         <h2 className="font-serif text-lg text-[#121212]">Privacy</h2>
-        <p className="text-[12px] text-[#6B6B6B] leading-relaxed">
+        <p className="text-[12px] text-[#524C4C] leading-relaxed">
           We keep your orders, addresses and preferences to run your account and deliver what you buy. You control every
           marketing message from Notification Preferences.
         </p>
@@ -330,7 +330,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
           <h2 className="font-serif text-lg text-[#C0392B]">Close Account</h2>
         </div>
         <div className="p-5 space-y-4">
-          <div className="text-[12px] text-[#6B6B6B] leading-relaxed space-y-2">
+          <div className="text-[12px] text-[#524C4C] leading-relaxed space-y-2">
             <p>Closing your account is scheduled rather than instant, so an accidental request can be undone. Before it takes effect you can cancel from this page.</p>
             <p className="text-[#121212] font-medium">Once the closure completes:</p>
             <ul className="list-disc pl-5 space-y-1">

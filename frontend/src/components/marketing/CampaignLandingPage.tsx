@@ -118,7 +118,7 @@ export const CampaignLandingPage: React.FC<CampaignLandingPageProps> = ({
           <h2 className="font-serif text-3xl sm:text-4xl text-[#121212]">
             Why This Edit Exists
           </h2>
-          <p className="text-sm text-[#6B6B6B] leading-relaxed font-light">
+          <p className="text-sm text-[#524C4C] leading-relaxed font-light">
             {campaign.brandStory}
           </p>
           <div className="pt-2">
@@ -155,7 +155,7 @@ export const CampaignLandingPage: React.FC<CampaignLandingPageProps> = ({
                 <div key={idx} className="bg-[#FAF9F6] border border-[#E8D5A8] p-6 space-y-3">
                   <div className="font-serif text-3xl text-[#C9972B] font-semibold">{step.step}</div>
                   <h4 className="font-serif text-lg text-[#121212]">{step.title}</h4>
-                  <p className="text-xs text-[#6B6B6B] leading-relaxed">{step.desc}</p>
+                  <p className="text-xs text-[#524C4C] leading-relaxed">{step.desc}</p>
                 </div>
               ))}
             </div>
@@ -201,7 +201,7 @@ export const CampaignLandingPage: React.FC<CampaignLandingPageProps> = ({
                   <h4 className="font-serif text-lg text-[#121212] group-hover:text-[#C9972B] transition-colors">
                     {product.name}
                   </h4>
-                  <p className="text-xs text-[#6B6B6B] line-clamp-2">
+                  <p className="text-xs text-[#524C4C] line-clamp-2">
                     {product.subtitle}
                   </p>
                   <span className="font-serif text-base font-semibold text-[#121212] block pt-1">

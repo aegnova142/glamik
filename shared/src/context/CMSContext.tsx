@@ -31,6 +31,7 @@ import {
   CMSFindMyShadeHero,
   CMSPersonalizedBeauty,
   CMSShopMegaMenu,
+  CMSHomepageBackgrounds,
 } from '../types';
 import { apiFetch, getAdminToken, setAdminAuth, clearAdminAuth, getStoredAdminUser } from '../utils/cmsClient';
 import { getSocket } from '../utils/socket';
@@ -60,6 +61,7 @@ export interface CMSContextType {
   shadeFinderTeaser: CMSShadeFinderTeaser | null;
   personalizedBeauty: CMSPersonalizedBeauty | null;
   shopMegaMenu: CMSShopMegaMenu | null;
+  homepageBackgrounds: CMSHomepageBackgrounds | null;
   journalSectionCopy: CMSJournalSectionCopy | null;
   findMyShadeResultsCopy: CMSFindMyShadeResultsCopy | null;
   findMyShadeHero: CMSFindMyShadeHero | null;
@@ -100,6 +102,7 @@ export interface CMSContextType {
   saveShadeFinderTeaser: (teaser: CMSShadeFinderTeaser) => Promise<boolean>;
   savePersonalizedBeauty: (data: CMSPersonalizedBeauty) => Promise<boolean>;
   saveShopMegaMenu: (data: CMSShopMegaMenu) => Promise<boolean>;
+  saveHomepageBackgrounds: (data: CMSHomepageBackgrounds) => Promise<boolean>;
   saveJournalSectionCopy: (copy: CMSJournalSectionCopy) => Promise<boolean>;
   saveFindMyShadeResultsCopy: (copy: CMSFindMyShadeResultsCopy) => Promise<boolean>;
   saveFindMyShadeHero: (hero: CMSFindMyShadeHero) => Promise<boolean>;
@@ -208,6 +211,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [shadeFinderTeaser, setShadeFinderTeaser] = useState<CMSShadeFinderTeaser | null>(null);
   const [personalizedBeauty, setPersonalizedBeauty] = useState<CMSPersonalizedBeauty | null>(null);
   const [shopMegaMenu, setShopMegaMenu] = useState<CMSShopMegaMenu | null>(null);
+  const [homepageBackgrounds, setHomepageBackgrounds] = useState<CMSHomepageBackgrounds | null>(null);
   const [journalSectionCopy, setJournalSectionCopy] = useState<CMSJournalSectionCopy | null>(null);
   const [findMyShadeResultsCopy, setFindMyShadeResultsCopy] = useState<CMSFindMyShadeResultsCopy | null>(null);
   const [findMyShadeHero, setFindMyShadeHero] = useState<CMSFindMyShadeHero | null>(null);
@@ -271,6 +275,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (res.data.shadeFinderTeaser) setShadeFinderTeaser(res.data.shadeFinderTeaser);
         if (res.data.personalizedBeauty) setPersonalizedBeauty(res.data.personalizedBeauty);
         if (res.data.shopMegaMenu) setShopMegaMenu(res.data.shopMegaMenu);
+        if (res.data.homepageBackgrounds) setHomepageBackgrounds(res.data.homepageBackgrounds);
         if (res.data.journalSectionCopy) setJournalSectionCopy(res.data.journalSectionCopy);
         if (res.data.findMyShadeResultsCopy) setFindMyShadeResultsCopy(res.data.findMyShadeResultsCopy);
         if (res.data.findMyShadeHero) setFindMyShadeHero(res.data.findMyShadeHero);
@@ -547,6 +552,15 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
+  const saveHomepageBackgrounds = async (data: CMSHomepageBackgrounds): Promise<boolean> => {
+    const res = await apiFetch('/api/admin/homepage-backgrounds', { method: 'PUT', body: JSON.stringify(data) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return true;
+    }
+    return false;
+  };
+
   const saveJournalSectionCopy = async (copy: CMSJournalSectionCopy): Promise<boolean> => {
     const res = await apiFetch('/api/admin/journal-section-copy', { method: 'PUT', body: JSON.stringify(copy) });
     if (res.status < 400) {
@@ -780,6 +794,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     shadeFinderTeaser,
     personalizedBeauty,
     shopMegaMenu,
+    homepageBackgrounds,
     journalSectionCopy,
     findMyShadeResultsCopy,
     findMyShadeHero,
@@ -814,6 +829,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     saveShadeFinderTeaser,
     savePersonalizedBeauty,
     saveShopMegaMenu,
+    saveHomepageBackgrounds,
     saveJournalSectionCopy,
     saveFindMyShadeResultsCopy,
     saveFindMyShadeHero,

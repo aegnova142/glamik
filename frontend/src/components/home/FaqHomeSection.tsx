@@ -41,11 +41,11 @@ export const FaqHomeSection: React.FC<FaqHomeSectionProps> = ({ onOpenSupport })
             <span className="text-sm font-semibold text-[#121212] truncate">{faq.question}</span>
           </span>
           <ChevronDown
-            className={`w-4 h-4 text-[#6B6B6B] shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-[#F05A7E]' : ''}`}
+            className={`w-4 h-4 text-[#524C4C] shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-[#F05A7E]' : ''}`}
           />
         </button>
         {isOpen && (
-          <p className="px-4 pb-4 pl-12 text-xs text-[#6B6B6B] leading-relaxed">{faq.answer}</p>
+          <p className="px-4 pb-4 pl-12 text-xs text-[#524C4C] leading-relaxed">{faq.answer}</p>
         )}
       </div>
     );
@@ -59,7 +59,7 @@ export const FaqHomeSection: React.FC<FaqHomeSectionProps> = ({ onOpenSupport })
             How Can We <span className="text-[#F05A7E]">Help You?</span>
           </h2>
           <div className="relative max-w-md mx-auto pt-2">
-            <Search className="w-4 h-4 text-[#6B6B6B] absolute left-4 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-[#524C4C] absolute left-4 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={query}
@@ -76,7 +76,7 @@ export const FaqHomeSection: React.FC<FaqHomeSectionProps> = ({ onOpenSupport })
         </div>
 
         {filtered.length === 0 && (
-          <p className="text-center text-sm text-[#6B6B6B] py-8">No questions match "{query}".</p>
+          <p className="text-center text-sm text-[#524C4C] py-8">No questions match "{query}".</p>
         )}
 
         {hasMore && (

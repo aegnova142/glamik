@@ -105,7 +105,7 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
                   <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#121212] tracking-tight">
                     Calibrated for your {beautyProfile.skinTone} Complexion &amp; {beautyProfile.undertone} Undertones
                   </h2>
-                  <p className="text-sm sm:text-base text-[#6B6B6B] mt-2 leading-relaxed">
+                  <p className="text-sm sm:text-base text-[#524C4C] mt-2 leading-relaxed">
                     Based on your Atelier Diagnostic, we’ve personalized luxury formulations and shade calibrations to accentuate your natural radiance without ashiness.
                   </p>
                 </div>
@@ -117,7 +117,7 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
                       Recommended Shade: <strong className="text-[#F05A7E]">{recShadeName}</strong>
                     </span>
                   </div>
-                  <div className="px-3 py-1.5 bg-white border border-[#E8D5A8] rounded-xl text-xs text-[#6B6B6B]">
+                  <div className="px-3 py-1.5 bg-white border border-[#E8D5A8] rounded-xl text-xs text-[#524C4C]">
                     Skin Tone: <strong className="text-[#121212]">{beautyProfile.skinTone}</strong>
                   </div>
                 </div>
@@ -246,7 +246,7 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
 
       <div className="space-y-1">
         <h4 className="font-serif text-base font-bold text-[#121212]">{card.title || 'Coming soon'}</h4>
-        {card.description && <p className="text-[11px] leading-relaxed text-[#6B6B6B]">{card.description}</p>}
+        {card.description && <p className="text-[11px] leading-relaxed text-[#524C4C]">{card.description}</p>}
       </div>
 
       <button
@@ -290,7 +290,7 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
             {t.heading} <span className="italic text-[#9B2D4F]">{t.headingHighlight}</span>
           </h2>
 
-          <p className="text-sm sm:text-base text-[#6B6B6B] font-normal leading-relaxed">{t.description}</p>
+          <p className="text-sm sm:text-base text-[#524C4C] font-normal leading-relaxed">{t.description}</p>
         </div>
 
         {/* Main card */}
@@ -303,7 +303,7 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
                 <div>
                   <span className="text-[11px] font-bold uppercase tracking-widest text-[#9B2D4F]">{t.stepLabel}</span>
                   <h3 className="font-serif text-xl sm:text-2xl font-bold text-[#121212]">{t.selectHeading}</h3>
-                  <p className="text-xs text-[#6B6B6B] mt-1">{t.selectSubtext}</p>
+                  <p className="text-xs text-[#524C4C] mt-1">{t.selectSubtext}</p>
                 </div>
               </div>
 
@@ -341,7 +341,7 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
                             style={{ backgroundColor: u.accentColor }}
                           />
                         </span>
-                        <span className="block text-[11px] text-[#6B6B6B] leading-snug mt-0.5">{u.description}</span>
+                        <span className="block text-[11px] text-[#524C4C] leading-snug mt-0.5">{u.description}</span>
                       </span>
                       <ArrowRight className={`w-4 h-4 shrink-0 self-end ${isSelected ? 'text-[#9B2D4F]' : 'text-[#C9B8A0]'}`} />
                     </button>
@@ -374,11 +374,11 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
                         <Icon className="w-4 h-4" />
                       </span>
                       <span className="text-xs font-bold text-[#121212] leading-none">{label}</span>
-                      <span className="text-[10px] text-[#6B6B6B] leading-none">{sub}</span>
+                      <span className="text-[10px] text-[#524C4C] leading-none">{sub}</span>
                     </div>
                   ))}
                 </div>
-                <p className="mt-4 pt-4 border-t border-[#E8D5A8]/60 text-center text-[11px] text-[#6B6B6B] leading-relaxed">
+                <p className="mt-4 pt-4 border-t border-[#E8D5A8]/60 text-center text-[11px] text-[#524C4C] leading-relaxed">
                   <span className="font-semibold text-[#9B2D4F]">10,000+</span> complexions analysed to craft your bespoke shade edit.
                 </p>
               </div>
@@ -401,7 +401,7 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
                   <h3 className="font-serif text-xl sm:text-2xl font-bold text-[#121212]">{t.formulationHeading}</h3>
                 </div>
                 {active.tag && (
-                  <span className="hidden sm:inline-flex items-center text-[11px] text-[#6B6B6B] bg-white border border-[#E8D5A8] rounded-full px-3 py-1.5 shrink-0">
+                  <span className="hidden sm:inline-flex items-center text-[11px] text-[#524C4C] bg-white border border-[#E8D5A8] rounded-full px-3 py-1.5 shrink-0">
                     {active.tag}
                   </span>
                 )}
@@ -414,7 +414,7 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
 
               {/* Quiz CTA */}
               <div className="mt-4 flex items-center justify-between gap-3 bg-white border border-[#E8D5A8] rounded-2xl px-4 py-3">
-                <span className="inline-flex items-center gap-2 text-xs text-[#6B6B6B]">
+                <span className="inline-flex items-center gap-2 text-xs text-[#524C4C]">
                   <Sparkles className="w-3.5 h-3.5 text-[#9B2D4F]" />
                   {t.quizPrompt}
                 </span>

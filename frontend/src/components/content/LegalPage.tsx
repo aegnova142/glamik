@@ -105,7 +105,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({
           <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl text-[#121212] tracking-tight">
             Policies &amp; Transparency
           </h1>
-          <p className="text-[#6B6B6B] text-sm sm:text-base font-light mt-3 max-w-2xl">
+          <p className="text-[#524C4C] text-sm sm:text-base font-light mt-3 max-w-2xl">
             Our commitment to purity in beauty extends to absolute clarity in our customer relationships, formulation transparency, and ethical data governance.
           </p>
         </div>
@@ -172,12 +172,12 @@ export const LegalPage: React.FC<LegalPageProps> = ({
                     Glamirk Beauty Private Limited
                   </p>
                   {cmsPolicy.subtitle && (
-                    <p className="text-xs text-[#6B6B6B] mt-1 font-normal">
+                    <p className="text-xs text-[#524C4C] mt-1 font-normal">
                       {cmsPolicy.subtitle}
                     </p>
                   )}
                   {cmsPolicy.content && (
-                    <p className="text-sm text-[#6B6B6B] mt-3 font-light leading-relaxed">
+                    <p className="text-sm text-[#524C4C] mt-3 font-light leading-relaxed">
                       {cmsPolicy.content}
                     </p>
                   )}

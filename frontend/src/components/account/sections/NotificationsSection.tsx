@@ -129,13 +129,13 @@ export const NotificationsSection: React.FC<NotificationsSectionProps> = ({ show
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-[13.5px] font-semibold text-[#121212]">{topic.label}</h3>
                     {topic.required && (
-                      <span className="inline-flex items-center gap-1 text-[9px] font-bold tracking-[0.12em] uppercase text-[#6B6B6B] bg-[#FAF9F6] border border-[#E8D5A8] rounded-full px-2 py-0.5">
+                      <span className="inline-flex items-center gap-1 text-[9px] font-bold tracking-[0.12em] uppercase text-[#524C4C] bg-[#FAF9F6] border border-[#E8D5A8] rounded-full px-2 py-0.5">
                         <Lock className="w-2.5 h-2.5" />
                         Always on
                       </span>
                     )}
                   </div>
-                  <p className="text-[11.5px] text-[#6B6B6B] mt-0.5 leading-relaxed">{topic.description}</p>
+                  <p className="text-[11.5px] text-[#524C4C] mt-0.5 leading-relaxed">{topic.description}</p>
                 </div>
                 <AccountToggle
                   checked={entry.enabled}
@@ -161,7 +161,7 @@ export const NotificationsSection: React.FC<NotificationsSectionProps> = ({ show
                             ? 'bg-[#FAF9F6] text-[#C4BCA9] border-[#EFE8D8] cursor-not-allowed'
                             : selected
                             ? 'bg-[#0B0B0B] text-white border-[#0B0B0B] cursor-pointer'
-                            : 'bg-white text-[#6B6B6B] border-[#E8D5A8] hover:border-[#C9972B] cursor-pointer'
+                            : 'bg-white text-[#524C4C] border-[#E8D5A8] hover:border-[#C9972B] cursor-pointer'
                         }`}
                       >
                         {selected && channel.available && <Check className="w-3 h-3" />}
@@ -178,7 +178,7 @@ export const NotificationsSection: React.FC<NotificationsSectionProps> = ({ show
 
       <div className="flex gap-2.5 bg-[#FAF9F6] border border-[#E8D5A8] rounded-xl p-4">
         <Bell className="w-4 h-4 text-[#C9972B] shrink-0 mt-0.5" />
-        <p className="text-[11.5px] text-[#6B6B6B] leading-relaxed">
+        <p className="text-[11.5px] text-[#524C4C] leading-relaxed">
           SMS, WhatsApp and push channels are shown for completeness but can&apos;t be selected — those providers have not
           been connected to this store yet. In-app and email notifications are delivered today.
         </p>

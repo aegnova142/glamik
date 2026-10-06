@@ -95,7 +95,7 @@ export const LookDetailModal: React.FC<LookDetailModalProps> = ({
                   <h2 className="font-serif text-2xl text-[#121212]">
                     {look.title}
                   </h2>
-                  <p className="text-xs sm:text-sm text-[#6B6B6B] font-light leading-relaxed">
+                  <p className="text-xs sm:text-sm text-[#524C4C] font-light leading-relaxed">
                     {look.description}
                   </p>
                 </div>
@@ -127,7 +127,7 @@ export const LookDetailModal: React.FC<LookDetailModalProps> = ({
                             {item.product.name}
                           </h4>
                           {item.shade && (
-                            <span className="text-[11px] text-[#6B6B6B]">
+                            <span className="text-[11px] text-[#524C4C]">
                               Shade: {item.shade.name}
                             </span>
                           )}
@@ -144,7 +144,7 @@ export const LookDetailModal: React.FC<LookDetailModalProps> = ({
               {/* Total & Action */}
               <div className="pt-4 border-t border-[#E8D5A8] space-y-3">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-xs uppercase tracking-wider text-[#6B6B6B]">
+                  <span className="text-xs uppercase tracking-wider text-[#524C4C]">
                     Look Total ({resolvedProducts.length} Items):
                   </span>
                   <span className="font-serif text-xl font-medium text-[#121212]">

@@ -58,7 +58,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           id="mobile-tab-home"
           onClick={onNavigateHome}
           aria-current={isHome ? 'page' : undefined}
-          className={`${tabBase} ${isHome ? 'text-[#F05A7E]' : 'text-[#6B6B6B] hover:text-[#121212]'}`}
+          className={`${tabBase} ${isHome ? 'text-[#F05A7E]' : 'text-[#524C4C] hover:text-[#121212]'}`}
         >
           <div className="relative">
             <Home className={`w-5 h-5 ${isHome ? 'stroke-[2.2]' : 'stroke-[1.75]'}`} />
@@ -72,7 +72,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           id="mobile-tab-shop"
           onClick={onNavigateShop}
           aria-current={isShop ? 'page' : undefined}
-          className={`${tabBase} ${isShop ? 'text-[#F05A7E]' : 'text-[#6B6B6B] hover:text-[#121212]'}`}
+          className={`${tabBase} ${isShop ? 'text-[#F05A7E]' : 'text-[#524C4C] hover:text-[#121212]'}`}
         >
           <div className="relative">
             <LayoutGrid className={`w-5 h-5 ${isShop ? 'stroke-[2.2]' : 'stroke-[1.75]'}`} />
@@ -86,7 +86,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           id="mobile-tab-shade-finder"
           onClick={onOpenShadeFinder}
           aria-current={isShadeFinder ? 'page' : undefined}
-          className={`${tabBase} ${isShadeFinder ? 'text-[#F05A7E]' : 'text-[#6B6B6B] hover:text-[#F05A7E]'}`}
+          className={`${tabBase} ${isShadeFinder ? 'text-[#F05A7E]' : 'text-[#524C4C] hover:text-[#F05A7E]'}`}
         >
           <div className="relative">
             <div
@@ -112,7 +112,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           onClick={onOpenCart}
           aria-label={cartCount > 0 ? `Cart, ${cartCount} items` : 'Cart'}
           aria-current={isCart ? 'page' : undefined}
-          className={`${tabBase} ${isCart ? 'text-[#F05A7E]' : 'text-[#6B6B6B] hover:text-[#121212]'}`}
+          className={`${tabBase} ${isCart ? 'text-[#F05A7E]' : 'text-[#524C4C] hover:text-[#121212]'}`}
         >
           <div className="relative">
             <ShoppingBag className={`w-5 h-5 ${isCart ? 'stroke-[2.2]' : 'stroke-[1.75]'}`} />
@@ -133,7 +133,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           onClick={onOpenAccount}
           aria-label={isCustomerLoggedIn ? `Account, signed in as ${customerUser?.name}` : 'Account, sign in'}
           aria-current={isAccount ? 'page' : undefined}
-          className={`${tabBase} ${isAccount ? 'text-[#F05A7E]' : 'text-[#6B6B6B] hover:text-[#121212]'}`}
+          className={`${tabBase} ${isAccount ? 'text-[#F05A7E]' : 'text-[#524C4C] hover:text-[#121212]'}`}
         >
           <div className="relative">
             {isCustomerLoggedIn && customerUser?.avatarUrl ? (

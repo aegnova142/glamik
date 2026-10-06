@@ -39,7 +39,7 @@ export const UndertoneGuideModal: React.FC<UndertoneGuideModalProps> = ({
             <button
               id="undertone-guide-close-btn"
               onClick={onClose}
-              className="absolute top-4 right-4 p-2 text-[#6B6B6B] hover:text-[#121212] hover:bg-[#FAF9F6] rounded-full transition-colors cursor-pointer"
+              className="absolute top-4 right-4 p-2 text-[#524C4C] hover:text-[#121212] hover:bg-[#FAF9F6] rounded-full transition-colors cursor-pointer"
               aria-label="Close undertone guide"
             >
               <X className="w-5 h-5" />
@@ -54,7 +54,7 @@ export const UndertoneGuideModal: React.FC<UndertoneGuideModalProps> = ({
               <h2 className="font-serif text-2xl sm:text-3xl text-[#121212]">
                 FIND YOUR UNDERTONE
               </h2>
-              <p className="text-xs sm:text-sm text-[#6B6B6B] font-light max-w-md mx-auto leading-relaxed">
+              <p className="text-xs sm:text-sm text-[#524C4C] font-light max-w-md mx-auto leading-relaxed">
                 Undertone is the subtle, natural hue beneath your surface skin. Identifying it helps ensure lipsticks and complexion cosmetics complement you seamlessly.
               </p>
             </div>
@@ -71,7 +71,7 @@ export const UndertoneGuideModal: React.FC<UndertoneGuideModalProps> = ({
                   <h3 className="text-xs font-semibold tracking-wider uppercase text-[#121212]">
                     1. The Wrist Vein Indicator
                   </h3>
-                  <p className="text-xs text-[#6B6B6B] font-light leading-relaxed">
+                  <p className="text-xs text-[#524C4C] font-light leading-relaxed">
                     Under natural daylight, look at the veins inside your wrist. Greenish or olive veins often indicate a <strong className="text-[#121212]">Warm</strong> undertone. Blue or purplish veins often indicate a <strong className="text-[#121212]">Cool</strong> undertone. A mix of blue-green often suggests a <strong className="text-[#121212]">Neutral</strong> undertone.
                   </p>
                 </div>
@@ -86,7 +86,7 @@ export const UndertoneGuideModal: React.FC<UndertoneGuideModalProps> = ({
                   <h3 className="text-xs font-semibold tracking-wider uppercase text-[#121212]">
                     2. The Jewellery Test
                   </h3>
-                  <p className="text-xs text-[#6B6B6B] font-light leading-relaxed">
+                  <p className="text-xs text-[#524C4C] font-light leading-relaxed">
                     Yellow gold jewellery typically illuminates and flatters <strong className="text-[#121212]">Warm</strong> undertones. Silver and platinum jewellery highlights <strong className="text-[#121212]">Cool</strong> undertones. If you look equally radiant in both, you are likely <strong className="text-[#121212]">Neutral</strong>.
                   </p>
                 </div>
@@ -101,7 +101,7 @@ export const UndertoneGuideModal: React.FC<UndertoneGuideModalProps> = ({
                   <h3 className="text-xs font-semibold tracking-wider uppercase text-[#121212]">
                     3. Sun Exposure
                   </h3>
-                  <p className="text-xs text-[#6B6B6B] font-light leading-relaxed">
+                  <p className="text-xs text-[#524C4C] font-light leading-relaxed">
                     If your skin tans easily with golden warmth, you lean <strong className="text-[#121212]">Warm</strong>. If your skin burns or flushes pink before tanning, you lean <strong className="text-[#121212]">Cool</strong>. If it tans gradually with mild initial flush, you lean <strong className="text-[#121212]">Neutral</strong>.
                   </p>
                 </div>
@@ -111,7 +111,7 @@ export const UndertoneGuideModal: React.FC<UndertoneGuideModalProps> = ({
 
             {/* Direct Selection Options inside Modal */}
             <div className="space-y-3 pt-4 border-t border-[#E8D5A8]">
-              <span className="text-[11px] font-semibold tracking-[0.2em] uppercase text-[#6B6B6B] block text-center">
+              <span className="text-[11px] font-semibold tracking-[0.2em] uppercase text-[#524C4C] block text-center">
                 Select Your Undertone
               </span>
 
@@ -126,7 +126,7 @@ export const UndertoneGuideModal: React.FC<UndertoneGuideModalProps> = ({
                   <span className="text-xs font-bold uppercase tracking-wider text-[#121212] block">
                     Warm
                   </span>
-                  <span className="text-[11px] text-[#6B6B6B] block mt-0.5 font-light">
+                  <span className="text-[11px] text-[#524C4C] block mt-0.5 font-light">
                     Golden, peachy, honey or olive nuances.
                   </span>
                 </button>
@@ -141,7 +141,7 @@ export const UndertoneGuideModal: React.FC<UndertoneGuideModalProps> = ({
                   <span className="text-xs font-bold uppercase tracking-wider text-[#121212] block">
                     Cool
                   </span>
-                  <span className="text-[11px] text-[#6B6B6B] block mt-0.5 font-light">
+                  <span className="text-[11px] text-[#524C4C] block mt-0.5 font-light">
                     Rose, berry, pink or bluish nuances.
                   </span>
                 </button>
@@ -156,7 +156,7 @@ export const UndertoneGuideModal: React.FC<UndertoneGuideModalProps> = ({
                   <span className="text-xs font-bold uppercase tracking-wider text-[#121212] block">
                     Neutral
                   </span>
-                  <span className="text-[11px] text-[#6B6B6B] block mt-0.5 font-light">
+                  <span className="text-[11px] text-[#524C4C] block mt-0.5 font-light">
                     Balanced mix of warm and cool tones.
                   </span>
                 </button>
@@ -168,7 +168,7 @@ export const UndertoneGuideModal: React.FC<UndertoneGuideModalProps> = ({
                     onSelectUndertone('NEUTRAL' as any);
                     onClose();
                   }}
-                  className="text-xs text-[#6B6B6B] hover:text-[#121212] underline underline-offset-4 font-light cursor-pointer"
+                  className="text-xs text-[#524C4C] hover:text-[#121212] underline underline-offset-4 font-light cursor-pointer"
                 >
                   I'm still not sure (Default to universal neutral formulation)
                 </button>
@@ -176,7 +176,7 @@ export const UndertoneGuideModal: React.FC<UndertoneGuideModalProps> = ({
             </div>
 
             {/* Note */}
-            <p className="text-[10.5px] text-[#6B6B6B] text-center mt-6 italic">
+            <p className="text-[10.5px] text-[#524C4C] text-center mt-6 italic">
               *Glamirk beauty guidelines are curated for personalized aesthetic styling and are not medical diagnoses.
             </p>
 

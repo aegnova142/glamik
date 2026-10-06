@@ -47,7 +47,7 @@ export const CompleteTheLook: React.FC<CompleteTheLookProps> = ({
           <h3 className="font-serif text-2xl sm:text-3xl text-[#121212]">
             COMPLETE YOUR LOOK
           </h3>
-          <p className="text-xs text-[#6B6B6B] font-light">
+          <p className="text-xs text-[#524C4C] font-light">
             Pair with complementary formulations for a cohesive, long-lasting editorial presence.
           </p>
         </div>

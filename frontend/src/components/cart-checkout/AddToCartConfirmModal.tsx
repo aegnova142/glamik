@@ -58,7 +58,7 @@ export const AddToCartConfirmModal: React.FC<AddToCartConfirmModalProps> = ({
           >
             <button
               onClick={onClose}
-              className="absolute top-3 right-3 p-1.5 text-[#6B6B6B] hover:text-[#121212] cursor-pointer"
+              className="absolute top-3 right-3 p-1.5 text-[#524C4C] hover:text-[#121212] cursor-pointer"
               aria-label="Close"
             >
               <X className="w-4 h-4" />
@@ -85,9 +85,9 @@ export const AddToCartConfirmModal: React.FC<AddToCartConfirmModalProps> = ({
               />
               <div className="min-w-0 space-y-0.5">
                 <h4 className="font-serif text-sm text-[#121212] truncate">{product.name}</h4>
-                {shade && <p className="text-xs text-[#6B6B6B]">Shade: {shade.name}</p>}
-                {size && <p className="text-xs text-[#6B6B6B]">Size: {size}</p>}
-                <p className="text-xs text-[#6B6B6B]">Qty: {quantity}</p>
+                {shade && <p className="text-xs text-[#524C4C]">Shade: {shade.name}</p>}
+                {size && <p className="text-xs text-[#524C4C]">Size: {size}</p>}
+                <p className="text-xs text-[#524C4C]">Qty: {quantity}</p>
                 <p className="text-sm font-semibold text-[#121212]">{product.currency}{price * quantity}</p>
               </div>
             </div>

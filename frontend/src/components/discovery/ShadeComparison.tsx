@@ -33,7 +33,7 @@ export const ShadeComparison: React.FC<ShadeComparisonProps> = ({
           <h3 className="font-serif text-2xl sm:text-3xl text-[#121212]">
             COMPARE YOUR MATCHES
           </h3>
-          <p className="text-xs sm:text-sm text-[#6B6B6B] font-light max-w-xl">
+          <p className="text-xs sm:text-sm text-[#524C4C] font-light max-w-xl">
             Select up to 3 shades to compare undertone nuances, suggested styling occasions, and depth characteristics.
           </p>
         </div>
@@ -49,7 +49,7 @@ export const ShadeComparison: React.FC<ShadeComparisonProps> = ({
                 className={`px-3 py-1.5 text-xs font-medium tracking-wider uppercase border transition-all flex items-center gap-2 cursor-pointer ${
                   isSelected
                     ? 'border-[#0B0B0B] bg-[#0B0B0B] text-[#FAF9F6]'
-                    : 'border-[#E8D5A8] bg-[#FAF9F6] text-[#6B6B6B] hover:border-[#0B0B0B]'
+                    : 'border-[#E8D5A8] bg-[#FAF9F6] text-[#524C4C] hover:border-[#0B0B0B]'
                 }`}
               >
                 <span
@@ -67,7 +67,7 @@ export const ShadeComparison: React.FC<ShadeComparisonProps> = ({
       {/* Comparison Grid Matrix */}
       {comparedShades.length === 0 ? (
         <div className="text-center py-12 bg-[#FAF9F6] border border-[#E8D5A8]">
-          <p className="text-xs text-[#6B6B6B] uppercase tracking-wider">
+          <p className="text-xs text-[#524C4C] uppercase tracking-wider">
             Select at least one shade above to view side-by-side comparison.
           </p>
         </div>
@@ -97,9 +97,9 @@ export const ShadeComparison: React.FC<ShadeComparisonProps> = ({
               </div>
 
               {/* Attributes Comparison */}
-              <div className="space-y-3 text-xs text-[#6B6B6B] pt-4 border-t border-[#E8D5A8]">
+              <div className="space-y-3 text-xs text-[#524C4C] pt-4 border-t border-[#E8D5A8]">
                 <div className="flex justify-between py-1.5 border-b border-[#E8D5A8]">
-                  <span className="text-[#6B6B6B] uppercase tracking-wider text-[10px] font-semibold">
+                  <span className="text-[#524C4C] uppercase tracking-wider text-[10px] font-semibold">
                     Finish:
                   </span>
                   <span className="text-[#121212] font-medium">
@@ -108,7 +108,7 @@ export const ShadeComparison: React.FC<ShadeComparisonProps> = ({
                 </div>
 
                 <div className="flex justify-between py-1.5 border-b border-[#E8D5A8]">
-                  <span className="text-[#6B6B6B] uppercase tracking-wider text-[10px] font-semibold">
+                  <span className="text-[#524C4C] uppercase tracking-wider text-[10px] font-semibold">
                     Coverage:
                   </span>
                   <span className="text-[#121212] font-medium">
@@ -117,7 +117,7 @@ export const ShadeComparison: React.FC<ShadeComparisonProps> = ({
                 </div>
 
                 <div className="flex justify-between py-1.5 border-b border-[#E8D5A8]">
-                  <span className="text-[#6B6B6B] uppercase tracking-wider text-[10px] font-semibold">
+                  <span className="text-[#524C4C] uppercase tracking-wider text-[10px] font-semibold">
                     Best For:
                   </span>
                   <span className="text-[#121212] font-medium">
@@ -130,10 +130,10 @@ export const ShadeComparison: React.FC<ShadeComparisonProps> = ({
                 </div>
 
                 <div className="py-2">
-                  <span className="text-[#6B6B6B] uppercase tracking-wider text-[10px] font-semibold block mb-1">
+                  <span className="text-[#524C4C] uppercase tracking-wider text-[10px] font-semibold block mb-1">
                     Editorial Notes:
                   </span>
-                  <p className="text-[11.5px] italic text-[#6B6B6B] font-light leading-relaxed">
+                  <p className="text-[11.5px] italic text-[#524C4C] font-light leading-relaxed">
                     "{shade.description}"
                   </p>
                 </div>

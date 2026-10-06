@@ -112,7 +112,7 @@ export const HelpSection: React.FC<HelpSectionProps> = ({ orders, initialOrderId
           >
             <Mail className="w-4 h-4 text-[#C9972B] shrink-0" />
             <div className="min-w-0">
-              <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#6B6B6B] block">Email us</span>
+              <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#524C4C] block">Email us</span>
               <span className="text-[12.5px] text-[#121212] truncate block">{globalSettings.contactEmail}</span>
             </div>
           </a>
@@ -124,7 +124,7 @@ export const HelpSection: React.FC<HelpSectionProps> = ({ orders, initialOrderId
           >
             <Phone className="w-4 h-4 text-[#C9972B] shrink-0" />
             <div className="min-w-0">
-              <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#6B6B6B] block">Call us</span>
+              <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#524C4C] block">Call us</span>
               <span className="text-[12.5px] text-[#121212] truncate block">{globalSettings.contactPhone}</span>
             </div>
           </a>
@@ -138,7 +138,7 @@ export const HelpSection: React.FC<HelpSectionProps> = ({ orders, initialOrderId
           >
             <MessageSquare className="w-4 h-4 text-[#C9972B] shrink-0" />
             <div className="min-w-0">
-              <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#6B6B6B] block">WhatsApp</span>
+              <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#524C4C] block">WhatsApp</span>
               <span className="text-[12.5px] text-[#121212] truncate block">Chat with our concierge</span>
             </div>
           </a>
@@ -210,14 +210,14 @@ export const HelpSection: React.FC<HelpSectionProps> = ({ orders, initialOrderId
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <span className="text-[13px] font-semibold text-[#121212] block">{ticket.subject}</span>
-                      <span className="text-[11px] text-[#6B6B6B]">Raised {formatDate(ticket.createdAt)}</span>
+                      <span className="text-[11px] text-[#524C4C]">Raised {formatDate(ticket.createdAt)}</span>
                     </div>
                     <StatusBadge
                       status={ticket.status}
                       tone={ticket.status === 'RESOLVED' || ticket.status === 'CLOSED' ? 'positive' : 'progress'}
                     />
                   </div>
-                  <p className="text-[12px] text-[#6B6B6B] leading-relaxed">{ticket.message}</p>
+                  <p className="text-[12px] text-[#524C4C] leading-relaxed">{ticket.message}</p>
                   {ticket.adminResponse && (
                     <div className="bg-[#FAF9F6] border border-[#E8D5A8] rounded-lg p-3">
                       <span className="text-[9.5px] font-semibold tracking-[0.14em] uppercase text-[#C9972B] block mb-1">
@@ -245,7 +245,7 @@ export const HelpSection: React.FC<HelpSectionProps> = ({ orders, initialOrderId
               className={`shrink-0 px-3.5 py-2 text-[10.5px] font-semibold tracking-[0.12em] uppercase rounded-full border transition-colors cursor-pointer ${
                 category === cat.id
                   ? 'bg-[#0B0B0B] text-white border-[#0B0B0B]'
-                  : 'bg-white text-[#6B6B6B] border-[#E8D5A8] hover:text-[#121212] hover:border-[#C9972B]'
+                  : 'bg-white text-[#524C4C] border-[#E8D5A8] hover:text-[#121212] hover:border-[#C9972B]'
               }`}
             >
               {cat.label}
@@ -255,7 +255,7 @@ export const HelpSection: React.FC<HelpSectionProps> = ({ orders, initialOrderId
 
         {visibleFaqs.length === 0 ? (
           <AccountCard className="p-6 text-center">
-            <p className="text-xs text-[#6B6B6B]">No questions in this category yet. Raise a request above and we'll help.</p>
+            <p className="text-xs text-[#524C4C]">No questions in this category yet. Raise a request above and we'll help.</p>
           </AccountCard>
         ) : (
           <AccountCard className="divide-y divide-[#F1EBDD] overflow-hidden">
@@ -275,7 +275,7 @@ export const HelpSection: React.FC<HelpSectionProps> = ({ orders, initialOrderId
                   </button>
                   {open && (
                     <div className="px-5 pb-4 -mt-1">
-                      <p className="text-[12.5px] text-[#6B6B6B] leading-relaxed">{faq.answer}</p>
+                      <p className="text-[12.5px] text-[#524C4C] leading-relaxed">{faq.answer}</p>
                     </div>
                   )}
                 </div>

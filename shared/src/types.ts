@@ -1769,6 +1769,44 @@ export interface CMSShopMegaMenu {
   promo: CMSShopPromoBanner;
 }
 
+// [Glamik CMS] 2026-10-06 — admin-managed homepage section backgrounds.
+export interface CMSBackgroundItem {
+  id: string;
+  name: string;
+  description?: string;
+  /** Required primary (desktop) artwork. tablet/mobile fall back to this. */
+  desktopImage: string;
+  tabletImage?: string;
+  mobileImage?: string;
+  isActive: boolean;
+  /** Visible strength of the background image, 0–100 (low = "halka halka"/faint). */
+  opacity?: number;
+  /** Optional ISO schedule window; empty = always eligible. */
+  startAt?: string;
+  endAt?: string;
+  /** Higher wins when several are eligible at once. */
+  priority?: number;
+  /** CSS object-position keyword, e.g. "center", "top left". */
+  position?: string;
+  fit?: 'cover' | 'contain';
+  overlay?: 'none' | 'ivory' | 'blush' | 'white' | 'dark';
+  /** 0–30 (%). */
+  overlayOpacity?: number;
+}
+
+export interface CMSSectionBackground {
+  sectionKey: string;
+  displayName: string;
+  rotationEnabled: boolean;
+  rotationIntervalMs: number;
+  transition: 'none' | 'fade' | 'crossfade';
+  items: CMSBackgroundItem[];
+}
+
+export interface CMSHomepageBackgrounds {
+  sections: CMSSectionBackground[];
+}
+
 export interface CMSDatabaseSchema {
   users: CMSUser[];
   pages: CMSPage[];
@@ -1800,5 +1838,7 @@ export interface CMSDatabaseSchema {
   personalizedBeauty: CMSPersonalizedBeauty;
   /** Header Shop mega-menu (columns, items, promo card). */
   shopMegaMenu: CMSShopMegaMenu;
+  /** Admin-managed backgrounds per homepage section. */
+  homepageBackgrounds: CMSHomepageBackgrounds;
 }
 

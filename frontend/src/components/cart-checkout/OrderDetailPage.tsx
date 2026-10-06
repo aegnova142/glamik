@@ -91,7 +91,7 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
   if (isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center bg-[#FAF9F6] py-16">
-        <div className="flex flex-col items-center gap-3 text-[#6B6B6B]">
+        <div className="flex flex-col items-center gap-3 text-[#524C4C]">
           <Loader2 className="h-8 w-8 animate-spin text-[#C9972B]" />
           <p className="text-xs uppercase tracking-wider">Loading your order...</p>
         </div>
@@ -107,7 +107,7 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
             <LogIn className="w-6 h-6" />
           </div>
           <h1 className="font-serif text-2xl text-[#121212]">Sign In to View This Order</h1>
-          <p className="text-xs text-[#6B6B6B]">
+          <p className="text-xs text-[#524C4C]">
             Order details are tied to your Glamirk account. Sign in to view this order.
           </p>
           <button
@@ -129,7 +129,7 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
             <ShoppingBag className="w-6 h-6" />
           </div>
           <h1 className="font-serif text-2xl text-[#121212]">Order Not Found</h1>
-          <p className="text-xs text-[#6B6B6B]">
+          <p className="text-xs text-[#524C4C]">
             We couldn't find that order. It may have been removed, belong to a different account, or the link may be incorrect.
           </p>
           <button
@@ -251,7 +251,7 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <button
           onClick={onBack}
-          className="mb-6 flex items-center gap-1.5 text-xs text-[#6B6B6B] hover:text-[#121212] font-medium transition-colors cursor-pointer"
+          className="mb-6 flex items-center gap-1.5 text-xs text-[#524C4C] hover:text-[#121212] font-medium transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>BACK TO MY GLAM</span>
@@ -269,7 +269,7 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
               {order.status.replace(/_/g, ' ')}
             </span>
           </div>
-          <p className="text-xs text-[#6B6B6B] mt-1">
+          <p className="text-xs text-[#524C4C] mt-1">
             Placed on {formatDateTime(order.createdAt)}
           </p>
         </div>
@@ -277,7 +277,7 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
         <div className="bg-white border border-[#E8D5A8] p-6 sm:p-8 space-y-8 shadow-xs">
           {/* Items */}
           <div className="space-y-3">
-            <span className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
+            <span className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block">
               ITEMS IN THIS ORDER
             </span>
             <div className="divide-y divide-[#FAF9F6] border border-[#E8D5A8] bg-[#FAF9F6]">
@@ -291,7 +291,7 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
                     />
                     <div className="min-w-0">
                       <h5 className="font-serif text-sm text-[#121212] truncate">{item.productName}</h5>
-                      <p className="text-xs text-[#6B6B6B]">
+                      <p className="text-xs text-[#524C4C]">
                         {item.shade ? `Shade: ${item.shade.name}` : item.size ? `Size: ${item.size}` : ''} • Qty: {item.quantity}
                       </p>
                       <p className="text-xs text-[#121212] font-medium mt-0.5">₹{item.price * item.quantity}</p>
@@ -311,38 +311,38 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
           {/* Address + Payment */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-5 bg-[#FAF9F6] border border-[#E8D5A8] space-y-1.5 text-xs">
-              <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] font-semibold flex items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-wider text-[#524C4C] font-semibold flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5" /> DELIVERY ADDRESS
               </span>
               <p className="font-medium text-[#121212]">{order.deliveryAddress?.name}</p>
-              <p className="text-[#6B6B6B]">{order.deliveryAddress?.addressLine1}</p>
+              <p className="text-[#524C4C]">{order.deliveryAddress?.addressLine1}</p>
               {order.deliveryAddress?.addressLine2 && (
-                <p className="text-[#6B6B6B]">{order.deliveryAddress.addressLine2}</p>
+                <p className="text-[#524C4C]">{order.deliveryAddress.addressLine2}</p>
               )}
-              <p className="text-[#6B6B6B]">
+              <p className="text-[#524C4C]">
                 {order.deliveryAddress?.city}, {order.deliveryAddress?.state} - {order.deliveryAddress?.pinCode}
               </p>
-              <p className="text-[#6B6B6B]">{order.deliveryAddress?.phone}</p>
+              <p className="text-[#524C4C]">{order.deliveryAddress?.phone}</p>
             </div>
 
             <div className="p-5 bg-[#FAF9F6] border border-[#E8D5A8] space-y-1.5 text-xs">
-              <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] font-semibold flex items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-wider text-[#524C4C] font-semibold flex items-center gap-1.5">
                 <CreditCard className="w-3.5 h-3.5" /> PAYMENT
               </span>
               <p className="font-medium text-[#121212]">{getPaymentMethodLabel(order.payment.method)}</p>
-              <p className="text-[#6B6B6B]">Payment Status: {getPaymentStatusLabel(order.payment.status)}</p>
+              <p className="text-[#524C4C]">Payment Status: {getPaymentStatusLabel(order.payment.status)}</p>
               <div className="pt-2 mt-2 border-t border-white space-y-1">
-                <div className="flex justify-between text-[#6B6B6B]">
+                <div className="flex justify-between text-[#524C4C]">
                   <span>Subtotal</span>
                   <span>₹{order.subtotal}</span>
                 </div>
                 {order.discount > 0 && (
-                  <div className="flex justify-between text-[#6B6B6B]">
+                  <div className="flex justify-between text-[#524C4C]">
                     <span>Discount</span>
                     <span>-₹{order.discount}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-[#6B6B6B]">
+                <div className="flex justify-between text-[#524C4C]">
                   <span>Shipping</span>
                   <span>{order.shipping === 0 ? 'FREE' : `₹${order.shipping}`}</span>
                 </div>
@@ -399,7 +399,7 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
           {/* Status history */}
           {order.timeline?.length > 0 && (
             <div className="space-y-3 pt-2 border-t border-[#E8D5A8]">
-              <span className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
+              <span className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block">
                 STATUS HISTORY
               </span>
               <div className="space-y-2">
@@ -407,9 +407,9 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
                   <div key={idx} className="flex items-start justify-between gap-4 text-xs">
                     <div>
                       <span className="font-medium text-[#121212]">{event.status.replace(/_/g, ' ')}</span>
-                      <p className="text-[#6B6B6B]">{event.note}</p>
+                      <p className="text-[#524C4C]">{event.note}</p>
                     </div>
-                    <span className="text-[#6B6B6B] flex-shrink-0">
+                    <span className="text-[#524C4C] flex-shrink-0">
                       {formatDateTime(event.timestamp)}
                     </span>
                   </div>
@@ -441,13 +441,13 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
                 <h3 className="font-serif text-xl text-[#121212]">Cancel Order</h3>
                 <button
                   onClick={() => setIsCancelModalOpen(false)}
-                  className="text-[#6B6B6B] hover:text-[#121212] cursor-pointer"
+                  className="text-[#524C4C] hover:text-[#121212] cursor-pointer"
                   aria-label="Close"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <p className="text-xs text-[#6B6B6B]">
+              <p className="text-xs text-[#524C4C]">
                 Why would you like to cancel order #{order.orderNumber}? Any reserved stock will be released back to the catalog.
               </p>
               <div className="space-y-2">
@@ -473,7 +473,7 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
                 <button
                   onClick={() => setIsCancelModalOpen(false)}
                   disabled={isCancelling}
-                  className="flex-1 px-4 py-2.5 border border-[#E8D5A8] text-[#6B6B6B] text-xs font-semibold tracking-wider uppercase hover:bg-[#FAF9F6] cursor-pointer disabled:opacity-50"
+                  className="flex-1 px-4 py-2.5 border border-[#E8D5A8] text-[#524C4C] text-xs font-semibold tracking-wider uppercase hover:bg-[#FAF9F6] cursor-pointer disabled:opacity-50"
                 >
                   KEEP ORDER
                 </button>
@@ -511,7 +511,7 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
                 <div className="py-6 text-center space-y-2">
                   <RotateCcw className="w-8 h-8 text-[#C9972B] mx-auto" />
                   <h3 className="font-serif text-xl text-[#121212]">Return Requested</h3>
-                  <p className="text-xs text-[#6B6B6B]">We'll review your request and keep you updated.</p>
+                  <p className="text-xs text-[#524C4C]">We'll review your request and keep you updated.</p>
                 </div>
               ) : (
                 <>
@@ -519,13 +519,13 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
                     <h3 className="font-serif text-xl text-[#121212]">Request Return</h3>
                     <button
                       onClick={() => setIsReturnModalOpen(false)}
-                      className="text-[#6B6B6B] hover:text-[#121212] cursor-pointer"
+                      className="text-[#524C4C] hover:text-[#121212] cursor-pointer"
                       aria-label="Close"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
-                  <p className="text-xs text-[#6B6B6B]">
+                  <p className="text-xs text-[#524C4C]">
                     Why would you like to return an item from order #{order.orderNumber}?
                   </p>
                   <div className="space-y-2">
@@ -555,7 +555,7 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({
                     <button
                       onClick={() => setIsReturnModalOpen(false)}
                       disabled={isSubmittingReturn}
-                      className="flex-1 px-4 py-2.5 border border-[#E8D5A8] text-[#6B6B6B] text-xs font-semibold tracking-wider uppercase hover:bg-[#FAF9F6] cursor-pointer disabled:opacity-50"
+                      className="flex-1 px-4 py-2.5 border border-[#E8D5A8] text-[#524C4C] text-xs font-semibold tracking-wider uppercase hover:bg-[#FAF9F6] cursor-pointer disabled:opacity-50"
                     >
                       CANCEL
                     </button>

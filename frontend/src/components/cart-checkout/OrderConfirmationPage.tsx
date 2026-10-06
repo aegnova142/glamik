@@ -56,7 +56,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
   if (isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center bg-[#FAF9F6] py-16">
-        <div className="flex flex-col items-center gap-3 text-[#6B6B6B]">
+        <div className="flex flex-col items-center gap-3 text-[#524C4C]">
           <Loader2 className="h-8 w-8 animate-spin text-[#C9972B]" />
           <p className="text-xs uppercase tracking-wider">Loading your order...</p>
         </div>
@@ -72,7 +72,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
             <LogIn className="h-6 w-6" />
           </div>
           <h1 className="font-serif text-2xl text-[#121212]">Sign In to View This Order</h1>
-          <p className="text-xs leading-relaxed text-[#6B6B6B]">
+          <p className="text-xs leading-relaxed text-[#524C4C]">
             Order confirmations are tied to your Glamirk account. Sign in to see the details of this order.
           </p>
           <button
@@ -91,11 +91,11 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
     return (
       <div className="flex min-h-[60vh] items-center justify-center bg-[#FAF9F6] px-4 py-16 text-center">
         <div className="max-w-sm space-y-4">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E8D5A8] text-[#6B6B6B]">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#E8D5A8] text-[#524C4C]">
             <SearchX className="h-6 w-6" />
           </div>
           <h1 className="font-serif text-2xl text-[#121212]">Order Not Found</h1>
-          <p className="text-xs leading-relaxed text-[#6B6B6B]">
+          <p className="text-xs leading-relaxed text-[#524C4C]">
             We couldn't find this order on your account. It may belong to a different account, or the link may be incorrect.
           </p>
           <button
@@ -135,7 +135,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
             Order ID: #{order.orderNumber}
           </span>
 
-          <p className="text-xs sm:text-sm text-[#6B6B6B] max-w-md mx-auto font-light leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#524C4C] max-w-md mx-auto font-light leading-relaxed">
             Thank you for your order. Your formulations are being prepared and bottled in our signature luxury gift packaging.
           </p>
 
@@ -158,7 +158,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
           {/* Quick Metrics Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pb-6 border-b border-[#E8D5A8] text-xs">
             <div>
-              <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] block">
+              <span className="text-[10px] uppercase tracking-wider text-[#524C4C] block">
                 ORDER NUMBER
               </span>
               <span className="font-mono font-semibold text-[#121212] mt-0.5 block">
@@ -166,7 +166,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
               </span>
             </div>
             <div>
-              <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] block">
+              <span className="text-[10px] uppercase tracking-wider text-[#524C4C] block">
                 ESTIMATED ARRIVAL
               </span>
               <span className="font-medium text-[#C9972B] mt-0.5 block">
@@ -174,7 +174,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
               </span>
             </div>
             <div>
-              <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] block">
+              <span className="text-[10px] uppercase tracking-wider text-[#524C4C] block">
                 PAYMENT METHOD
               </span>
               <span className="font-medium text-[#121212] uppercase mt-0.5 block">
@@ -182,7 +182,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
               </span>
             </div>
             <div>
-              <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] block">
+              <span className="text-[10px] uppercase tracking-wider text-[#524C4C] block">
                 {order.payment.status === 'PAID' ? 'TOTAL PAID' : 'AMOUNT DUE'}
               </span>
               <span className="font-serif text-base font-semibold text-[#121212] mt-0.5 block">
@@ -193,7 +193,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
 
           {/* Itemized Items */}
           <div className="space-y-3">
-            <span className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
+            <span className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block">
               ITEMS RESERVED IN THIS SHIPMENT:
             </span>
 
@@ -210,7 +210,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
                       <h4 className="font-serif text-sm text-[#121212]">
                         {item.productName}
                       </h4>
-                      <p className="text-xs text-[#6B6B6B]">
+                      <p className="text-xs text-[#524C4C]">
                         {item.shade ? `Shade: ${item.shade.name}` : item.size ? `Size: ${item.size}` : ''}
                         {' '}• Qty: {item.quantity}
                       </p>
@@ -226,7 +226,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
           </div>
 
           {/* Price Breakdown */}
-          <div className="space-y-1.5 pt-4 border-t border-[#E8D5A8] text-xs text-[#6B6B6B] max-w-xs ml-auto">
+          <div className="space-y-1.5 pt-4 border-t border-[#E8D5A8] text-xs text-[#524C4C] max-w-xs ml-auto">
             <div className="flex justify-between">
               <span>Subtotal</span>
               <span className="font-mono text-[#121212]">₹{order.subtotal}</span>
@@ -252,37 +252,37 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
           {/* Delivery & Dispatch Summary Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-[#E8D5A8] text-xs">
             <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5 text-[#6B6B6B] uppercase tracking-wider font-semibold text-[10px]">
+              <div className="flex items-center gap-1.5 text-[#524C4C] uppercase tracking-wider font-semibold text-[10px]">
                 <MapPin className="w-3.5 h-3.5 text-[#C9972B]" />
                 <span>DISPATCH DESTINATION</span>
               </div>
               <p className="font-medium text-[#121212]">
                 {order.deliveryAddress.name} ({order.deliveryAddress.type})
               </p>
-              <p className="text-[#6B6B6B]">
+              <p className="text-[#524C4C]">
                 {order.deliveryAddress.addressLine1}
                 {order.deliveryAddress.addressLine2 && `, ${order.deliveryAddress.addressLine2}`}
               </p>
-              <p className="text-[#6B6B6B]">
+              <p className="text-[#524C4C]">
                 {order.deliveryAddress.city}, {order.deliveryAddress.state} - {order.deliveryAddress.pinCode}
               </p>
-              <p className="text-[#6B6B6B] font-mono">
+              <p className="text-[#524C4C] font-mono">
                 Phone: {order.deliveryAddress.phone}
               </p>
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5 text-[#6B6B6B] uppercase tracking-wider font-semibold text-[10px]">
+              <div className="flex items-center gap-1.5 text-[#524C4C] uppercase tracking-wider font-semibold text-[10px]">
                 <Truck className="w-3.5 h-3.5 text-[#C9972B]" />
                 <span>EXPEDITION PARTNER</span>
               </div>
               <p className="font-medium text-[#121212]">
                 {order.courierPartner || 'Blue Dart Apex Premier'}
               </p>
-              <p className="text-[#6B6B6B]">
+              <p className="text-[#524C4C]">
                 Tracking AWB: <span className="font-mono">{order.trackingNumber}</span>
               </p>
-              <p className="text-[#6B6B6B] text-[11px]">
+              <p className="text-[#524C4C] text-[11px]">
                 Status updates will be notified via SMS and email.
               </p>
             </div>

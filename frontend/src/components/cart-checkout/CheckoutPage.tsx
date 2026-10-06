@@ -298,7 +298,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
           <div className="flex items-center gap-4">
             <button
               onClick={onBackToCart}
-              className="text-xs text-[#6B6B6B] hover:text-[#121212] flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="text-xs text-[#524C4C] hover:text-[#121212] flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="hidden sm:inline">RETURN TO BAG</span>
@@ -357,7 +357,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   ? 'text-[#121212]'
                   : currentStep === 'review'
                   ? 'text-[#C9972B]'
-                  : 'text-[#6B6B6B]'
+                  : 'text-[#524C4C]'
               }`}
             >
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-mono ${
@@ -365,7 +365,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   ? 'bg-[#0B0B0B] text-white'
                   : currentStep === 'review'
                   ? 'bg-[#C9972B] text-white'
-                  : 'bg-[#E8D5A8] text-[#6B6B6B]'
+                  : 'bg-[#E8D5A8] text-[#524C4C]'
               }`}>
                 02
               </span>
@@ -380,13 +380,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 if (validateDetails()) setCurrentStep('review');
               }}
               className={`flex items-center gap-2 cursor-pointer ${
-                currentStep === 'review' ? 'text-[#121212]' : 'text-[#6B6B6B]'
+                currentStep === 'review' ? 'text-[#121212]' : 'text-[#524C4C]'
               }`}
             >
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-mono ${
                 currentStep === 'review'
                   ? 'bg-[#0B0B0B] text-white'
-                  : 'bg-[#E8D5A8] text-[#6B6B6B]'
+                  : 'bg-[#E8D5A8] text-[#524C4C]'
               }`}>
                 03
               </span>
@@ -416,14 +416,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <h2 className="font-serif text-2xl text-[#121212] mt-1">
                     CUSTOMER & DELIVERY DETAILS
                   </h2>
-                  <p className="text-xs text-[#6B6B6B] mt-1">
+                  <p className="text-xs text-[#524C4C] mt-1">
                     We will send order tracking, receipt invoices, and delivery PIN confirmations here.
                   </p>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                    <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1.5">
                       FULL NAME *
                     </label>
                     <input
@@ -442,7 +442,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                      <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1.5">
                         MOBILE NUMBER *
                       </label>
                       <div className="flex">
@@ -466,7 +466,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     </div>
 
                     <div>
-                      <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                      <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1.5">
                         EMAIL ADDRESS *
                       </label>
                       <input
@@ -487,12 +487,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                 {/* Saved Address Cards */}
                 <div className="space-y-3">
-                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
+                  <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block">
                     SAVED ADDRESSES:
                   </label>
 
                   {savedAddresses.length === 0 && !isAddingNewAddress && (
-                    <p className="text-xs text-[#6B6B6B]">
+                    <p className="text-xs text-[#524C4C]">
                       You don't have a saved address yet. Add one below to continue.
                     </p>
                   )}
@@ -524,14 +524,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                           <h4 className="font-serif text-sm text-[#121212] font-medium mt-2">
                             {addr.name}
                           </h4>
-                          <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">
+                          <p className="text-xs text-[#524C4C] mt-1 leading-relaxed">
                             {addr.addressLine1}
                             {addr.addressLine2 && `, ${addr.addressLine2}`}
                           </p>
-                          <p className="text-xs text-[#6B6B6B]">
+                          <p className="text-xs text-[#524C4C]">
                             {addr.city}, {addr.state} - {addr.pinCode}
                           </p>
-                          <p className="text-[11px] text-[#6B6B6B] mt-2 font-mono">
+                          <p className="text-[11px] text-[#524C4C] mt-2 font-mono">
                             {addr.phone}
                           </p>
                         </div>
@@ -566,7 +566,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsAddingNewAddress(false)}
-                        className="text-xs text-[#6B6B6B] hover:underline"
+                        className="text-xs text-[#524C4C] hover:underline"
                       >
                         Cancel
                       </button>
@@ -574,7 +574,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                        <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                           FLAT / BUILDING / STREET *
                         </label>
                         <input
@@ -592,7 +592,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       </div>
 
                       <div>
-                        <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                        <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                           LANDMARK / LOCALITY (OPTIONAL)
                         </label>
                         <input
@@ -609,7 +609,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                        <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                           PIN CODE *
                         </label>
                         <input
@@ -628,7 +628,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       </div>
 
                       <div>
-                        <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                        <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                           CITY *
                         </label>
                         <input
@@ -643,7 +643,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       </div>
 
                       <div>
-                        <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1">
+                        <label className="text-[10.5px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1">
                           STATE *
                         </label>
                         <input
@@ -695,7 +695,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <h2 className="font-serif text-2xl text-[#121212] mt-1">
                     SELECT PAYMENT METHOD
                   </h2>
-                  <p className="text-xs text-[#6B6B6B] mt-1">
+                  <p className="text-xs text-[#524C4C] mt-1">
                     Choose how you'd like to pay for this order.
                   </p>
                 </div>
@@ -738,7 +738,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 </div>
 
                 {!ONLINE_PAYMENTS_ENABLED && (
-                  <div className="p-3 bg-[#FAF9F6] border border-[#E8D5A8] text-[10.5px] text-[#6B6B6B] flex items-center gap-2">
+                  <div className="p-3 bg-[#FAF9F6] border border-[#E8D5A8] text-[10.5px] text-[#524C4C] flex items-center gap-2">
                     <ShieldCheck className="w-3.5 h-3.5 text-[#C9972B] flex-shrink-0" />
                     <span>Online payments (UPI, Card, Net Banking, Wallet) are coming soon. For now, all orders are Cash on Delivery.</span>
                   </div>
@@ -749,7 +749,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     only offer 'cod' in that state. Kept intact for when a
                     real gateway is integrated. */}
                 {ONLINE_PAYMENTS_ENABLED && paymentMethod !== 'cod' && (
-                  <div className="p-3 bg-[#FCE8ED] border border-[#E8D5A8] text-[10.5px] text-[#6B6B6B] flex items-center gap-2">
+                  <div className="p-3 bg-[#FCE8ED] border border-[#E8D5A8] text-[10.5px] text-[#524C4C] flex items-center gap-2">
                     <ShieldCheck className="w-3.5 h-3.5 text-[#C9972B] flex-shrink-0" />
                     <span>DEMO PAYMENT — this is a simulated transaction. No real gateway is called and your full card number is never stored.</span>
                   </div>
@@ -757,7 +757,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                 {ONLINE_PAYMENTS_ENABLED && paymentMethod === 'upi' && (
                   <div>
-                    <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                    <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1.5">
                       UPI ID *
                     </label>
                     <input
@@ -776,7 +776,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 {ONLINE_PAYMENTS_ENABLED && paymentMethod === 'card' && (
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                      <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1.5">
                         CARD NUMBER *
                       </label>
                       <input
@@ -793,7 +793,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       {validationErrors.cardNumber && <p className="text-[11px] text-[#F05A7E] mt-1">{validationErrors.cardNumber}</p>}
                     </div>
                     <div>
-                      <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                      <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1.5">
                         NAME ON CARD *
                       </label>
                       <input
@@ -809,7 +809,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                        <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1.5">
                           EXPIRY (MM/YY) *
                         </label>
                         <input
@@ -828,7 +828,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         {validationErrors.cardExpiry && <p className="text-[11px] text-[#F05A7E] mt-1">{validationErrors.cardExpiry}</p>}
                       </div>
                       <div>
-                        <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                        <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1.5">
                           CVV *
                         </label>
                         <input
@@ -850,7 +850,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                 {ONLINE_PAYMENTS_ENABLED && paymentMethod === 'netbanking' && (
                   <div>
-                    <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                    <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1.5">
                       SELECT YOUR BANK *
                     </label>
                     <select
@@ -871,7 +871,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                 {ONLINE_PAYMENTS_ENABLED && paymentMethod === 'wallet' && (
                   <div>
-                    <label className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block mb-1.5">
+                    <label className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block mb-1.5">
                       SELECT WALLET PROVIDER *
                     </label>
                     <select
@@ -891,7 +891,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 )}
 
                 {paymentMethod === 'cod' && (
-                  <p className="text-xs text-[#6B6B6B]">
+                  <p className="text-xs text-[#524C4C]">
                     Pay when your order is delivered.
                   </p>
                 )}
@@ -930,7 +930,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   <h2 className="font-serif text-2xl text-[#121212] mt-1">
                     REVIEW & CONFIRM ORDER
                   </h2>
-                  <p className="text-xs text-[#6B6B6B] mt-1">
+                  <p className="text-xs text-[#524C4C] mt-1">
                     Please inspect your dispatch destination, payment method, and reserved selections.
                   </p>
                 </div>
@@ -941,7 +941,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   {/* Address Summary Block */}
                   <div className="p-4 bg-[#FAF9F6] border border-[#E8D5A8] space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase tracking-wider font-semibold text-[#6B6B6B]">
+                      <span className="text-[10px] uppercase tracking-wider font-semibold text-[#524C4C]">
                         DELIVERING TO:
                       </span>
                       <button
@@ -956,14 +956,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         <h4 className="font-serif text-sm font-medium text-[#121212]">
                           {activeAddress.name} ({activeAddress.type})
                         </h4>
-                        <p className="text-xs text-[#6B6B6B]">
+                        <p className="text-xs text-[#524C4C]">
                           {activeAddress.addressLine1}
                           {activeAddress.addressLine2 && `, ${activeAddress.addressLine2}`}
                         </p>
-                        <p className="text-xs text-[#6B6B6B]">
+                        <p className="text-xs text-[#524C4C]">
                           {activeAddress.city}, {activeAddress.state} - {activeAddress.pinCode}
                         </p>
-                        <p className="text-[11px] text-[#6B6B6B] font-mono">
+                        <p className="text-[11px] text-[#524C4C] font-mono">
                           Phone: {activeAddress.phone}
                         </p>
                       </>
@@ -975,7 +975,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   {/* Payment Summary Block */}
                   <div className="p-4 bg-[#FAF9F6] border border-[#E8D5A8] space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase tracking-wider font-semibold text-[#6B6B6B]">
+                      <span className="text-[10px] uppercase tracking-wider font-semibold text-[#524C4C]">
                         PAYMENT METHOD:
                       </span>
                       <button
@@ -988,7 +988,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     <h4 className="font-serif text-sm font-medium text-[#121212] uppercase">
                       {paymentMethodLabel[paymentMethod]}
                     </h4>
-                    <p className="text-xs text-[#6B6B6B]">
+                    <p className="text-xs text-[#524C4C]">
                       {paymentMethodDetail[paymentMethod]}
                     </p>
                   </div>
@@ -997,7 +997,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
 
                 {/* Items Summary in Step 4 */}
                 <div className="space-y-3 pt-2">
-                  <span className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
+                  <span className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block">
                     RESERVED CREATIONS:
                   </span>
                   <div className="divide-y divide-[#E8D5A8] border border-[#E8D5A8] bg-[#FAF9F6]">
@@ -1015,7 +1015,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                               <h5 className="font-serif text-xs sm:text-sm text-[#121212]">
                                 {item.product.name}
                               </h5>
-                              <p className="text-[11px] text-[#6B6B6B]">
+                              <p className="text-[11px] text-[#524C4C]">
                                 {item.selectedShade ? `Shade: ${item.selectedShade.name}` : item.selectedSize ? `Size: ${item.selectedSize}` : ''} • Qty: {item.quantity}
                               </p>
                             </div>
@@ -1072,7 +1072,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     )}
                   </button>
 
-                  <p className="text-[10.5px] text-center text-[#6B6B6B]">
+                  <p className="text-[10.5px] text-center text-[#524C4C]">
                     {paymentMethod === 'cod'
                       ? 'By confirming, you authorize Glamirk Beauty to process this Cash on Delivery order.'
                       : `By confirming, you authorize a simulated ${paymentMethodLabel[paymentMethod]} payment for this demo order.`}
@@ -1106,7 +1106,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                           <p className="text-[#121212] font-medium truncate max-w-[140px]">
                             {item.product.name}
                           </p>
-                          <span className="text-[10px] text-[#6B6B6B]">
+                          <span className="text-[10px] text-[#524C4C]">
                             Qty {item.quantity} {item.selectedShade ? `• ${item.selectedShade.name}` : ''}
                           </span>
                         </div>
@@ -1118,7 +1118,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </div>
 
               {/* Breakdown numbers */}
-              <div className="space-y-2 pt-3 border-t border-[#E8D5A8] text-xs text-[#6B6B6B]">
+              <div className="space-y-2 pt-3 border-t border-[#E8D5A8] text-xs text-[#524C4C]">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
                   <span className="font-mono text-[#121212]">₹{subtotal}</span>
@@ -1142,7 +1142,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   </span>
                 </div>
 
-                <div className="flex justify-between text-[11px] text-[#6B6B6B]">
+                <div className="flex justify-between text-[11px] text-[#524C4C]">
                   <span>All Taxes & GST</span>
                   <span>Included</span>
                 </div>
@@ -1158,7 +1158,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </div>
 
               {/* Assurances */}
-              <div className="pt-3 border-t border-[#FAF9F6] space-y-2 text-[11px] text-[#6B6B6B]">
+              <div className="pt-3 border-t border-[#FAF9F6] space-y-2 text-[11px] text-[#524C4C]">
                 <div className="flex items-center gap-2">
                   <Lock className="w-3.5 h-3.5 text-[#C9972B]" />
                   <span>Secure 256-bit encryption</span>
@@ -1200,7 +1200,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                 <h3 className="font-serif text-xl sm:text-2xl text-[#121212]">
                   SECURELY PROCESSING YOUR PAYMENT...
                 </h3>
-                <p className="text-xs text-[#6B6B6B] font-light leading-relaxed">
+                <p className="text-xs text-[#524C4C] font-light leading-relaxed">
                   Connecting with certified payment networks. Please do not refresh or close this window.
                 </p>
               </div>

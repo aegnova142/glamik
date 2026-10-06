@@ -94,7 +94,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
   if (isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center bg-[#FAF9F6] py-16">
-        <div className="flex flex-col items-center gap-3 text-[#6B6B6B]">
+        <div className="flex flex-col items-center gap-3 text-[#524C4C]">
           <Loader2 className="h-8 w-8 animate-spin text-[#C9972B]" />
           <p className="text-xs uppercase tracking-wider">Loading your orders...</p>
         </div>
@@ -110,7 +110,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
             <LogIn className="w-6 h-6" />
           </div>
           <h1 className="font-serif text-2xl text-[#121212]">Sign In to Track This Order</h1>
-          <p className="text-xs text-[#6B6B6B]">
+          <p className="text-xs text-[#524C4C]">
             Order tracking is tied to your Glamirk account. Sign in to see live dispatch status.
           </p>
           <button
@@ -134,7 +134,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
           <h1 className="font-serif text-2xl text-[#121212]">
             {initialOrderId ? 'Order Not Found' : 'No Orders Yet'}
           </h1>
-          <p className="text-xs text-[#6B6B6B]">
+          <p className="text-xs text-[#524C4C]">
             {initialOrderId
               ? "We couldn't find this order on your account. It may belong to a different account, or the link may be incorrect."
               : "You haven't placed any orders yet. Once you do, you'll be able to track their live dispatch status here."}
@@ -212,7 +212,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
         <div className="mb-6 flex items-center justify-between">
           <button
             onClick={onBackToAccount}
-            className="flex items-center gap-1.5 text-xs text-[#6B6B6B] hover:text-[#121212] font-medium transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 text-xs text-[#524C4C] hover:text-[#121212] font-medium transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>BACK TO MY GLAM</span>
@@ -235,7 +235,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
           <h1 className="font-serif text-3xl sm:text-4xl text-[#121212] mt-1">
             TRACK YOUR ORDER
           </h1>
-          <p className="text-xs text-[#6B6B6B] mt-1">
+          <p className="text-xs text-[#524C4C] mt-1">
             Live status of your reserved Glamirk formulations from our Mumbai atelier.
           </p>
         </div>
@@ -243,7 +243,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
         {/* Search Order Number Strip */}
         <form onSubmit={handleSearchOrder} className="mb-8 p-4 bg-white border border-[#E8D5A8] flex gap-3">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-[#524C4C] absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
@@ -274,13 +274,13 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
                   {selectedOrder.status}
                 </span>
               </div>
-              <p className="text-xs text-[#6B6B6B] mt-1">
+              <p className="text-xs text-[#524C4C] mt-1">
                 Placed on {selectedOrder.createdAt} • Priority Luxury Air Courier
               </p>
             </div>
 
             <div className="text-left sm:text-right">
-              <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] block">
+              <span className="text-[10px] uppercase tracking-wider text-[#524C4C] block">
                 ESTIMATED ARRIVAL
               </span>
               <span className="font-serif text-lg font-semibold text-[#C9972B] mt-0.5 block">
@@ -291,7 +291,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
 
           {/* Vertical/Horizontal Timeline */}
           <div className="space-y-6">
-            <span className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
+            <span className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block">
               DISPATCH TIMELINE:
             </span>
 
@@ -323,7 +323,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
                               ? 'text-[#121212] font-semibold'
                               : isPassed
                               ? 'text-[#121212]'
-                              : 'text-[#6B6B6B]'
+                              : 'text-[#524C4C]'
                           }`}
                         >
                           {step.label}
@@ -334,7 +334,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-[#6B6B6B] mt-0.5">
+                      <p className="text-xs text-[#524C4C] mt-0.5">
                         {historyEvent?.note || step.description}
                       </p>
                       {historyEvent && (
@@ -352,25 +352,25 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
           {/* Courier & Waybill Information */}
           <div className="p-5 bg-[#FAF9F6] border border-[#E8D5A8] grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div className="space-y-1">
-              <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] font-semibold block">
+              <span className="text-[10px] uppercase tracking-wider text-[#524C4C] font-semibold block">
                 CARRIER & AWB TRACKING
               </span>
               <p className="font-medium text-[#121212]">
                 {selectedOrder.courierPartner || 'Assigned after dispatch'}
               </p>
-              <p className="font-mono text-[#6B6B6B]">
+              <p className="font-mono text-[#524C4C]">
                 AWB Reference: {selectedOrder.trackingNumber || 'Pending dispatch'}
               </p>
             </div>
 
             <div className="space-y-1">
-              <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] font-semibold block">
+              <span className="text-[10px] uppercase tracking-wider text-[#524C4C] font-semibold block">
                 DELIVERING TO
               </span>
               <p className="font-medium text-[#121212]">
                 {selectedOrder.deliveryAddress.name} ({selectedOrder.deliveryAddress.type})
               </p>
-              <p className="text-[#6B6B6B] truncate">
+              <p className="text-[#524C4C] truncate">
                 {selectedOrder.deliveryAddress.city}, {selectedOrder.deliveryAddress.state} - {selectedOrder.deliveryAddress.pinCode}
               </p>
             </div>
@@ -378,7 +378,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
 
           {/* Products in Shipment */}
           <div className="space-y-3 pt-2">
-            <span className="text-[11px] uppercase tracking-wider font-semibold text-[#6B6B6B] block">
+            <span className="text-[11px] uppercase tracking-wider font-semibold text-[#524C4C] block">
               ITEMS IN THIS SHIPMENT:
             </span>
 
@@ -395,7 +395,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
                       <h5 className="font-serif text-sm text-[#121212]">
                         {item.productName}
                       </h5>
-                      <p className="text-xs text-[#6B6B6B]">
+                      <p className="text-xs text-[#524C4C]">
                         {item.shade ? `Shade: ${item.shade.name}` : item.size ? `Size: ${item.size}` : ''} • Qty: {item.quantity}
                       </p>
                     </div>

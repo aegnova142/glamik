@@ -85,7 +85,7 @@ export const DynamicSectionRenderer: React.FC<DynamicSectionRendererProps> = ({
                 </span>
               )}
               <h2 className="font-serif text-xl sm:text-2xl text-[#FAF9F6]">{props.heading}</h2>
-              <p className="text-xs text-[#6B6B6B]">{props.description}</p>
+              <p className="text-xs text-[#524C4C]">{props.description}</p>
             </div>
 
             {props.showCountdown && props.endDate && (
@@ -120,7 +120,7 @@ export const DynamicSectionRenderer: React.FC<DynamicSectionRendererProps> = ({
               {props.heading}
             </h2>
             {props.description && (
-              <p className="text-sm sm:text-base text-[#6B6B6B] leading-relaxed">
+              <p className="text-sm sm:text-base text-[#524C4C] leading-relaxed">
                 {props.description}
               </p>
             )}

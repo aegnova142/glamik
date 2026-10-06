@@ -84,7 +84,7 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({
           ))}
         </div>
       ) : count === 0 ? (
-        <div className="p-6 bg-white border border-[#E8D5A8] rounded-2xl text-xs text-[#6B6B6B]">
+        <div className="p-6 bg-white border border-[#E8D5A8] rounded-2xl text-xs text-[#524C4C]">
           No reviews yet for this product — be the first to share your experience from your Order History once it's delivered.
         </div>
       ) : (
@@ -100,11 +100,11 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({
                   />
                 ))}
               </div>
-              <span className="text-[11px] text-[#6B6B6B]">{count} review{count === 1 ? '' : 's'}</span>
+              <span className="text-[11px] text-[#524C4C]">{count} review{count === 1 ? '' : 's'}</span>
             </div>
             <div className="flex-1 space-y-1.5">
               {breakdown.map((b) => (
-                <div key={b.star} className="flex items-center gap-2 text-[11px] text-[#6B6B6B]">
+                <div key={b.star} className="flex items-center gap-2 text-[11px] text-[#524C4C]">
                   <span className="w-8">{b.star} star</span>
                   <div className="flex-1 h-1.5 bg-[#FCE8ED] rounded-full overflow-hidden">
                     <div
@@ -138,11 +138,11 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({
                   )}
                 </div>
                 {rev.title && <h4 className="text-sm font-bold text-[#121212]">{rev.title}</h4>}
-                <p className="text-xs text-[#6B6B6B] leading-relaxed">{rev.comment}</p>
+                <p className="text-xs text-[#524C4C] leading-relaxed">{rev.comment}</p>
                 {rev.photoUrl && (
                   <img src={rev.photoUrl} alt="Customer upload" className="w-16 h-16 object-cover rounded-lg border border-[#E8D5A8]" />
                 )}
-                <div className="pt-1 flex items-center justify-between text-[10.5px] text-[#6B6B6B]">
+                <div className="pt-1 flex items-center justify-between text-[10.5px] text-[#524C4C]">
                   <span>{rev.customerName}</span>
                   <span>{formatDate(rev.date)}</span>
                 </div>

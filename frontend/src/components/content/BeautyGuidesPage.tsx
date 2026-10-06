@@ -69,7 +69,7 @@ export const BeautyGuidesPage: React.FC<BeautyGuidesPageProps> = ({
         <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl text-[#121212] tracking-tight mb-3">
           BEAUTY GUIDES
         </h1>
-        <p className="font-serif italic text-lg sm:text-xl text-[#6B6B6B] max-w-xl mx-auto">
+        <p className="font-serif italic text-lg sm:text-xl text-[#524C4C] max-w-xl mx-auto">
           Scientific precision, color theory, and step-by-step cosmetic rituals.
         </p>
 
@@ -84,7 +84,7 @@ export const BeautyGuidesPage: React.FC<BeautyGuidesPageProps> = ({
                 className={`px-5 py-3 text-xs font-semibold tracking-[0.16em] uppercase transition-all duration-300 rounded-none cursor-pointer flex items-center gap-2 ${
                   isSelected
                     ? 'bg-[#0B0B0B] text-[#FAF9F6] shadow-md'
-                    : 'bg-[#FAF9F6] text-[#6B6B6B] hover:bg-[#E8D5A8] hover:text-[#121212]'
+                    : 'bg-[#FAF9F6] text-[#524C4C] hover:bg-[#E8D5A8] hover:text-[#121212]'
                 }`}
               >
                 <span>{guide.category}</span>
@@ -189,12 +189,12 @@ export const BeautyGuidesPage: React.FC<BeautyGuidesPageProps> = ({
                           {step.title}
                         </h4>
 
-                        <p className="text-xs sm:text-sm text-[#6B6B6B] leading-relaxed">
+                        <p className="text-xs sm:text-sm text-[#524C4C] leading-relaxed">
                           {step.description}
                         </p>
 
                         {step.proTip && (
-                          <div className="p-3 bg-[#FAF9F6] border border-[#E8D5A8] text-[11px] text-[#6B6B6B] space-y-1">
+                          <div className="p-3 bg-[#FAF9F6] border border-[#E8D5A8] text-[11px] text-[#524C4C] space-y-1">
                             <strong className="text-[#C9972B] uppercase tracking-wider block font-semibold">
                               PRO TIP
                             </strong>
@@ -221,7 +221,7 @@ export const BeautyGuidesPage: React.FC<BeautyGuidesPageProps> = ({
                                 {stepProduct.name}
                               </h5>
                               {stepShade && (
-                                <span className="text-[10px] text-[#6B6B6B] block">
+                                <span className="text-[10px] text-[#524C4C] block">
                                   Shade: {stepShade.name}
                                 </span>
                               )}
@@ -285,7 +285,7 @@ export const BeautyGuidesPage: React.FC<BeautyGuidesPageProps> = ({
                         <h4 className="font-serif text-sm text-[#121212] group-hover:text-[#C9972B] transition-colors">
                           {product.name}
                         </h4>
-                        <span className="text-xs text-[#6B6B6B] font-serif font-medium block">
+                        <span className="text-xs text-[#524C4C] font-serif font-medium block">
                           ₹{product.price}
                         </span>
                       </div>

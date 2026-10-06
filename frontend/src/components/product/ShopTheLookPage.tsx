@@ -115,9 +115,9 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
                   <h3 className="font-serif text-base text-[#121212]">
                     {offer.publicTitle || offer.name}
                   </h3>
-                  <p className="text-xs text-[#6B6B6B] leading-relaxed">{offer.description}</p>
+                  <p className="text-xs text-[#524C4C] leading-relaxed">{offer.description}</p>
                   {offer.minOrderValue > 0 && (
-                    <p className="text-[10.5px] text-[#6B6B6B] font-mono">
+                    <p className="text-[10.5px] text-[#524C4C] font-mono">
                       Minimum bag value: ₹{offer.minOrderValue}
                     </p>
                   )}
@@ -138,7 +138,7 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
               className={`px-4 py-2 text-xs font-medium tracking-wider uppercase whitespace-nowrap transition-all ${
                 selectedFilter === tab
                   ? 'bg-[#0B0B0B] text-[#FAF9F6] shadow-xs'
-                  : 'bg-[#FAF9F6] text-[#6B6B6B] hover:text-[#121212] border border-[#E8D5A8]'
+                  : 'bg-[#FAF9F6] text-[#524C4C] hover:text-[#121212] border border-[#E8D5A8]'
               }`}
             >
               {tab}
@@ -214,7 +214,7 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
                     &ldquo;{look.tagline}&rdquo;
                   </p>
 
-                  <p className="text-xs sm:text-sm text-[#6B6B6B] font-light leading-relaxed">
+                  <p className="text-xs sm:text-sm text-[#524C4C] font-light leading-relaxed">
                     {look.description}
                   </p>
 
@@ -246,7 +246,7 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
                               {item.product.name}
                             </h4>
                             {item.shade && (
-                              <span className="text-[10.5px] text-[#6B6B6B] block truncate">
+                              <span className="text-[10.5px] text-[#524C4C] block truncate">
                                 Shade: {item.shade.name}
                               </span>
                             )}
@@ -263,7 +263,7 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
                 {/* Bundle Footer */}
                 <div className="pt-6 border-t border-[#E8D5A8] flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div className="text-center sm:text-left">
-                    <span className="text-xs text-[#6B6B6B] uppercase tracking-wider block">
+                    <span className="text-xs text-[#524C4C] uppercase tracking-wider block">
                       Total Set Value ({resolvedProducts.length} Items):
                     </span>
                     <span className="font-serif text-2xl font-medium text-[#121212]">

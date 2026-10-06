@@ -53,7 +53,7 @@ export const OffersDrawer: React.FC<OffersDrawerProps> = ({
                 </div>
                 <button
                   onClick={onClose}
-                  className="p-2 text-[#6B6B6B] hover:text-[#121212] transition-colors cursor-pointer"
+                  className="p-2 text-[#524C4C] hover:text-[#121212] transition-colors cursor-pointer"
                   aria-label="Close offers drawer"
                 >
                   <X className="w-5 h-5" />
@@ -62,13 +62,13 @@ export const OffersDrawer: React.FC<OffersDrawerProps> = ({
 
               {/* Offer List */}
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                <p className="text-xs text-[#6B6B6B] font-light leading-relaxed">
+                <p className="text-xs text-[#524C4C] font-light leading-relaxed">
                   Apply available privileges and editorial promotional codes to your shopping bag.
                 </p>
 
                 <div className="space-y-3.5">
                   {offers.length === 0 && (
-                    <p className="text-xs text-[#6B6B6B] text-center py-6">No active offers right now — check back soon.</p>
+                    <p className="text-xs text-[#524C4C] text-center py-6">No active offers right now — check back soon.</p>
                   )}
                   {offers.map((coupon) => {
                     const isApplied = appliedCoupon?.code === coupon.code;
@@ -98,11 +98,11 @@ export const OffersDrawer: React.FC<OffersDrawerProps> = ({
                             <h3 className="font-serif text-base text-[#121212] mt-2.5">
                               {coupon.title}
                             </h3>
-                            <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">
+                            <p className="text-xs text-[#524C4C] mt-1 leading-relaxed">
                               {coupon.description}
                             </p>
                             {coupon.minOrderValue && coupon.minOrderValue > 0 && (
-                              <p className="text-[10.5px] text-[#6B6B6B] mt-1.5 font-mono">
+                              <p className="text-[10.5px] text-[#524C4C] mt-1.5 font-mono">
                                 Minimum bag value: ₹{coupon.minOrderValue}
                               </p>
                             )}
@@ -126,7 +126,7 @@ export const OffersDrawer: React.FC<OffersDrawerProps> = ({
                                 className={`px-4 py-2 text-[11px] font-semibold tracking-widest uppercase transition-colors cursor-pointer ${
                                   isEligible
                                     ? 'bg-[#0B0B0B] text-[#FAF9F6] hover:bg-[#0B0B0B]'
-                                    : 'bg-[#E8D5A8] text-[#6B6B6B] cursor-not-allowed'
+                                    : 'bg-[#E8D5A8] text-[#524C4C] cursor-not-allowed'
                                 }`}
                               >
                                 {isEligible ? 'APPLY' : 'LOCKED'}
@@ -146,7 +146,7 @@ export const OffersDrawer: React.FC<OffersDrawerProps> = ({
                 </div>
 
                 {/* Subtle Luxury Note */}
-                <div className="p-4 bg-[#FAF9F6] border border-[#E8D5A8] mt-6 flex items-start gap-2.5 text-xs text-[#6B6B6B]">
+                <div className="p-4 bg-[#FAF9F6] border border-[#E8D5A8] mt-6 flex items-start gap-2.5 text-xs text-[#524C4C]">
                   <Sparkles className="w-4 h-4 text-[#C9972B] flex-shrink-0 mt-0.5" />
                   <p>
                     Glamirk Privé members receive exclusive auto-credited rewards at checkout based on their tier.

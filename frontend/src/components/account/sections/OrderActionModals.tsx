@@ -36,12 +36,12 @@ const ModalShell: React.FC<{
         >
           <div className="px-5 sm:px-7 py-5 border-b border-[#E8D5A8] pr-14">
             <h2 className="font-serif text-xl text-[#121212]">{title}</h2>
-            {subtitle && <p className="text-[11.5px] text-[#6B6B6B] mt-1">{subtitle}</p>}
+            {subtitle && <p className="text-[11.5px] text-[#524C4C] mt-1">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute top-4 right-4 p-2 text-[#6B6B6B] hover:text-[#121212] transition-colors cursor-pointer"
+            className="absolute top-4 right-4 p-2 text-[#524C4C] hover:text-[#121212] transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -107,7 +107,7 @@ export const CancelOrderModal: React.FC<{
       onClose={onClose}
     >
       <form onSubmit={handleSubmit} className="space-y-5">
-        <p className="text-xs text-[#6B6B6B] leading-relaxed bg-[#FAF9F6] border border-[#E8D5A8] rounded-lg p-3.5">
+        <p className="text-xs text-[#524C4C] leading-relaxed bg-[#FAF9F6] border border-[#E8D5A8] rounded-lg p-3.5">
           Cancelling releases the reserved stock and stops the order from being dispatched. This cannot be undone — you
           would need to place a new order.
         </p>

@@ -107,10 +107,10 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
               ) : (
                 <span className="font-serif text-2xl sm:text-3xl text-[#121212] block leading-none">
                   {item.value ?? 0}
-                  {item.suffix && <span className="text-sm text-[#6B6B6B] ml-1">{item.suffix}</span>}
+                  {item.suffix && <span className="text-sm text-[#524C4C] ml-1">{item.suffix}</span>}
                 </span>
               )}
-              <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#6B6B6B] mt-2 block">
+              <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#524C4C] mt-2 block">
                 {item.label}
               </span>
             </button>
@@ -133,7 +133,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
               </div>
               <div className="min-w-0 flex-1">
                 <span className="font-serif text-base text-[#121212] block">{action.label}</span>
-                <span className="text-[11.5px] text-[#6B6B6B]">{action.hint}</span>
+                <span className="text-[11.5px] text-[#524C4C]">{action.hint}</span>
               </div>
               <ChevronRight className="w-4 h-4 text-[#D6CEBC] group-hover:text-[#C9972B] transition-colors shrink-0" />
             </button>
@@ -157,7 +157,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
 
         {recentOrders.length === 0 ? (
           <div className="p-8 text-center space-y-4">
-            <p className="text-xs text-[#6B6B6B]">You haven&apos;t placed an order yet.</p>
+            <p className="text-xs text-[#524C4C]">You haven&apos;t placed an order yet.</p>
             <button
               onClick={onExploreShop}
               className="px-6 py-3 bg-[#0B0B0B] text-white text-[11px] font-semibold tracking-[0.16em] uppercase rounded-full hover:bg-[#171717] transition-colors cursor-pointer"
@@ -183,7 +183,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
                       <span className="font-serif text-sm text-[#121212]">#{order.orderNumber}</span>
                       <StatusBadge status={order.status} tone={orderStatusTone(order.status)} />
                     </div>
-                    <p className="text-[11.5px] text-[#6B6B6B] mt-1 truncate">
+                    <p className="text-[11.5px] text-[#524C4C] mt-1 truncate">
                       {order.items[0]?.productName}
                       {order.items.length > 1 ? ` + ${order.items.length - 1} more` : ''}
                     </p>

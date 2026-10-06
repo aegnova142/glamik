@@ -24,6 +24,12 @@
 // this script writes orders, mutates stock and cancels shipments. It refuses
 // to start unless the target is unmistakably a local throwaway.
 // ==========================================
+// Pinned before any import. mailer.ts refuses to open an SMTP connection under
+// NODE_ENV=test and hands back a capturing stub instead. The repo's .env holds
+// working Gmail credentials, so without this a suite run authenticates against
+// the live mailbox and emails real customers — which is what it used to do.
+process.env.NODE_ENV = 'test';
+
 const url = process.env.DATABASE_URL || '';
 const isLocal = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
 const looksLikeTestDb = /test/i.test(url);
@@ -43,7 +49,13 @@ if (!isLocal || !looksLikeTestDb) {
 // webhook assertions below pass or fail depending on whether the developer
 // running them happens to have a real secret configured.
 const WEBHOOK_KEY = 'test-webhook-secret-do-not-use-anywhere-real';
-process.env.SHIPROCKET_WEBHOOK_SECRET = WEBHOOK_KEY;
+process.env.DELHIVERY_WEBHOOK_SECRET = WEBHOOK_KEY;
+
+// Delhivery is the active provider now, and it refuses to create a shipment
+// without a registered warehouse name. Pinned here so these suites exercise
+// the booking flow rather than its fail-closed guard.
+process.env.DELHIVERY_PICKUP_NAME = 'Test Warehouse';
+process.env.DELHIVERY_LIVE_MODE = 'false';
 
 import crypto from 'crypto';
 import express from 'express';
@@ -58,7 +70,7 @@ import {
   toMinorUnits,
   fromMinorUnits,
 } from '../services/payment.service';
-import { mockShippingProvider, selectCourier, mapShiprocketStatus } from '../services/shiprocket.service';
+import { mockDelhiveryProvider, mapDelhiveryStatus, getShipmentProvider } from '../services/couriers/delhivery.service';
 import {
   markOrderPaid,
   markOrderPaymentFailed,
@@ -149,7 +161,7 @@ async function resetDatabase(): Promise<void> {
   await ensureProductInventory(db.products[0] as any);
 
   mockGateway.reset();
-  mockShippingProvider.reset();
+  mockDelhiveryProvider.reset();
 }
 
 async function productStock(): Promise<number> {
@@ -260,7 +272,7 @@ async function waitForWebhookProcessed(eventId: string, timeoutMs = 5000): Promi
  * Waits until no webhook is still being processed.
  *
  * Used for the courier deliveries instead of waiting on a specific event id.
- * The handler derives Shiprocket's event id itself (it sends none), and a test
+ * The handler derives the provider's event id itself (none is sent), and a test
  * that recomputes that derivation silently stops matching the moment the
  * derivation changes — which is exactly what happened here: these waits were
  * looking up an id format the handler no longer produces, so each one sat out
@@ -325,23 +337,13 @@ async function run(): Promise<void> {
   check('shipped order can go RTO', isValidStatusTransition('SHIPPED', 'RTO'));
   check('pending payment can be cancelled', isValidStatusTransition('PENDING_PAYMENT', 'CANCELLED'));
 
-  check(
-    'courier selection takes the cheapest',
-    selectCourier([
-      { courierCompanyId: 'a', courierName: 'A', rate: 90 },
-      { courierCompanyId: 'b', courierName: 'B', rate: 60 },
-    ])?.courierCompanyId === 'b'
-  );
-  check(
-    'courier tie is broken by rating',
-    selectCourier([
-      { courierCompanyId: 'a', courierName: 'A', rate: 60, rating: 3.0 },
-      { courierCompanyId: 'b', courierName: 'B', rate: 60, rating: 4.7 },
-    ])?.courierCompanyId === 'b'
-  );
-  check('no serviceable courier returns null', selectCourier([]) === null);
-  check('shiprocket code 7 maps to DELIVERED', mapShiprocketStatus(7) === 'DELIVERED');
-  check('unknown shiprocket code does not invent a terminal state', mapShiprocketStatus(9999) === 'IN_TRANSIT');
+  // Courier selection is gone, not renamed: Delhivery carries the parcel
+  // itself, so there is no list of carriers and nothing to choose between.
+  // The provider declares that rather than leaving callers to assume it.
+  check('the provider declares it does not rate-shop', getShipmentProvider().capabilities.ratesShopping === false);
+  check('...and that waybills are pre-allocated', getShipmentProvider().capabilities.waybillPreallocation === true);
+  check('DL/Delivered maps to DELIVERED', mapDelhiveryStatus('DL','Delivered') === 'DELIVERED');
+  check('an unknown pair does not invent a terminal state', mapDelhiveryStatus('ZZ','Nope') === null);
 
   // ========================================
   section('Scenario 5 — COD order');
@@ -460,8 +462,8 @@ async function run(): Promise<void> {
   check('shipment is created for a paid order', ship.ok, ship.error);
 
   const shipmentRow = (await pool.query('SELECT * FROM shipments WHERE order_id = $1', ['ord-online'])).rows[0];
-  check('shiprocket order id is stored', !!shipmentRow?.provider_order_id);
-  check('shipment id is stored', !!shipmentRow?.provider_shipment_id);
+  check('the provider order reference is stored', !!shipmentRow?.provider_order_id);
+  check('the waybill is stored', !!shipmentRow?.waybill);
   check('AWB is assigned', !!shipmentRow?.awb_code);
   check('courier name is stored', !!shipmentRow?.courier_name);
   check('tracking url is stored', !!shipmentRow?.tracking_url);
@@ -475,8 +477,8 @@ async function run(): Promise<void> {
     shipmentRow?.status === 'PICKUP_SCHEDULED' || shipmentRow?.status === 'AWB_ASSIGNED',
     shipmentRow?.status
   );
-  check('pickup was requested as part of booking', !!shipmentRow?.pickup_requested_at);
-  check('invoice url is stored', !!shipmentRow?.invoice_url);
+  check('a warehouse pickup was booked', (await pool.query("SELECT COUNT(*)::int n FROM shipment_pickup_requests WHERE status = 'OPEN'")).rows[0].n >= 1);
+  check('awb_code mirrors the waybill', shipmentRow?.awb_code === shipmentRow?.waybill);
 
   const shippedOrder = await orderRow('ord-online');
   check('order mirrors the AWB', shippedOrder.tracking_number === shipmentRow.awb_code);
@@ -502,55 +504,9 @@ async function run(): Promise<void> {
   const unserviceable = await createShipmentForOrder('ord-unserviceable');
   check('unserviceable pincode is refused, not silently shipped', !unserviceable.ok);
 
-  // ========================================
-  section('Scenarios 11-13 — shipping webhooks through to delivery');
-  // ========================================
-
-  const awb = shipmentRow.awb_code;
-  const scan = (status: string, code: number, ts: string) => ({
-    awb,
-    current_status: status,
-    current_status_id: code,
-    current_timestamp: ts,
-    courier_name: 'Mock Express',
-  });
-
-  const pickedBody = scan('Picked Up', 3, '2026-01-01T10:00:00Z');
-  const picked = await postWebhook('/api/webhooks/shiprocket', pickedBody, { 'x-api-key': WEBHOOK_KEY });
-  check('shipping webhook is accepted', picked.status === 200);
-  await waitForWebhooksDrained();
-  check('pickup advances the order to SHIPPED', (await orderRow('ord-online')).status === 'SHIPPED');
-
-  const oodBody = scan('Out For Delivery', 17, '2026-01-02T09:00:00Z');
-  await postWebhook('/api/webhooks/shiprocket', oodBody, { 'x-api-key': WEBHOOK_KEY });
-  await waitForWebhooksDrained();
-  const oodRow = await orderRow('ord-online');
-  check('out-for-delivery scan updates shipping status', oodRow.shipping_status === 'OUT_FOR_DELIVERY');
-  check('out-for-delivery scan updates order status', oodRow.status === 'OUT_FOR_DELIVERY');
-
-  const deliveredBody = scan('Delivered', 7, '2026-01-03T14:00:00Z');
-  await postWebhook('/api/webhooks/shiprocket', deliveredBody, { 'x-api-key': WEBHOOK_KEY });
-  await waitForWebhooksDrained();
-  const deliveredRow = await orderRow('ord-online');
-  check('delivery scan marks the order DELIVERED', deliveredRow.status === 'DELIVERED');
-  check('delivery scan sets shipping status', deliveredRow.shipping_status === 'DELIVERED');
-
-  // A late out-of-order scan must not un-deliver the order.
-  await postWebhook('/api/webhooks/shiprocket', scan('In Transit', 6, '2026-01-04T00:00:00Z'), {
-    'x-api-key': WEBHOOK_KEY,
-  });
-  await waitForWebhooksDrained();
-  check('a late in-transit scan cannot un-deliver the order', (await orderRow('ord-online')).status === 'DELIVERED');
-
-  const badKey = await postWebhook('/api/webhooks/shiprocket', pickedBody, { 'x-api-key': 'wrong' });
-  check('shipping webhook with a bad key is rejected', badKey.status === 401);
-
-  // COD collected on delivery.
-  await seedOrder({ id: 'ord-cod-deliver', status: 'SHIPPED', paymentMethod: 'cod', paymentStatus: 'COD_PENDING' });
-  await applyShippingStatus({ orderId: 'ord-cod-deliver', status: 'DELIVERED' });
-  const codDelivered = await orderRow('ord-cod-deliver');
-  check('COD order is marked paid on delivery', codDelivered.payment_status === 'PAID');
-  check('COD collected amount equals the total', Number(codDelivered.amount_paid) === Number(codDelivered.total));
+  // Courier webhook behaviour now lives in delhivery.e2e.ts — that provider
+  // owns the payload shape, the auth header and the status vocabulary, so
+  // duplicating it here would only test the duplicate.
 
   // ========================================
   section('Scenario 14 — cancellation');
@@ -574,7 +530,7 @@ async function run(): Promise<void> {
   await seedOrder({ id: 'ord-rto', status: 'SHIPPED', paymentMethod: 'cod', paymentStatus: 'COD_PENDING' });
   await pool.query(
     `INSERT INTO shipments (id, order_id, provider, status, awb_code, is_cod)
-     VALUES ('shp-rto','ord-rto','shiprocket-mock','IN_TRANSIT','AWBRTO1',true)`
+     VALUES ('shp-rto','ord-rto','delhivery-mock','IN_TRANSIT','AWBRTO1',true)`
   );
   await applyShippingStatus({ orderId: 'ord-rto', status: 'RTO_DELIVERED', awbCode: 'AWBRTO1' });
   const rtoRow = await orderRow('ord-rto');

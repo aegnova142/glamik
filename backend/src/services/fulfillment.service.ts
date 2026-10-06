@@ -1,4 +1,4 @@
-import { pool, loadDatabase, saveDatabase, withStockLock } from '../db/db';
+import { pool, loadDatabase, saveDatabase, withStockLock, withOrderShipmentLock } from '../db/db';
 import { env } from '../config/env';
 import {
   OrderStatus,
@@ -13,14 +13,12 @@ import { notifyOrderStatusChange } from './notifications.service';
 import { sendOrderStatusEmail } from './email.service';
 import { grantOrderPoints } from './rewards.service';
 import {
-  getShippingProvider,
-  selectCourier,
-  shippingConfigured,
-  scrubSecrets,
-  scanDedupeKey,
-  CreateShipmentInput,
-  ShiprocketScan,
-} from './shiprocket.service';
+  getShipmentProvider,
+  shipmentProviderConfigured,
+  scrubDelhiverySecrets,
+  delhiveryScanKey,
+} from './couriers/delhivery.service';
+import { CreateShipmentInput, ShipmentPaymentMode, TrackingScan } from './couriers/shippingProvider';
 import { getPaymentGateway, toMinorUnits } from './payment.service';
 import { hasSellableStock } from '@glamirk/shared/utils/productVariant';
 import {
@@ -330,7 +328,7 @@ export async function markOrderPaid(input: {
   });
 
   // Fulfilment is attempted immediately but never blocks the response: a
-  // Shiprocket outage must not turn a successful payment into a failed
+  // courier outage must not turn a successful payment into a failed
   // checkout. The reconciliation sweep retries anything that did not stick.
   void createShipmentForOrder(input.orderId).catch((err) =>
     console.error(`[fulfillment] shipment creation failed for ${input.orderId}:`, err)
@@ -387,21 +385,47 @@ export async function recordRefund(input: { orderId: string; amount: number }): 
 // ------------------------------------------
 // Shipping
 // ------------------------------------------
-
 /**
- * Creates the courier shipment for an order, exactly once.
+ * Books the courier shipment for an order, exactly once.
  *
- * Duplicate protection is the unique index on shipments.order_id, claimed up
- * front: the row is inserted *before* any API call, so a second concurrent
- * caller fails the insert and backs off rather than both reaching Shiprocket
- * and buying two AWBs for one parcel.
+ * Delhivery's sequence differs from an aggregator's in a way that matters for
+ * safety: a waybill is drawn from the client pool BEFORE the shipment exists.
+ * So the order of operations here is
  *
- * Partial failure is expected and handled: if the order is created but AWB
- * assignment fails, the shipment row keeps what succeeded and records the
- * error, so a retry resumes from where it stopped instead of creating a second
- * Shiprocket order.
+ *   claim the shipments row  ->  draw a waybill  ->  PERSIST it  ->  create
+ *
+ * and the persist step is not an optimisation. If creation times out after
+ * Delhivery accepted it, the parcel exists and the waybill is spent; a retry
+ * that drew a fresh waybill would create a second parcel for the same order
+ * and leak the first. Reusing the stored waybill makes the retry collide with
+ * the unique index instead.
+ *
+ * Duplicate protection is therefore two layers: the unique index on
+ * shipments.order_id, claimed before any API call, and the unique index on
+ * shipments.waybill.
+ *
+ * Partial failure is expected. The shipment row keeps whatever succeeded and
+ * records the error, so a retry resumes rather than restarting.
+ *
+ * Serialised per order by an advisory lock. The unique index alone was not
+ * enough: it decides only who INSERTs the shipments row, and the caller that
+ * loses then reads that same row and carries on — two callers holding one
+ * shipmentRowId, each drawing a waybill, the second overwriting the first with
+ * an UPDATE that no unique index can catch. Two create.json calls, two real
+ * parcels, one orphaned waybill. The lock is what makes the sequence below
+ * single-threaded for a given order; the indexes remain the backstop.
  */
 export async function createShipmentForOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  const run = await withOrderShipmentLock(orderId, () => bookShipmentForOrder(orderId));
+  if (!run.acquired) {
+    // Someone else is mid-flight on this exact order. Refusing is the safe
+    // answer — queueing behind them would book the parcel a second time.
+    return { ok: false, error: 'A shipment booking for this order is already in progress.' };
+  }
+  return run.value!;
+}
+
+async function bookShipmentForOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
   const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
   const order = orderRes.rows[0];
   if (!order) return { ok: false, error: 'Order not found.' };
@@ -414,6 +438,7 @@ export async function createShipmentForOrder(orderId: string): Promise<{ ok: boo
     return { ok: false, error: `Order is ${order.status}.` };
   }
 
+  const provider = getShipmentProvider();
   const shipmentId = 'shp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   const isCod = order.payment_method === 'cod';
 
@@ -424,14 +449,19 @@ export async function createShipmentForOrder(orderId: string): Promise<{ ok: boo
      VALUES ($1, $2, $3, 'PENDING', $4)
      ON CONFLICT (order_id) DO NOTHING
      RETURNING id`,
-    [shipmentId, orderId, getShippingProvider().name, isCod]
+    [shipmentId, orderId, provider.name, isCod]
   );
 
   let shipmentRowId = claim.rows[0]?.id;
+  let existingWaybill: string | null = null;
+
   if (!shipmentRowId) {
-    // A shipment row already exists. Resume only if it never got an AWB —
-    // otherwise this is a genuine duplicate attempt and must not proceed.
-    const existing = await pool.query('SELECT id, awb_code, attempt_count FROM shipments WHERE order_id = $1', [orderId]);
+    // A shipment row already exists. Resume only if it never got a waybill
+    // onto an accepted shipment — otherwise this is a genuine duplicate.
+    const existing = await pool.query(
+      'SELECT id, awb_code, waybill, attempt_count FROM shipments WHERE order_id = $1',
+      [orderId]
+    );
     const row = existing.rows[0];
     if (!row) return { ok: false, error: 'Shipment row vanished.' };
     if (row.awb_code) return { ok: true };
@@ -439,28 +469,43 @@ export async function createShipmentForOrder(orderId: string): Promise<{ ok: boo
       return { ok: false, error: 'Shipment creation has failed too many times; needs manual review.' };
     }
     shipmentRowId = row.id;
+    // A waybill drawn by a previous attempt but never spent. Reused, not
+    // replaced — drawing a fresh one on every retry leaks the client's pool.
+    existingWaybill = row.waybill || null;
   }
 
   await pool.query('UPDATE shipments SET attempt_count = attempt_count + 1, updated_at = now() WHERE id = $1', [
     shipmentRowId,
   ]);
 
-  // Records the failure against the shipment and leaves the integration in
-  // FAILED, which is what makes a retry possible and visible. The Glamirk order
-  // is never cancelled, refunded or stock-released because a courier call
-  // failed — a parcel we have not booked yet is still a sale we owe the
-  // customer.
-  const fail = async (rawError: string) => {
-    const error = scrubSecrets(rawError);
+  /**
+   * Records a booking failure and leaves the shipment retryable.
+   *
+   * The Glamirk order is never cancelled, refunded or stock-released because a
+   * courier call failed — a parcel we have not booked yet is still a sale we
+   * owe the customer. `integration_status` becomes PENDING rather than FAILED
+   * so the admin list reads it as "waiting to be booked", which is what it is:
+   * an operator action is outstanding, not a dead end. `last_error` carries
+   * the reason, already scrubbed of anything secret-shaped.
+   *
+   * `permanent` marks the cases retrying cannot fix — an address Delhivery
+   * will not deliver to at all. Those still stay PENDING rather than FAILED,
+   * because the fix is to change the address and retry, not to give up.
+   */
+  const fail = async (rawError: string, permanent = false) => {
+    const error = scrubDelhiverySecrets(rawError);
     await pool.query(
-      `UPDATE shipments SET last_error = $2, integration_status = 'FAILED', updated_at = now() WHERE id = $1`,
+      `UPDATE shipments SET last_error = $2, integration_status = 'PENDING',
+              status = 'PENDING', updated_at = now()
+       WHERE id = $1`,
       [shipmentRowId, error]
     );
-    console.error(`[fulfillment] shipment ${shipmentRowId} for order ${orderId}: ${error}`);
-    return { ok: false, error };
+    // The order's own shipping lifecycle stays NOT_SHIPPED: nothing has moved,
+    // and showing a customer anything else would be a lie.
+    console.error(`[fulfillment] shipment ${shipmentRowId} for order ${orderId} pending: ${error}`);
+    return { ok: false, error, pending: true, permanent };
   };
 
-  const provider = getShippingProvider();
   const address = order.shipping_address || {};
   const itemsRes = await pool.query(
     'SELECT product_id, product_name, quantity, price FROM order_items WHERE order_id = $1',
@@ -474,7 +519,7 @@ export async function createShipmentForOrder(orderId: string): Promise<{ ok: boo
   let weightKg = 0;
   for (const item of itemsRes.rows) {
     const product = db.products.find((p) => p.id === item.product_id);
-    const unitWeight = Number((product as any)?.weightKg) || env.shiprocket.defaultWeightKg;
+    const unitWeight = Number((product as any)?.weightKg) || env.delhivery.defaultWeightKg;
     weightKg += unitWeight * item.quantity;
   }
   weightKg = Math.max(0.05, Math.round(weightKg * 1000) / 1000);
@@ -492,6 +537,7 @@ export async function createShipmentForOrder(orderId: string): Promise<{ ok: boo
       city: address.city || '',
       state: address.state || '',
       pinCode: address.pinCode || '',
+      country: 'India',
     },
     items: itemsRes.rows.map((item) => ({
       name: item.product_name,
@@ -504,256 +550,245 @@ export async function createShipmentForOrder(orderId: string): Promise<{ ok: boo
     total: Number(order.total),
     isCod,
     weightKg,
-    lengthCm: env.shiprocket.defaultLengthCm,
-    breadthCm: env.shiprocket.defaultBreadthCm,
-    heightCm: env.shiprocket.defaultHeightCm,
+    lengthCm: env.delhivery.defaultLengthCm,
+    breadthCm: env.delhivery.defaultBreadthCm,
+    heightCm: env.delhivery.defaultHeightCm,
+    sellerInvoice: order.order_number,
   };
 
   if (!payload.address.pinCode) return fail('Order has no delivery pincode.');
 
-  // 1. Which couriers will actually carry this, to this pincode, at this
-  //    weight, with this payment mode.
-  const serviceability = await provider.checkServiceability({
+  // 1. Will Delhivery deliver here at all? Checked before a waybill is drawn,
+  //    so an unserviceable address costs nothing from the pool.
+  const serviceability = await provider.checkPincode({
     deliveryPincode: payload.address.pinCode,
-    weightKg,
     isCod,
-    declaredValue: Number(order.total),
   });
   if (!serviceability.ok) return fail(`Serviceability check failed: ${serviceability.error}`);
+  if (!serviceability.value?.serviceable) {
+    const remark = serviceability.value?.remark;
+    // An embargo clears on its own; a plain refusal does not. Both leave the
+    // shipment PENDING and the order intact — the difference is only what the
+    // operator should do about it.
+    return fail(
+      serviceability.value?.temporary
+        ? `Pincode ${payload.address.pinCode} is temporarily unserviceable${remark ? ` (${remark})` : ''}. Retry later.`
+        : `Pincode ${payload.address.pinCode} is not serviceable by Delhivery. The delivery address must be changed.`,
+      !serviceability.value?.temporary
+    );
+  }
 
-  const courier = selectCourier(serviceability.value);
-  if (!courier) return fail(`No courier services pincode ${payload.address.pinCode} for this shipment.`);
+  // A pincode can be serviceable for prepaid and still refuse cash. Delhivery
+  // reports the two separately and we were asking for the answer without
+  // reading it — booking a COD parcel into a prepaid-only area gets it refused
+  // at the door and returned as an RTO. Caught here instead, while it is still
+  // a message to an operator rather than a parcel on a van.
+  //
+  // Strictly `=== false`: undefined means the provider did not say, and a
+  // missing answer must not block a sale.
+  if (isCod && serviceability.value.codAvailable === false) {
+    return fail(
+      `Pincode ${payload.address.pinCode} does not accept Cash on Delivery. The order must be prepaid, or the delivery address changed.`,
+      true
+    );
+  }
 
-  // 2. Create the shipment.
-  const created = await provider.createShipment(payload);
+  // 2. Draw a waybill and persist it BEFORE creating anything. See the note at
+  //    the top of this function — this is what makes a timeout recoverable.
+  let waybill = existingWaybill;
+  if (!waybill) {
+    if (!provider.fetchWaybill) return fail('Provider cannot allocate a waybill.');
+    const drawn = await provider.fetchWaybill();
+    if (!drawn.ok || !drawn.value?.waybill) {
+      // An ambiguous outcome is reported in its own words. The order is still
+      // retryable and a retry still draws a fresh number — but the previous
+      // one may have been allocated and lost, and that is worth an operator
+      // seeing in last_error rather than discovering on a Delhivery invoice.
+      return fail(
+        drawn.ambiguous
+          ? `Waybill allocation outcome unknown: ${drawn.error} A retry will draw a fresh number.`
+          : `Waybill fetch failed: ${drawn.error}`
+      );
+    }
+    waybill = drawn.value.waybill;
+
+    await pool.query(
+      `UPDATE shipments SET waybill = $2, waybill_fetched_at = now(), updated_at = now() WHERE id = $1`,
+      [shipmentRowId, waybill]
+    );
+  }
+
+  // 3. Create the shipment against that waybill.
+  const paymentMode: ShipmentPaymentMode = isCod ? 'COD' : 'PREPAID';
+  const created = await provider.createShipment({ ...payload, waybill }, paymentMode);
   if (!created.ok) return fail(`Create failed: ${created.error}`);
 
-  await pool.query(
-    `UPDATE shipments SET provider_order_id = $2, provider_shipment_id = $3, provider_response = $4::jsonb,
-            courier_company_id = $5, courier_name = $6, integration_status = 'CREATED', updated_at = now()
-     WHERE id = $1`,
-    [
-      shipmentRowId,
-      created.value.providerOrderId,
-      created.value.providerShipmentId,
-      JSON.stringify(created.value.raw || {}),
-      courier.courierCompanyId,
-      courier.courierName,
-    ]
-  );
+  const trackingUrl =
+    created.value.trackingUrl || `https://www.delhivery.com/track/package/${encodeURIComponent(created.value.waybill)}`;
 
-  // 3. Buy the AWB from the selected courier.
-  const awb = await provider.assignAwb({
-    shipmentId: created.value.providerShipmentId,
-    courierCompanyId: courier.courierCompanyId,
-  });
-  if (!awb.ok) return fail(`AWB assignment failed: ${awb.error}`);
-
-  const trackingUrl = `https://shiprocket.co/tracking/${encodeURIComponent(awb.value.awbCode)}`;
-
-  // 4. Label. Non-fatal: the shipment is real and trackable without one, and
-  //    it can be regenerated from the admin panel at any time.
-  const label = await provider.generateLabel({ shipmentId: created.value.providerShipmentId });
+  // 4. Label. Non-fatal: the parcel is real and trackable without one, and it
+  //    can be regenerated from the admin panel at any time.
+  const label = await provider.getLabel({ waybill: created.value.waybill });
 
   await pool.query(
-    `UPDATE shipments SET awb_code = $2, courier_name = $3, courier_company_id = $4,
-            tracking_url = $5, label_url = $6, status = 'AWB_ASSIGNED',
-            integration_status = 'READY', last_error = NULL,
-            provider_artifacts = provider_artifacts || $7::jsonb,
+    `UPDATE shipments SET awb_code = $2, waybill = $2, courier_name = $3,
+            provider_order_id = $4, tracking_url = $5, label_url = $6,
+            status = 'AWB_ASSIGNED', integration_status = 'READY', last_error = NULL,
+            provider_response = $7::jsonb,
+            provider_artifacts = provider_artifacts || $8::jsonb,
             updated_at = now()
      WHERE id = $1`,
     [
       shipmentRowId,
-      awb.value.awbCode,
-      awb.value.courierName,
-      awb.value.courierCompanyId,
+      created.value.waybill,
+      created.value.courierName || 'Delhivery',
+      created.value.providerOrderRef || order.order_number,
       trackingUrl,
       label.ok ? label.value.labelUrl : null,
+      JSON.stringify(created.value.raw || {}),
       JSON.stringify(label.ok ? { label: label.value.raw ?? {} } : {}),
     ]
   );
 
   // The orders table keeps carrying these three columns because the existing
-  // tracking screen and admin read them directly. Written alongside the
-  // shipment row rather than instead of it.
+  // tracking screen and admin read them directly.
   await pool.query(
     `UPDATE orders SET tracking_number = $2, courier_partner = $3, courier_tracking_url = $4,
             shipping_status = 'AWB_ASSIGNED'
      WHERE id = $1`,
-    [orderId, awb.value.awbCode, awb.value.courierName, trackingUrl]
+    [orderId, created.value.waybill, created.value.courierName || 'Delhivery', trackingUrl]
   );
 
-  // 5. Ask the courier to collect, and 6. produce the invoice.
-  //
-  // Both are deliberately non-fatal and deliberately after the AWB write above.
-  // The parcel is booked and trackable at this point; a pickup that has to be
-  // re-requested or an invoice that has to be regenerated is an operational
-  // nuisance, not a reason to report the shipment as failed and have a retry
-  // walk the whole sequence again. Each is independently idempotent, so the
-  // admin retry button resumes exactly the step that did not finish.
-  await ensureShipmentPickup(orderId);
-  await ensureShipmentInvoice(orderId);
+  // 5. Ask for a collection. Warehouse-level, so this is a no-op whenever a
+  //    booking for today already exists — see ensureWarehousePickup.
+  await ensureWarehousePickup();
 
   return { ok: true };
 }
 
 /**
- * Loads the shipment row with the fields the post-AWB steps need.
- *
- * Shared by pickup, manifest and invoice so each one checks the same
- * preconditions against the same row rather than three slightly different
- * readings of "is this shipment ready".
+ * Loads the shipment row with the fields the post-creation steps need.
  */
 async function loadShipmentRow(orderId: string): Promise<any | null> {
   const res = await pool.query(
-    `SELECT id, order_id, provider_order_id, provider_shipment_id, awb_code,
-            pickup_requested_at, pickup_scheduled_at, manifest_url, manifest_generated_at, invoice_url
+    `SELECT id, order_id, provider, provider_order_id, awb_code, waybill, label_url,
+            integration_status, status
      FROM shipments WHERE order_id = $1`,
     [orderId]
   );
   return res.rows[0] || null;
 }
 
+/** Delhivery expects HH:MM:SS, and a booking made at 6pm for the same day will
+ * not be collected. Both are formatting decisions, kept in one place. */
+function pickupSlotForToday(): { date: string; time: string } {
+  const now = new Date();
+  // IST, because the warehouse and the courier both operate in it.
+  const ist = new Date(now.getTime() + (5 * 60 + 30) * 60 * 1000);
+  return { date: ist.toISOString().slice(0, 10), time: env.delhivery.pickupTime };
+}
+
 /**
- * Requests the courier pickup, exactly once.
+ * Books one collection per warehouse per day.
  *
- * Idempotency is the pickup_requested_at marker, claimed with a conditional
- * UPDATE before the provider is called: a second concurrent caller updates zero
- * rows and returns without touching Shiprocket. Generating a duplicate pickup
- * is not harmless — it books a second courier visit someone has to cancel.
+ * Delhivery's pickup is warehouse-level: a single request covers every parcel
+ * waiting at that location that day. Calling it per shipment would book a van
+ * per order, which is why this takes no shipment and is safe to call after
+ * every creation.
  *
- * The marker is cleared again if the call fails, so a transient failure stays
- * retryable rather than permanently convincing us a pickup exists.
+ * The duplicate guard is the partial unique index on
+ * (provider, pickup_location, pickup_date) WHERE status = 'OPEN', claimed
+ * before the provider is called. A second caller loses the insert and returns
+ * without touching Delhivery. A booking that fails is marked FAILED rather
+ * than left OPEN, so the day stays retryable.
  */
-export async function ensureShipmentPickup(orderId: string): Promise<{ ok: boolean; error?: string; skipped?: boolean }> {
-  const shipment = await loadShipmentRow(orderId);
-  if (!shipment) return { ok: false, error: 'This order has no shipment.' };
-  if (!shipment.provider_shipment_id) return { ok: false, error: 'Shipment has not been created with the courier yet.' };
-  // Shiprocket rejects a pickup for a shipment with no AWB, and so do we —
-  // locally, without spending a call to find out.
-  if (!shipment.awb_code) return { ok: false, error: 'Shipment has no AWB yet.' };
-  if (shipment.pickup_requested_at) return { ok: true, skipped: true };
+export async function ensureWarehousePickup(): Promise<{ ok: boolean; error?: string; skipped?: boolean }> {
+  const provider = getShipmentProvider();
+  const pickupLocation = env.delhivery.pickupLocation;
+  if (!pickupLocation) {
+    return { ok: false, error: 'DELHIVERY_PICKUP_NAME is not set.' };
+  }
+
+  const { date, time } = pickupSlotForToday();
+  const id = 'pu-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
 
   const claim = await pool.query(
-    `UPDATE shipments SET pickup_requested_at = now(), updated_at = now()
-     WHERE id = $1 AND pickup_requested_at IS NULL
+    `INSERT INTO shipment_pickup_requests
+       (id, provider, pickup_location, pickup_date, pickup_time, expected_package_count, status)
+     VALUES ($1, $2, $3, $4::date, $5, 1, 'OPEN')
+     ON CONFLICT (provider, pickup_location, pickup_date) WHERE status = 'OPEN' DO NOTHING
      RETURNING id`,
-    [shipment.id]
+    [id, provider.name, pickupLocation, date, time]
   );
-  if (claim.rows.length === 0) return { ok: true, skipped: true };
 
-  const result = await getShippingProvider().generatePickup({ shipmentId: shipment.provider_shipment_id });
-  if (!result.ok) {
-    const error = scrubSecrets(result.error || 'Pickup generation failed.');
-    // Release the claim so this can be retried. Safe: the provider told us it
-    // did not schedule anything.
+  if (claim.rows.length === 0) {
+    // Today's van is already booked. Count this parcel against it so the
+    // declared package count stays roughly honest, then stop.
     await pool.query(
-      'UPDATE shipments SET pickup_requested_at = NULL, last_error = $2, updated_at = now() WHERE id = $1',
-      [shipment.id, error]
+      `UPDATE shipment_pickup_requests
+          SET expected_package_count = expected_package_count + 1, updated_at = now()
+        WHERE provider = $1 AND pickup_location = $2 AND pickup_date = $3::date AND status = 'OPEN'`,
+      [provider.name, pickupLocation, date]
     );
-    console.error(`[fulfillment] pickup for order ${orderId}: ${error}`);
+    return { ok: true, skipped: true };
+  }
+
+  const result = await provider.requestPickup({
+    pickupLocation,
+    pickupDate: date,
+    pickupTime: time,
+    expectedPackageCount: 1,
+  });
+
+  if (!result.ok) {
+    const error = scrubDelhiverySecrets(result.error || 'Pickup request failed.');
+    // FAILED, not OPEN — an open row would block every retry for the rest of
+    // the day behind a booking that does not exist.
+    await pool.query(
+      `UPDATE shipment_pickup_requests SET status = 'FAILED', last_error = $2, updated_at = now() WHERE id = $1`,
+      [claim.rows[0].id, error]
+    );
+    console.error(`[fulfillment] pickup for ${pickupLocation} on ${date}: ${error}`);
     return { ok: false, error };
   }
 
   await pool.query(
-    `UPDATE shipments SET pickup_scheduled_at = now(), status = 'PICKUP_SCHEDULED',
-            provider_artifacts = provider_artifacts || $2::jsonb, last_error = NULL, updated_at = now()
-     WHERE id = $1`,
-    [shipment.id, JSON.stringify({ pickup: result.value?.raw ?? {} })]
+    `UPDATE shipment_pickup_requests
+        SET provider_pickup_id = $2, provider_response = $3::jsonb, last_error = NULL, updated_at = now()
+      WHERE id = $1`,
+    [claim.rows[0].id, result.value?.pickupId || null, JSON.stringify(result.value?.raw ?? {})]
   );
-  // The parcel's own lifecycle moves through the one function that owns it, so
-  // the order status, timeline and notifications stay consistent with every
-  // other way a shipment can advance.
-  await applyShippingStatus({
-    orderId,
-    status: 'PICKUP_SCHEDULED',
-    awbCode: shipment.awb_code,
-    note: 'Pickup scheduled with the courier',
-  });
   return { ok: true };
 }
 
 /**
- * Generates (and if needed prints) the handover manifest for this shipment.
+ * Regenerates the shipping label for an order.
  *
- * Two endpoints, because Shiprocket splits them: /manifests/generate creates
- * the document and sometimes returns its URL; /manifests/print returns the URL
- * for an already-generated manifest. The print call is made only when generate
- * did not hand one back, so the normal path costs one request.
+ * Idempotent by stored URL: once there is one, Delhivery is not asked again.
  */
-export async function generateShipmentManifest(orderId: string): Promise<{ ok: boolean; error?: string; manifestUrl?: string }> {
+export async function ensureShipmentLabel(orderId: string): Promise<{ ok: boolean; error?: string; labelUrl?: string }> {
   const shipment = await loadShipmentRow(orderId);
   if (!shipment) return { ok: false, error: 'This order has no shipment.' };
-  if (!shipment.provider_shipment_id) return { ok: false, error: 'Shipment has not been created with the courier yet.' };
-  if (!shipment.awb_code) return { ok: false, error: 'Shipment has no AWB yet.' };
-  // Already produced. Returned rather than regenerated — a manifest is a
-  // handover record, and reissuing it after the courier has signed one is how
-  // a disputed handover becomes unprovable.
-  if (shipment.manifest_url) return { ok: true, manifestUrl: shipment.manifest_url };
+  if (shipment.label_url) return { ok: true, labelUrl: shipment.label_url };
 
-  const provider = getShippingProvider();
-  const generated = await provider.generateManifest({ shipmentId: shipment.provider_shipment_id });
-  if (!generated.ok) {
-    const error = scrubSecrets(generated.error || 'Manifest generation failed.');
-    await pool.query('UPDATE shipments SET last_error = $2, updated_at = now() WHERE id = $1', [shipment.id, error]);
-    return { ok: false, error };
-  }
+  const waybill = shipment.waybill || shipment.awb_code;
+  if (!waybill) return { ok: false, error: 'Shipment has no waybill yet.' };
 
-  let manifestUrl = generated.value?.manifestUrl;
-  let printRaw: unknown = null;
-  if (!manifestUrl && shipment.provider_order_id) {
-    const printed = await provider.printManifest({ orderIds: [shipment.provider_order_id] });
-    if (printed.ok) {
-      manifestUrl = printed.value.manifestUrl;
-      printRaw = printed.value.raw ?? {};
-    }
-  }
-
-  await pool.query(
-    `UPDATE shipments SET manifest_url = COALESCE($2, manifest_url), manifest_generated_at = now(),
-            provider_artifacts = provider_artifacts || $3::jsonb, updated_at = now()
-     WHERE id = $1`,
-    [
-      shipment.id,
-      manifestUrl || null,
-      JSON.stringify({ manifest: generated.value?.raw ?? {}, ...(printRaw ? { manifestPrint: printRaw } : {}) }),
-    ]
-  );
-
-  // Generated but with no URL is a partial success: the manifest exists at
-  // Shiprocket and can be printed later from the admin panel.
-  return { ok: true, manifestUrl };
-}
-
-/**
- * Fetches the Shiprocket invoice PDF for this order.
- *
- * Idempotent by stored URL: once we have one, the call is not repeated. The
- * invoice is keyed on Shiprocket's ORDER id, not the shipment id — a different
- * identifier from every other step here, which is why it is read explicitly
- * from provider_order_id rather than reusing the shipment id.
- */
-export async function ensureShipmentInvoice(orderId: string): Promise<{ ok: boolean; error?: string; invoiceUrl?: string }> {
-  const shipment = await loadShipmentRow(orderId);
-  if (!shipment) return { ok: false, error: 'This order has no shipment.' };
-  if (shipment.invoice_url) return { ok: true, invoiceUrl: shipment.invoice_url };
-  if (!shipment.provider_order_id) return { ok: false, error: 'Shipment has no Shiprocket order id yet.' };
-
-  const result = await getShippingProvider().generateInvoice({ orderIds: [shipment.provider_order_id] });
+  const result = await getShipmentProvider().getLabel({ waybill });
   if (!result.ok) {
-    const error = scrubSecrets(result.error || 'Invoice generation failed.');
-    // Non-fatal and not recorded as a shipment failure: an invoice is a
-    // document, and its absence does not stop the parcel moving.
-    console.warn(`[fulfillment] invoice for order ${orderId}: ${error}`);
+    const error = scrubDelhiverySecrets(result.error || 'Label generation failed.');
+    // Non-fatal and not recorded as a shipment failure: a label is a document,
+    // and its absence does not stop the parcel moving.
+    console.warn(`[fulfillment] label for order ${orderId}: ${error}`);
     return { ok: false, error };
   }
 
   await pool.query(
-    `UPDATE shipments SET invoice_url = $2, provider_artifacts = provider_artifacts || $3::jsonb, updated_at = now()
+    `UPDATE shipments SET label_url = $2, provider_artifacts = provider_artifacts || $3::jsonb, updated_at = now()
      WHERE id = $1`,
-    [shipment.id, result.value.invoiceUrl, JSON.stringify({ invoice: result.value.raw ?? {} })]
+    [shipment.id, result.value.labelUrl, JSON.stringify({ label: result.value.raw ?? {} })]
   );
-  return { ok: true, invoiceUrl: result.value.invoiceUrl };
+  return { ok: true, labelUrl: result.value.labelUrl };
 }
 
 /**
@@ -771,7 +806,7 @@ export async function recordTrackingEvents(input: {
   orderId: string;
   shipmentRowId: string | null;
   awb: string | null;
-  scans: ShiprocketScan[];
+  scans: TrackingScan[];
   source?: string;
   providerStatus?: string | null;
   providerStatusId?: number | null;
@@ -779,8 +814,8 @@ export async function recordTrackingEvents(input: {
 }): Promise<number> {
   let inserted = 0;
   for (const scan of input.scans) {
-    const dedupeKey = scanDedupeKey({
-      awb: input.awb,
+    const dedupeKey = delhiveryScanKey({
+      waybill: input.awb,
       orderId: input.orderId,
       rawDate: scan.rawDate,
       activity: scan.activity,
@@ -854,7 +889,14 @@ export async function applyShippingStatus(input: {
 
   const impliedOrderStatus = SHIPPING_TO_ORDER_STATUS[status];
   if (impliedOrderStatus) {
-    const currentStatus = orderUpdate.rows[0]?.status;
+    // Read the order's status directly rather than from the UPDATE above. That
+    // statement returns a row only when shipping_status actually changed, so a
+    // push that moves the shipment while the order's shipping_status already
+    // matched left `current` undefined — skipping the terminal check below and
+    // letting a late in-transit scan drag a DELIVERED order back to SHIPPED,
+    // re-sending its "on the way" email.
+    const orderRes = await pool.query('SELECT status FROM orders WHERE id = $1', [orderId]);
+    const currentStatus = orderRes.rows[0]?.status;
     const current = currentStatus ? canonicalOrderStatus(currentStatus) : undefined;
     // Never drag an order backwards: a late "in transit" scan arriving after
     // delivery must not un-deliver the order.
@@ -909,15 +951,15 @@ export async function applyShippingStatus(input: {
  * and the resolution is an RTO, not a cancellation.
  */
 export async function cancelShipmentForOrder(orderId: string): Promise<boolean> {
-  const result = await pool.query('SELECT id, awb_code, status FROM shipments WHERE order_id = $1', [orderId]);
+  const result = await pool.query('SELECT id, awb_code, waybill, status FROM shipments WHERE order_id = $1', [orderId]);
   const shipment = result.rows[0];
   if (!shipment || !shipment.awb_code) return false;
   if (['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'].includes(shipment.status)) {
     return false;
   }
 
-  const provider = getShippingProvider();
-  const cancelled = await provider.cancelShipment({ awbCode: shipment.awb_code });
+  const provider = getShipmentProvider();
+  const cancelled = await provider.cancelShipment({ waybill: shipment.waybill || shipment.awb_code });
   if (!cancelled.ok) {
     await pool.query('UPDATE shipments SET last_error = $2, updated_at = now() WHERE id = $1', [
       shipment.id,
@@ -992,5 +1034,5 @@ export async function refundOrderPayment(
 /** True when shipments should be attempted at all. Exposed so callers can
  * explain *why* nothing shipped rather than failing silently. */
 export function shipmentsEnabled(): boolean {
-  return shippingConfigured() || !env.isProduction;
+  return shipmentProviderConfigured() || !env.isProduction;
 }

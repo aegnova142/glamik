@@ -243,6 +243,52 @@ export function withStockLock<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+/**
+ * Namespace for per-order shipment booking locks. Distinct from
+ * STOCK_ADVISORY_LOCK_KEY so the two critical sections can never collide — a
+ * booking that waited on the stock lock would deadlock against a checkout.
+ */
+const SHIPMENT_ADVISORY_LOCK_NAMESPACE = 8421508;
+
+/**
+ * Serialises courier booking for ONE order across every process.
+ *
+ * Unlike withStockLock this does not queue: a second caller for the same order
+ * is told the lock is busy and gives up. That is the correct answer here —
+ * booking is not a read-modify-write that must eventually run, it is a call
+ * that creates a physical parcel, and "wait and then do it too" is exactly how
+ * one order ends up with two.
+ *
+ * Keyed on the order id via hashtext(), so unrelated orders book in parallel.
+ * Takes a dedicated client because an advisory lock belongs to the session —
+ * acquiring and releasing on two different pooled connections would release a
+ * lock this caller never held.
+ */
+export async function withOrderShipmentLock<T>(
+  orderId: string,
+  fn: () => Promise<T>
+): Promise<{ acquired: boolean; value?: T }> {
+  const client = await pool.connect();
+  try {
+    const got = await client.query('SELECT pg_try_advisory_lock($1::int, hashtext($2)) AS acquired', [
+      SHIPMENT_ADVISORY_LOCK_NAMESPACE,
+      orderId,
+    ]);
+    if (!got.rows[0]?.acquired) return { acquired: false };
+    try {
+      return { acquired: true, value: await fn() };
+    } finally {
+      // Best-effort, in a finally: a throw inside the critical section must not
+      // strand the lock and wedge every later attempt on this order.
+      await client
+        .query('SELECT pg_advisory_unlock($1::int, hashtext($2))', [SHIPMENT_ADVISORY_LOCK_NAMESPACE, orderId])
+        .catch(() => undefined);
+    }
+  } finally {
+    client.release();
+  }
+}
+
 async function withAdvisoryLock<T>(fn: () => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {

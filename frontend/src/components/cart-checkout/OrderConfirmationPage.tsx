@@ -277,7 +277,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
                 <span>EXPEDITION PARTNER</span>
               </div>
               <p className="font-medium text-[#121212]">
-                {order.courierPartner || 'Blue Dart Apex Premier'}
+                {order.courierPartner || 'Courier partner'}
               </p>
               <p className="text-[#6B6B6B]">
                 Tracking AWB: <span className="font-mono">{order.trackingNumber}</span>

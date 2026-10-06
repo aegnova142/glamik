@@ -85,57 +85,45 @@ export function resolveJwtSecret(configured: string | undefined, isProduction: b
   return value;
 }
 
-export const SHIPROCKET_DEFAULT_BASE_URL = 'https://apiv2.shiprocket.in';
+export const DELHIVERY_DEFAULT_BASE_URL = 'https://track.delhivery.com';
 
 /**
- * Validates SHIPROCKET_BASE_URL before it is allowed to prefix an outbound
- * request that carries a bearer token.
+ * Validates DELHIVERY_BASE_URL before it is allowed to prefix a request that
+ * carries the API token.
  *
- * Every Shiprocket call is authenticated, so whatever host this resolves to
- * receives our API token in an Authorization header. An unvalidated env var
- * there is a credential-exfiltration primitive and a server-side request
- * forgery sink: `SHIPROCKET_BASE_URL=http://169.254.169.254` would point the
- * whole integration at the cloud metadata service.
- *
- * The rules are deliberately narrow — HTTPS, and a host that is Shiprocket's
- * own or an explicit loopback for tests. Anything else falls back to the real
- * API rather than failing closed at import time, because a typo in an env var
- * should not take the whole server down at boot.
- *
- * Exported for direct testing.
+ * Every Delhivery call is
+ * authenticated, so whatever this resolves to receives the token. An
+ * unvalidated env var there is a credential-exfiltration primitive and an SSRF
+ * sink. HTTPS and a delhivery.com host only, with loopback permitted for a
+ * local test double. A bad value falls back rather than throwing, because a
+ * typo should not take the server down at boot.
  */
-export function resolveShiprocketBaseUrl(raw: string | undefined | null): string {
-  if (!raw) return SHIPROCKET_DEFAULT_BASE_URL;
+export function resolveDelhiveryBaseUrl(raw: string | undefined | null): string {
+  if (!raw) return DELHIVERY_DEFAULT_BASE_URL;
 
   let parsed: URL;
   try {
     parsed = new URL(raw);
   } catch {
-    console.warn('[config] SHIPROCKET_BASE_URL is not a valid URL — using the default Shiprocket API host.');
-    return SHIPROCKET_DEFAULT_BASE_URL;
+    console.warn('[config] DELHIVERY_BASE_URL is not a valid URL — using the default Delhivery host.');
+    return DELHIVERY_DEFAULT_BASE_URL;
   }
 
-  // Node renders IPv6 hosts bracketed; strip them so ::1 compares equal.
   const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   const isLoopback = host === 'localhost' || host === '127.0.0.1' || host === '::1';
-  const isShiprocket = host === 'shiprocket.in' || host.endsWith('.shiprocket.in');
+  const isDelhivery = host === 'delhivery.com' || host.endsWith('.delhivery.com');
 
-  // Plain HTTP is tolerated only for a loopback test double. A cleartext
-  // request to a remote host would put the bearer token on the wire.
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLoopback)) {
-    console.warn('[config] SHIPROCKET_BASE_URL must use HTTPS — using the default Shiprocket API host.');
-    return SHIPROCKET_DEFAULT_BASE_URL;
+    console.warn('[config] DELHIVERY_BASE_URL must use HTTPS — using the default Delhivery host.');
+    return DELHIVERY_DEFAULT_BASE_URL;
   }
-
-  if (!isShiprocket && !isLoopback) {
-    console.warn('[config] SHIPROCKET_BASE_URL is not a Shiprocket host — using the default Shiprocket API host.');
-    return SHIPROCKET_DEFAULT_BASE_URL;
+  if (!isDelhivery && !isLoopback) {
+    console.warn('[config] DELHIVERY_BASE_URL is not a Delhivery host — using the default Delhivery host.');
+    return DELHIVERY_DEFAULT_BASE_URL;
   }
-
-  // Credentials in the URL would end up in logged request lines.
   if (parsed.username || parsed.password) {
-    console.warn('[config] SHIPROCKET_BASE_URL must not embed credentials — using the default Shiprocket API host.');
-    return SHIPROCKET_DEFAULT_BASE_URL;
+    console.warn('[config] DELHIVERY_BASE_URL must not embed credentials — using the default Delhivery host.');
+    return DELHIVERY_DEFAULT_BASE_URL;
   }
 
   return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
@@ -213,68 +201,79 @@ export const env = {
   },
 
   /**
-   * Shiprocket — shipping and delivery.
+   * Delhivery One — the active shipping provider.
    *
-   * Same two-key arrangement as Razorpay: SHIPROCKET_LIVE_MODE defaults to
-   * off, and even when on, real calls require credentials. With it off no
-   * shipment is ever created against the real account — the mock adapter
-   * answers instead, so courier selection, AWB assignment and tracking can be
-   * tested without generating a real pickup request someone has to cancel.
+   * Same two-key arrangement as payments: DELHIVERY_LIVE_MODE defaults to off, and even when on, real
+   * calls require a token. With it off nothing reaches Delhivery — no waybill
+   * is drawn from the client's pool, no shipment is created, no pickup is
+   * booked — and the mock adapter answers instead.
+   *
+   * Getters throughout, so the token comparison and the log scrubber read the
+   * current value rather than whatever the environment looked like at import.
    */
-  // Every field here is a getter rather than a value captured at module load.
-  // The flags below always were, and the credentials being different was a
-  // genuine inconsistency: verifyShiprocketWebhook and the log scrubber both
-  // read these at call time and would otherwise compare against whatever the
-  // environment looked like at the instant this module was first imported.
-  shiprocket: {
-    get email(): string | null {
-      return process.env.SHIPROCKET_EMAIL || null;
+  delhivery: {
+    get apiToken(): string | null {
+      return process.env.DELHIVERY_TOKEN || null;
     },
-    get password(): string | null {
-      return process.env.SHIPROCKET_PASSWORD || null;
-    },
-    get webhookSecret(): string | null {
-      return process.env.SHIPROCKET_WEBHOOK_SECRET || null;
+    get baseUrl(): string {
+      return resolveDelhiveryBaseUrl(process.env.DELHIVERY_BASE_URL);
     },
     /**
-     * API host. Configurable so a sandbox host can be pointed at without a code
-     * change, but read through resolveShiprocketBaseUrl() rather than used
-     * directly — an env var that becomes the prefix of every outbound
-     * authenticated request is an SSRF sink if it is taken on trust.
+     * Registered warehouse name, which must match Delhivery's record exactly —
+     * case and spaces included. A mismatch is the commonest reason
+     * create.json rejects a shipment, and the API's own error does not say so.
+     * Deliberately has no default: inventing one would turn a configuration
+     * gap into a run of failed shipments.
      */
-    get baseUrl(): string {
-      return resolveShiprocketBaseUrl(process.env.SHIPROCKET_BASE_URL);
+    get pickupLocation(): string | null {
+      return process.env.DELHIVERY_PICKUP_NAME?.trim() || null;
     },
-    /** Warehouse the parcel ships from — needed for serviceability lookups. */
-    get pickupPincode(): string | null {
-      return process.env.SHIPROCKET_PICKUP_PINCODE || null;
+    get sellerName(): string {
+      return process.env.DELHIVERY_SELLER_NAME?.trim() || 'Glamirk Beauty';
     },
-    get pickupLocation(): string {
-      return process.env.SHIPROCKET_PICKUP_LOCATION || 'Primary';
+    get sellerAddress(): string | null {
+      return process.env.DELHIVERY_SELLER_ADDRESS?.trim() || null;
+    },
+    /** Daily collection slot, HH:MM:SS as Delhivery expects it. Configurable
+     * because it is a warehouse operating decision, not a code constant. */
+    get pickupTime(): string {
+      const raw = process.env.DELHIVERY_PICKUP_TIME?.trim();
+      return raw && /^\d{2}:\d{2}:\d{2}$/.test(raw) ? raw : '14:00:00';
+    },
+    /** Scan Push shared secret. No fallback in any environment — an
+     * unconfigured webhook rejects everything rather than accepting anything. */
+    get webhookSecret(): string | null {
+      return process.env.DELHIVERY_WEBHOOK_SECRET || null;
     },
     /** Fallbacks for products with no shipping dimensions recorded. */
     get defaultWeightKg(): number {
-      return Number(process.env.SHIPROCKET_DEFAULT_WEIGHT_KG) || 0.3;
+      return Number(process.env.DELHIVERY_DEFAULT_WEIGHT_KG) || 0.3;
     },
     get defaultLengthCm(): number {
-      return Number(process.env.SHIPROCKET_DEFAULT_LENGTH_CM) || 15;
+      return Number(process.env.DELHIVERY_DEFAULT_LENGTH_CM) || 15;
     },
     get defaultBreadthCm(): number {
-      return Number(process.env.SHIPROCKET_DEFAULT_BREADTH_CM) || 10;
+      return Number(process.env.DELHIVERY_DEFAULT_BREADTH_CM) || 10;
     },
     get defaultHeightCm(): number {
-      return Number(process.env.SHIPROCKET_DEFAULT_HEIGHT_CM) || 5;
+      return Number(process.env.DELHIVERY_DEFAULT_HEIGHT_CM) || 5;
     },
     get liveMode(): boolean {
-      return process.env.SHIPROCKET_LIVE_MODE === 'true';
+      return process.env.DELHIVERY_LIVE_MODE === 'true';
     },
     get credentialsPresent(): boolean {
-      return !!(process.env.SHIPROCKET_EMAIL && process.env.SHIPROCKET_PASSWORD);
+      return !!(process.env.DELHIVERY_TOKEN && process.env.DELHIVERY_PICKUP_NAME?.trim());
     },
     get enabled(): boolean {
       return this.liveMode && this.credentialsPresent;
     },
   },
+
+  // Every field here is a getter rather than a value captured at module load.
+  // The flags below always were, and the credentials being different was a
+  // genuine inconsistency: the webhook verifier and the log scrubber both
+  // read these at call time and would otherwise compare against whatever the
+  // environment looked like at the instant this module was first imported.
 
   /**
    * SQL inventory.
@@ -389,18 +388,15 @@ export function warnOnWeakConfig(): void {
     );
   }
 
-  if (env.shiprocket.enabled) {
-    console.warn('[config] Shiprocket is in LIVE mode — real shipments and pickups will be created.');
-    if (!env.shiprocket.pickupPincode) {
-      console.warn('[config] SHIPROCKET_PICKUP_PINCODE is not set — courier serviceability cannot be checked.');
-    }
-  } else if (env.shiprocket.liveMode && !env.shiprocket.credentialsPresent) {
+  if (env.delhivery.enabled) {
+    console.warn('[config] Delhivery is in LIVE mode — real shipments and pickups will be created.');
+  } else if (env.delhivery.liveMode && !env.delhivery.credentialsPresent) {
     console.warn(
-      '[config] SHIPROCKET_LIVE_MODE is true but SHIPROCKET_EMAIL/SHIPROCKET_PASSWORD are missing — ' +
+      '[config] DELHIVERY_LIVE_MODE is true but DELHIVERY_TOKEN/DELHIVERY_PICKUP_NAME are missing — ' +
         'shipping stays on the mock adapter.'
     );
   } else {
-    console.log('[config] Shipping is in MOCK mode — no real shipments. Set SHIPROCKET_LIVE_MODE=true with credentials to go live.');
+    console.log('[config] Shipping is in MOCK mode — no real shipment. Set DELHIVERY_LIVE_MODE=true with credentials to go live.');
   }
 
   // Mobile + OTP is the primary customer sign-in, so an unconfigured channel

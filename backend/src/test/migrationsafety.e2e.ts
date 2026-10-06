@@ -14,6 +14,12 @@
  * refusal actually prevents DDL, and that the explicit path still works.
  */
 
+// Pinned before any import — mailer.ts will not open an SMTP connection under
+// NODE_ENV=test. See checkout.e2e.ts for why that matters. The
+// classifyDatabaseTarget cases below pass NODE_ENV explicitly as an argument,
+// so they are unaffected by what process.env holds.
+process.env.NODE_ENV = 'test';
+
 const url = process.env.DATABASE_URL || '';
 if (!/@(localhost|127\.0\.0\.1)[:/]/.test(url) || !/test/i.test(url)) {
   console.error('\nREFUSING TO RUN — DATABASE_URL must be a local database whose name contains "test".\n');

@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import type { PoolClient } from 'pg';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import nodemailer from 'nodemailer';
+import { getMailTransporter } from '../services/mailer';
 import { pool, loadDatabase, saveDatabase, withStockLock, evaluateOffers, InternalCMSDatabaseSchema } from '../db/db';
 import { requireCustomer, AuthenticatedCustomerRequest } from '../middleware/requireCustomer';
 import { rateLimit } from '../middleware/rateLimit';
@@ -94,23 +94,10 @@ import { sendOrderStatusEmail, sendAdminNewOrderEmail } from '../services/email.
 
 const router = express.Router();
 
-// Lazily built — undefined when SMTP isn't configured, in which case callers
-// fall back to their own dev-mode behavior instead of trying to send mail.
-let mailTransporter: ReturnType<typeof nodemailer.createTransport> | null | undefined;
-function getMailTransporter() {
-  if (mailTransporter !== undefined) return mailTransporter;
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    mailTransporter = null;
-    return mailTransporter;
-  }
-  mailTransporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: Number(process.env.SMTP_PORT) === 465,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
-  return mailTransporter;
-}
+// Null when SMTP isn't configured, in which case callers fall back to their
+// own dev-mode behavior instead of trying to send mail. Shared with
+// email.service.ts so there is a single gate on opening an SMTP connection —
+// see mailer.ts.
 
 // ==========================================
 // CUSTOMER AUTH

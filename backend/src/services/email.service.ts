@@ -1,25 +1,9 @@
-import nodemailer from 'nodemailer';
 import { OrderStatus } from '@glamirk/shared/types';
-
-// Lazily built — undefined when SMTP isn't configured, in which case every
-// send* function below silently no-ops rather than blocking the order flow.
-// Deliberately a separate transporter/cache from the one in server/commerce.ts
-// (used for password-reset emails) to avoid touching that already-working path.
-let mailTransporter: ReturnType<typeof nodemailer.createTransport> | null | undefined;
-function getMailTransporter() {
-  if (mailTransporter !== undefined) return mailTransporter;
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    mailTransporter = null;
-    return mailTransporter;
-  }
-  mailTransporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: Number(process.env.SMTP_PORT) === 465,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
-  return mailTransporter;
-}
+// Transport construction and the "may this process send at all" decision live
+// in mailer.ts, shared with the customer router. Null when SMTP isn't
+// configured, in which case every send* function below silently no-ops rather
+// than blocking the order flow.
+import { getMailTransporter } from './mailer';
 
 function wrapEmailHtml(heading: string, message: string, ctaLabel?: string, ctaUrl?: string): string {
   return `

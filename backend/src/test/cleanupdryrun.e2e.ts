@@ -14,6 +14,10 @@
  * exercises the real application cancellation path against it.
  */
 
+// Pinned before any import — mailer.ts will not open an SMTP connection under
+// NODE_ENV=test. See checkout.e2e.ts for why that matters.
+process.env.NODE_ENV = 'test';
+
 const url = process.env.DATABASE_URL || '';
 if (!/@(localhost|127\.0\.0\.1)[:/]/.test(url) || !/test/i.test(url)) {
   console.error('\nREFUSING TO RUN — DATABASE_URL must be a local database whose name contains "test".\n');

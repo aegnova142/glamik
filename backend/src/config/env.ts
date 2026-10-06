@@ -170,6 +170,47 @@ export const env = {
   adminHost: process.env.ADMIN_HOST?.trim().toLowerCase() || null,
 
   /**
+   * Image & video upload limits.
+   *
+   * Read through getters rather than captured at import time so a test can set
+   * the variable before exercising a route, matching how every other block
+   * here that needs to be overridable behaves.
+   *
+   * The ceilings are deliberately separate. multer buffers the whole body in
+   * memory, so the single number it is given has to be the larger of the two
+   * (a video), and the image limit is then re-applied once the magic bytes
+   * have said which one this actually is. Giving images the video ceiling
+   * would mean a 60 MB "product photo" was fully buffered before anything
+   * noticed.
+   */
+  media: {
+    /** Per-image ceiling, enforced after the real type is known. */
+    get maxImageBytes(): number {
+      const mb = Number(process.env.MEDIA_MAX_IMAGE_MB);
+      return (Number.isFinite(mb) && mb > 0 ? mb : 20) * 1024 * 1024;
+    },
+    /** Per-video ceiling. Also what multer is configured with. */
+    get maxVideoBytes(): number {
+      const mb = Number(process.env.MEDIA_MAX_VIDEO_MB);
+      return (Number.isFinite(mb) && mb > 0 ? mb : 60) * 1024 * 1024;
+    },
+    /**
+     * Whether SVG uploads are accepted at all.
+     *
+     * On by default because the site logo and favicon in production are
+     * already SVGs uploaded through this pipeline — turning it off would be a
+     * silent regression for an admin trying to replace the logo. SVG is the
+     * one accepted format that is also a script host, so it is never stored as
+     * received: it is sanitised first (see sanitizeSvg), and it is excluded
+     * from the f_auto/q_auto delivery transform because rasterising a logo is
+     * not what anyone asked for. Set MEDIA_ALLOW_SVG=false to refuse it.
+     */
+    get allowSvg(): boolean {
+      return process.env.MEDIA_ALLOW_SVG !== 'false';
+    },
+  },
+
+  /**
    * Razorpay — online payments.
    *
    * `liveMode` is the master switch and defaults to OFF. With it off the

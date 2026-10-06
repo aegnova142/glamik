@@ -3,6 +3,7 @@ import { Instagram, ArrowUpRight, Sparkles } from 'lucide-react';
 import { Product } from '@glamirk/shared/types';
 import { GLAMIRK_PRODUCTS } from '@glamirk/shared/data/products';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface GlamirkOnYouProps {
   onQuickView: (product: Product) => void;
@@ -85,10 +86,11 @@ export const GlamirkOnYou: React.FC<GlamirkOnYouProps> = ({ onQuickView }) => {
                 onClick={() => onQuickView(product)}
               >
                 <img
-                  src={tile.image}
+                  {...responsiveImage(tile.image, 'card', '(max-width: 640px) 50vw, 25vw')}
                   alt={tile.shadeTag}
                   className="w-full h-full object-cover transform group-hover:scale-104 transition-transform duration-500 ease-out"
                   loading="lazy"
+                  decoding="async"
                 />
 
                 {/* Hover Overlay */}

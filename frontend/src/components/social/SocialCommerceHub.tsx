@@ -19,6 +19,7 @@ import { updatePageSeo } from '../../utils/seo';
 import { trackEvent } from '../../utils/analytics';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { ProductImage } from '../product/ProductImage';
+import { cloudinaryImageUrl, responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface SocialCommerceHubProps {
   onOpenProduct: (product: Product) => void;
@@ -108,10 +109,11 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
                 className="relative aspect-[3/4] bg-[#FAF9F6] overflow-hidden cursor-pointer"
               >
                 <img
-                  src={post.mediaUrl}
+                  {...responsiveImage(post.mediaUrl, 'card', '(max-width: 640px) 50vw, 25vw')}
                   alt={post.caption}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                   loading="lazy"
+                  decoding="async"
                 />
 
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B]/75 via-transparent to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
@@ -181,7 +183,7 @@ export const SocialCommerceHub: React.FC<SocialCommerceHubProps> = ({
                 >
                   <div className="flex items-start gap-4">
                     <div className="w-16 h-16 rounded-full overflow-hidden bg-[#171717] border-2 border-[#C9972B] flex-shrink-0">
-                      <img src={creator.avatar} alt={creator.name} className="w-full h-full object-cover" />
+                      <img src={cloudinaryImageUrl(creator.avatar, 'avatar')} alt={creator.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5">

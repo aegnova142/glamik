@@ -27,6 +27,7 @@ import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { NotificationBell } from './NotificationBell';
 import { useClickOutside } from '../../hooks/useClickOutside';
+import { cloudinaryImageUrl, responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 /** One row of the account dropdown — same affordance for every link so the
  * signed-in and signed-out menus stay visually identical. */
@@ -190,8 +191,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               {globalSettings?.logoUrl ? (
                 <img
-                  src={globalSettings.logoUrl}
+                  src={cloudinaryImageUrl(globalSettings.logoUrl, 'logo')}
                   alt={globalSettings.logoText || globalSettings.brandName || 'Logo'}
+                  loading="eager"
+                  decoding="sync"
                   className="h-11 sm:h-14 w-auto max-w-[220px] object-contain group-hover:scale-105 transition-transform"
                 />
               ) : (
@@ -396,7 +399,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 aria-label="Account"
               >
                 {isCustomerLoggedIn && customerUser?.avatarUrl ? (
-                  <img src={customerUser.avatarUrl} alt="" className="w-5 h-5 rounded-full object-cover border border-[#E8D5A8]" />
+                  <img src={cloudinaryImageUrl(customerUser.avatarUrl, 'avatar')} alt="" loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover border border-[#E8D5A8]" />
                 ) : (
                   <User className="w-5 h-5 stroke-[1.75]" />
                 )}
@@ -556,7 +559,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <div className="flex items-center gap-3">
                             <span className="w-11 h-11 rounded-full bg-[#FCE8ED] border border-[#F3D9E0] flex items-center justify-center overflow-hidden shrink-0">
                               {col.iconUrl ? (
-                                <img src={col.iconUrl} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                                <img src={cloudinaryImageUrl(col.iconUrl, 'thumb')} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                               ) : ci === 0 ? (
                                 <Sparkles className="w-5 h-5 text-[#F05A7E]" />
                               ) : (
@@ -588,7 +591,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                               >
                                 <span className="w-11 h-11 rounded-lg bg-[#FCE8ED] border border-[#F3D9E0] overflow-hidden shrink-0 flex items-center justify-center">
                                   {item.imageUrl ? (
-                                    <img src={item.imageUrl} alt={item.altText || item.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                                    <img src={cloudinaryImageUrl(item.imageUrl, 'thumb')} alt={item.altText || item.name} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                                   ) : (
                                     <ShoppingBag className="w-4 h-4 text-[#F05A7E]/50" />
                                   )}
@@ -642,9 +645,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                               />
                             ) : (
                               <img
-                                src={shopMegaMenu.promo.mediaUrl}
+                                {...responsiveImage(shopMegaMenu.promo.mediaUrl, 'card', '340px')}
                                 alt=""
                                 loading="lazy"
+                                decoding="async"
                                 className="w-full h-full object-contain object-bottom"
                                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                               />
@@ -730,8 +734,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 >
                   {globalSettings?.logoUrl ? (
                     <img
-                      src={globalSettings.logoUrl}
+                      src={cloudinaryImageUrl(globalSettings.logoUrl, 'logo')}
                       alt={globalSettings.logoText || globalSettings.brandName || 'Logo'}
+                      decoding="async"
                       className="h-10 w-auto max-w-[180px] object-contain"
                     />
                   ) : (

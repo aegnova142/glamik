@@ -1,7 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
 import {
   loadDatabase,
@@ -52,6 +51,16 @@ import {
   ensureProductInventory,
   sqlInventoryEnabled,
 } from '../services/inventory.service';
+import {
+  createUploadMiddleware,
+  validateMediaFile,
+  uploadToCloudinary,
+  discardOrphanedAsset,
+  respondToUploadError,
+  sanitizeFilename,
+  hashBuffer,
+  UploadedAsset,
+} from '../services/media.service';
 import { env } from '../config/env';
 import { requireAdmin, AuthenticatedRequest } from '../middleware/requireAdmin';
 import {
@@ -81,45 +90,12 @@ const router = express.Router();
 // Cloudinary configuration for durable media storage (reads CLOUDINARY_URL automatically)
 cloudinary.config();
 
-// Multer holds the upload in memory; it is streamed to Cloudinary, never written to local disk
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 60 * 1024 * 1024 }, // 60 MB limit (video clips need more room than stills)
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files (JPEG, PNG, WebP, GIF, SVG) or video files (MP4, WebM, MOV) are supported'));
-    }
-  },
-});
-
-// resource_type: 'auto' lets Cloudinary classify image vs. video from the
-// actual file content, so callers never need to duplicate that check.
-function uploadBufferToCloudinary(buffer: Buffer): Promise<{ url: string; publicId: string }> {
-  return new Promise((resolve, reject) => {
-    // Cloudinary's SDK has no built-in timeout, so a stalled network call
-    // (bad credentials, DNS/firewall issue, dropped connection) leaves the
-    // callback never firing — the caller hangs forever instead of erroring.
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      reject(new Error('Cloudinary upload timed out after 30s'));
-    }, 30000);
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: 'glamirk-beauty', resource_type: 'auto' },
-      (err, result) => {
-        if (settled) return;
-        clearTimeout(timer);
-        settled = true;
-        if (err || !result) return reject(err || new Error('Cloudinary upload failed'));
-        resolve({ url: result.secure_url, publicId: result.public_id });
-      }
-    );
-    stream.end(buffer);
-  });
-}
+// Multer holds the upload in memory; it is streamed to Cloudinary, never
+// written to local disk. The ceiling here is the VIDEO one, because multer has
+// to pick a number before a single byte has been read and cannot know which
+// kind of file is arriving; validateMediaFile re-applies the (smaller) image
+// limit once the magic bytes have identified it. See media.service.ts.
+const upload = createUploadMiddleware();
 
 // ---------------------------------------------------------------------------
 // Rollback & Cleanup Timing policy
@@ -1915,37 +1891,115 @@ router.get('/admin/media', requireAdmin, async (req: AuthenticatedRequest, res: 
   res.json(db.media || []);
 });
 
+/**
+ * The single entry point for every admin image and video upload.
+ *
+ * Products, shades, categories, banners, the hero, looks, blog covers, the
+ * site logo and the media library itself all post here. Which is why the
+ * validation lives in a service rather than inline: this one handler is the
+ * whole attack surface for admin-supplied files, and it is also the one place
+ * a format or limit change has to be made.
+ *
+ * The order of operations is the safety argument:
+ *
+ *   validate → upload → persist → (only on persist failure) roll back
+ *
+ * Nothing is deleted on the success path. An upload that replaces an image
+ * elsewhere in the CMS leaves the old asset alone — see the "Rollback &
+ * Cleanup Timing" policy near the top of this file.
+ */
 router.post(
   '/admin/media/upload',
   requireAdmin,
-  upload.single('file'),
+  (req, res, next) => {
+    // multer's own errors (file too large, too many files) are surfaced here
+    // rather than thrown onward. Left to Express's default handler they come
+    // back as an HTML 500 stack trace, which is both an information leak and
+    // a baffling thing to show an admin who picked a 40 MB photo.
+    upload.single('file')(req, res, (err) => {
+      if (err) return respondToUploadError(err, res);
+      next();
+    });
+  },
   async (req: AuthenticatedRequest, res: Response) => {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+    const result = validateMediaFile(req.file, { accept: 'image-or-video' });
+    if (result.outcome === 'rejected') {
+      // Full detail to the log, a plain sentence to the admin. The detail
+      // includes what the bytes actually looked like, which is what makes a
+      // rejected upload diagnosable without asking them to send the file.
+      console.warn(
+        `[media] rejected upload from ${req.user?.email || 'unknown admin'}: ${result.error.logDetail}`
+      );
+      return res.status(result.error.status).json({ error: result.error.message });
     }
 
-    let uploaded: { url: string; publicId: string };
+    const file = result.file;
+    if (file.sanitizedNotes.length) {
+      console.warn(
+        `[media] sanitised SVG from ${req.user?.email || 'unknown admin'} — removed: ${file.sanitizedNotes.join(', ')}`
+      );
+    }
+
+    const displayName = sanitizeFilename(req.body.name || req.file?.originalname);
+
+    // Re-uploading a file that is already in the library returns the existing
+    // entry instead of storing identical pixels twice. The match is on a
+    // sha256 of the exact bytes, so it can only ever collapse two genuinely
+    // identical files — and because it reuses the existing record rather than
+    // creating a second one pointing at the same asset, deleting one entry
+    // can never orphan another.
+    const contentHash = hashBuffer(file.buffer);
+    const existingDb = await loadDatabase();
+    const duplicate = (existingDb.media || []).find((m) => m.contentHash && m.contentHash === contentHash);
+    if (duplicate) {
+      console.log(`[media] re-upload of an existing asset (${duplicate.id}) — reusing it`);
+      return res.json(duplicate);
+    }
+
+    let uploaded: UploadedAsset;
     try {
-      uploaded = await uploadBufferToCloudinary(req.file.buffer);
+      uploaded = await uploadToCloudinary(file, { folder: 'glamirk-beauty' });
     } catch (err) {
-      console.error('Cloudinary upload failed:', err);
-      return res.status(502).json({ error: 'Failed to upload file to storage' });
+      console.error('[media] Cloudinary upload failed:', err);
+      return res.status(502).json({
+        error: 'Could not save that file to storage right now. Please try again.',
+      });
     }
 
-    const db = await loadDatabase();
     const mediaItem: CMSMediaItem = {
       id: 'med-' + Date.now(),
-      name: req.body.name || req.file.originalname,
+      name: displayName,
       url: uploaded.url,
       publicId: uploaded.publicId,
-      size: req.file.size,
-      mimeType: req.file.mimetype,
-      altText: req.body.altText || req.file.originalname,
+      size: uploaded.bytes ?? file.buffer.length,
+      // The verified type, not the client-declared one. A file posted as
+      // image/png whose bytes are WebP is stored as, and reported as, WebP.
+      mimeType: file.mimeType,
+      altText: req.body.altText || displayName,
       uploadedAt: new Date().toISOString(),
+      width: uploaded.width,
+      height: uploaded.height,
+      format: uploaded.format,
+      resourceType: uploaded.resourceType,
+      contentHash: uploaded.contentHash,
+      ...(uploaded.width && uploaded.height ? { dimensions: `${uploaded.width} × ${uploaded.height}` } : {}),
     };
 
-    db.media.unshift(mediaItem);
-    await saveDatabase(db);
+    try {
+      const db = await loadDatabase();
+      db.media.unshift(mediaItem);
+      await saveDatabase(db);
+    } catch (err) {
+      // Cloudinary succeeded but the reference never landed, so nothing in the
+      // app knows this asset exists. It is safe — and only safe in exactly
+      // this case — to remove it, because it is brand new and unreferenced.
+      console.error('[media] saving the media record failed after a successful upload:', err);
+      await discardOrphanedAsset(uploaded);
+      return res.status(500).json({
+        error: 'The image uploaded but could not be saved. Nothing was changed — please try again.',
+      });
+    }
+
     await logAudit(req, 'UPLOAD_MEDIA', 'MEDIA', mediaItem.id, mediaItem.name);
     broadcastEvent('CMS_UPDATE', 'media', mediaItem);
 

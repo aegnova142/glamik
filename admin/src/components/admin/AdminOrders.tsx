@@ -27,6 +27,7 @@ import {
   AlertCircle,
   Check,
 } from 'lucide-react';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 // Every status an order may actually hold, including the legacy spellings —
 // filtering by a status no order can have would silently return nothing.
@@ -203,7 +204,7 @@ export const AdminOrders: React.FC = () => {
                 {selectedOrder.items.map((item, idx) => (
                   <div key={idx} className="py-3 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <img src={item.productImage} alt={item.productName} className="w-11 h-13 object-cover rounded border border-[#E8D5A8]/20" />
+                      <img src={cloudinaryImageUrl(item.productImage, 'thumb')} alt={item.productName} className="w-11 h-13 object-cover rounded border border-[#E8D5A8]/20" />
                       <div>
                         <p className="text-xs text-[#FAF9F6] font-medium">{item.productName}</p>
                         <p className="text-[11px] text-[#6B6B6B]">

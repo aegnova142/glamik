@@ -11,6 +11,7 @@ import {
 import { useSyncOnce } from '../../hooks/useSyncOnce';
 import { MediaUploadField } from './MediaUploadField';
 import { Plus, Trash2, Save, Check, Eye, EyeOff, Image as ImageIcon, Film, ArrowRight } from 'lucide-react';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const inputCls = 'w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]';
 const labelCls = 'block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1';
@@ -206,7 +207,7 @@ export const AdminShopMegaMenu: React.FC = () => {
           <div key={col.id} className="p-5 rounded-xl bg-[#171717] border border-[#E8D5A8]/30 space-y-4">
             <div className="flex flex-wrap items-center gap-3">
               <span className="w-10 h-10 rounded-full bg-[#0B0B0B] border border-[#E8D5A8]/30 overflow-hidden shrink-0 flex items-center justify-center">
-                {col.iconUrl ? <img src={col.iconUrl} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="w-4 h-4 text-[#6B6B6B]" />}
+                {col.iconUrl ? <img src={cloudinaryImageUrl(col.iconUrl, 'thumb')} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="w-4 h-4 text-[#6B6B6B]" />}
               </span>
               <input type="text" value={col.title} onChange={(e) => updateColumn(col.id, { title: e.target.value })} placeholder="Column title" className="flex-1 min-w-[160px] px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-sm font-serif text-[#FAF9F6]" />
               <div className="flex items-center gap-1">
@@ -263,7 +264,7 @@ export const AdminShopMegaMenu: React.FC = () => {
                 <div key={item.id} className="p-3 rounded-lg bg-[#0B0B0B] border border-[#E8D5A8]/20 space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="w-9 h-9 rounded-lg bg-[#171717] border border-[#E8D5A8]/20 overflow-hidden shrink-0 flex items-center justify-center">
-                      {item.imageUrl ? <img src={item.imageUrl} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="w-3.5 h-3.5 text-[#6B6B6B]" />}
+                      {item.imageUrl ? <img src={cloudinaryImageUrl(item.imageUrl, 'thumb')} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="w-3.5 h-3.5 text-[#6B6B6B]" />}
                     </span>
                     <input type="text" value={item.name} onChange={(e) => updateItem(col.id, item.id, { name: e.target.value })} placeholder="Item name" className="flex-1 px-3 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]" />
                     <button onClick={() => moveItem(col.id, ii, -1)} disabled={ii === 0} className="px-2 py-1 text-xs bg-[#171717] border border-[#E8D5A8]/20 rounded text-[#6B6B6B] hover:text-[#FAF9F6] disabled:opacity-30 cursor-pointer">↑</button>
@@ -369,7 +370,7 @@ export const AdminShopMegaMenu: React.FC = () => {
                 {state.promo.mediaType === 'video' ? (
                   <video src={state.promo.mediaUrl} poster={state.promo.posterUrl || undefined} muted loop autoPlay playsInline className="w-full h-full object-contain object-bottom" />
                 ) : (
-                  <img src={state.promo.mediaUrl} alt="" className="w-full h-full object-contain object-bottom" />
+                  <img src={cloudinaryImageUrl(state.promo.mediaUrl, 'thumb')} alt="" className="w-full h-full object-contain object-bottom" />
                 )}
               </div>
             )}

@@ -4,6 +4,7 @@ import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { CMSHeroContent, CMSHeroSlide, CMSHeroBackground } from '@glamirk/shared/types';
 import { HeroBackgroundCarousel } from './HeroBackgroundCarousel';
 import { resolveHeroLayout, heroRowOrderClass, heroTextAlignClasses } from '@glamirk/shared/components';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 // Stable reference so a hero with no Portion 2 images doesn't hand
 // HeroBackgroundCarousel a fresh [] every render (which would defeat its
@@ -398,10 +399,16 @@ export const Hero: React.FC<HeroProps> = ({ onShopClick, onFindShadeClick }) => 
                 <div className="relative aspect-[0.91] w-full">
 
                   {/* Subject photo fills the card — background stays true to each slide's own image instead of a fixed studio tint */}
+                  {/* Above the fold on every page load, so this is the LCP
+                      element: eager, high priority, decoded synchronously.
+                      Never give it loading="lazy". */}
                   <img
-                    src={activeSlide.image}
+                    {...responsiveImage(activeSlide.image, 'gallery', '(max-width: 1024px) 100vw, 45vw')}
                     alt="Premium beauty collection"
                     draggable={false}
+                    loading="eager"
+                    fetchPriority="high"
+                    decoding="sync"
                     className="absolute inset-0 w-full h-full object-cover"
                   />
 

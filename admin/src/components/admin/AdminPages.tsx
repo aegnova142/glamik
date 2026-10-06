@@ -23,6 +23,7 @@ import {
   Sparkles,
   ArrowLeft,
 } from 'lucide-react';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const AVAILABLE_SECTION_TYPES: { type: CMSSectionType; label: string; description: string }[] = [
   { type: 'hero', label: 'Hero Atelier Showcase', description: 'Large luxury editorial banner with heading, description, CTAs, and image' },
@@ -517,7 +518,7 @@ export const AdminPages: React.FC = () => {
                         {editingSection.props.image && (
                           <div className="mt-2 w-full h-32 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B]">
                             <img
-                              src={editingSection.props.image}
+                              src={cloudinaryImageUrl(editingSection.props.image, 'tile')}
                               alt="Section Preview"
                               className="w-full h-full object-cover"
                             />

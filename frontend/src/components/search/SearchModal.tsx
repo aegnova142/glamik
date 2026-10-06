@@ -163,7 +163,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                             className="p-3 bg-[#FAF9F6] hover:bg-[#FAF9F6] border border-[#E8D5A8] flex items-center justify-between cursor-pointer transition-colors"
                           >
                             <div className="flex items-center gap-3">
-                              <ProductImage
+                              <ProductImage preset="thumb"
                                 src={p.images.primary}
                                 alt={p.name}
                                 className="w-10 h-12 object-cover border border-[#E8D5A8]"

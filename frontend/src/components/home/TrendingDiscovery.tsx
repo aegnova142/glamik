@@ -7,6 +7,7 @@ import { GLAMIRK_LOOKS } from '@glamirk/shared/data/looks';
 import { GLAMIRK_JOURNAL_ARTICLES_EXTENDED } from '@glamirk/shared/data/editorial';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { ProductImage } from '../product/ProductImage';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface TrendingDiscoveryProps {
   onOpenProduct: (product: Product) => void;
@@ -87,8 +88,10 @@ export const TrendingDiscovery: React.FC<TrendingDiscoveryProps> = ({
               </span>
               <div className="aspect-[4/3] bg-[#FCE8ED] rounded-2xl overflow-hidden flex items-center justify-center">
                 <img
-                  src={trendingLook.image}
+                  {...responsiveImage(trendingLook.image, 'tile', '(max-width: 1024px) 100vw, 33vw')}
                   alt={trendingLook.title}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700"
                 />
               </div>
@@ -116,8 +119,10 @@ export const TrendingDiscovery: React.FC<TrendingDiscoveryProps> = ({
               </span>
               <div className="aspect-[4/3] bg-[#FCE8ED] rounded-2xl overflow-hidden">
                 <img
-                  src={trendingArticle.image}
+                  {...responsiveImage(trendingArticle.image, 'tile', '(max-width: 1024px) 100vw, 33vw')}
                   alt={trendingArticle.title}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                 />
               </div>

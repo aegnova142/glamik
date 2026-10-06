@@ -17,6 +17,7 @@ import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { updatePageSeo } from '../../utils/seo';
 import { trackEvent } from '../../utils/analytics';
 import { ProductImage } from '../product/ProductImage';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface CampaignLandingPageProps {
   campaignId?: string;
@@ -59,9 +60,14 @@ export const CampaignLandingPage: React.FC<CampaignLandingPageProps> = ({
     <div className="bg-[#FAF9F6] min-h-screen text-[#121212] pb-24">
       {/* Campaign Cinematic Hero */}
       <section className="relative bg-[#0B0B0B] text-[#FAF9F6] min-h-[70vh] flex items-center justify-center overflow-hidden border-b border-[#0B0B0B]">
+        {/* Full-bleed campaign hero — the LCP element of this page, so it is
+            loaded eagerly at high priority rather than deferred. */}
         <img
-          src={campaign.heroImage}
+          {...responsiveImage(campaign.heroImage, 'hero', '100vw')}
           alt={campaign.title}
+          loading="eager"
+          fetchPriority="high"
+          decoding="async"
           className="absolute inset-0 w-full h-full object-cover opacity-60 scale-105"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B] via-[#0B0B0B]/60 to-[#0B0B0B]/40" />

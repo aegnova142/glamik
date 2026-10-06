@@ -4,6 +4,7 @@ import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { CMSAboutContent } from '@glamirk/shared/types';
 import { ImageCropUploadModal } from './ImageCropUploadModal';
 import { useSyncOnce } from '../../hooks/useSyncOnce';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const AVAILABLE_VALUE_ICONS = ['ShieldCheck', 'Eye', 'Users', 'Leaf', 'FlaskConical', 'Heart'];
 
@@ -252,7 +253,7 @@ export const AdminAbout: React.FC = () => {
             <div className="space-y-2">
               <div className="rounded-2xl overflow-hidden border border-[#E8D5A8]/30 bg-white text-center">
                 <div className="aspect-[3/4] w-full overflow-hidden bg-[#FCE8ED]">
-                  <img src={f.image} alt={f.name} className="w-full h-full object-cover" />
+                  <img src={cloudinaryImageUrl(f.image, 'thumb')} alt={f.name} className="w-full h-full object-cover" />
                 </div>
                 <div className="p-2.5 space-y-0.5">
                   <p className="text-[10px] font-bold text-[#121212] leading-snug truncate">{f.name}</p>

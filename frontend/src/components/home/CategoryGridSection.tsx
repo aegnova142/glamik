@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowRight, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
+import { cloudinaryImageUrl, cloudinarySrcSet } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface CategoryItem {
   id: string;
@@ -130,8 +131,12 @@ export const CategoryGridSection: React.FC<CategoryGridSectionProps> = ({
               {/* Image Container with Soft Pink Background */}
               <div className="relative aspect-[4/3] rounded-[16px] overflow-hidden bg-[#FCE8ED] mb-4 border border-[#E8D5A8]/60">
                 <img
-                  src={cat.image}
+                  src={cloudinaryImageUrl(cat.image, 'tile')}
+                  srcSet={cloudinarySrcSet(cat.image, 'tile') || undefined}
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                   alt={cat.name}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
                 <div className="absolute top-2.5 right-2.5 bg-white/90 backdrop-blur-md px-2.5 py-0.5 rounded-full text-[10px] font-bold text-[#F05A7E] border border-[#E8D5A8]">

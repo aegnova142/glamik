@@ -3,6 +3,7 @@ import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { TryOnModelPreset, SkinToneType, UndertoneType } from '@glamirk/shared/types';
 import { Plus, Trash2, Save, Check, ArrowLeft, ImageUp } from 'lucide-react';
 import { ImageCropUploadModal } from './ImageCropUploadModal';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const SKIN_TONES: SkinToneType[] = ['Fair', 'Light', 'Medium', 'Tan', 'Deep'];
 const UNDERTONES: UndertoneType[] = ['Warm', 'Cool', 'Neutral'];
@@ -168,7 +169,7 @@ export const AdminTryOnModels: React.FC = () => {
               </label>
               {editing.image ? (
                 <div className="space-y-2">
-                  <img src={editing.image} alt="Model" className="w-full h-56 rounded-lg object-cover border border-[#E8D5A8]/30" />
+                  <img src={cloudinaryImageUrl(editing.image, 'tile')} alt="Model" className="w-full h-56 rounded-lg object-cover border border-[#E8D5A8]/30" />
                   <button
                     type="button"
                     onClick={() => setShowUpload(true)}
@@ -226,7 +227,7 @@ export const AdminTryOnModels: React.FC = () => {
             <div className="bg-white rounded-3xl border border-[#E8D5A8] shadow-[0_4px_16px_rgba(240,90,126,0.04)] overflow-hidden">
               <div className="aspect-[3/4] bg-[#FCE8ED] flex items-center justify-center overflow-hidden">
                 {editing.image ? (
-                  <img src={editing.image} alt="" className="w-full h-full object-cover" />
+                  <img src={cloudinaryImageUrl(editing.image, 'thumb')} alt="" className="w-full h-full object-cover" />
                 ) : (
                   <span className="text-[11px] text-[#6B6B6B]">No image yet</span>
                 )}
@@ -300,7 +301,7 @@ export const AdminTryOnModels: React.FC = () => {
                 <td className="p-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-12 rounded-lg bg-[#FCE8ED]/10 border border-[#E8D5A8]/20 overflow-hidden shrink-0">
-                      {model.image && <img src={model.image} alt="" className="w-full h-full object-cover" />}
+                      {model.image && <img src={cloudinaryImageUrl(model.image, 'thumb')} alt="" className="w-full h-full object-cover" />}
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-[#FAF9F6]">{model.name}</p>

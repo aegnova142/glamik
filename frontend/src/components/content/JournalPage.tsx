@@ -8,6 +8,7 @@ import { GLAMIRK_PRODUCTS } from '@glamirk/shared/data/products';
 import { updatePageSeo } from '../../utils/seo';
 import { trackEvent } from '../../utils/analytics';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface JournalPageProps {
   initialCategory?: string;
@@ -147,10 +148,12 @@ export const JournalPage: React.FC<JournalPageProps> = ({
             {/* Right Cinematic Editorial Visual */}
             <div className="lg:col-span-6 relative min-h-[380px] lg:min-h-full overflow-hidden">
               <img
-                src={heroArticle.heroImageLarge || heroArticle.image}
+                {...responsiveImage(heroArticle.heroImageLarge || heroArticle.image, 'hero', '(max-width: 1024px) 100vw, 50vw')}
                 alt={heroArticle.title}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out"
                 loading="eager"
+                fetchPriority="high"
+                decoding="sync"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B]/80 via-transparent to-[#0B0B0B]/20 lg:bg-gradient-to-r lg:from-[#0B0B0B] lg:via-transparent lg:to-transparent" />
             </div>

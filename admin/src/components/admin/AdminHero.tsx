@@ -6,6 +6,7 @@ import { ImageCropUploadModal } from './ImageCropUploadModal';
 import { useSyncOnce } from '../../hooks/useSyncOnce';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { HPOSITION_OPTIONS, resolveHeroLayout } from '@glamirk/shared/components';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const AVAILABLE_ICONS = ['ShieldCheck', 'Sparkles', 'Truck', 'Headphones', 'RotateCcw', 'Lock'];
 
@@ -17,7 +18,7 @@ const SlideCompositionPreview: React.FC<{ slide: Pick<CMSHeroSlide, 'image'> & P
     <div className="w-full max-w-[280px] rounded-xl bg-[#FAF9F6] p-4">
       <div className="relative mx-auto aspect-[0.91] w-[70%] overflow-hidden rounded-[14px] border border-[#E8D5A8] bg-[#0B0B0B] shadow-[0_10px_25px_rgba(11,11,11,0.16)]">
         {slide.image ? (
-          <img src={slide.image} alt="Hero preview" className="absolute inset-0 h-full w-full object-cover" />
+          <img src={cloudinaryImageUrl(slide.image, 'tile')} alt="Hero preview" className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[#6B6B6B]">
             <ImageOff className="h-6 w-6" />
@@ -338,7 +339,7 @@ export const AdminHero: React.FC = () => {
           </div>
           {state.image && (
             <div className="mt-2 w-24 aspect-[0.91] rounded-lg overflow-hidden border border-[#E8D5A8]/30 bg-[#0B0B0B]">
-              <img src={state.image} alt="Outer preview" className="w-full h-full object-cover" />
+              <img src={cloudinaryImageUrl(state.image, 'thumb')} alt="Outer preview" className="w-full h-full object-cover" />
             </div>
           )}
         </div>
@@ -511,7 +512,7 @@ export const AdminHero: React.FC = () => {
               <div className="flex items-center gap-3">
                 {slide.image && (
                   <div className="w-14 aspect-[0.91] rounded-lg overflow-hidden border border-[#E8D5A8]/30 bg-[#171717] shrink-0">
-                    <img src={slide.image} alt="Slide preview" className="w-full h-full object-cover" />
+                    <img src={cloudinaryImageUrl(slide.image, 'thumb')} alt="Slide preview" className="w-full h-full object-cover" />
                   </div>
                 )}
                 <div className="flex-1 space-y-1.5">
@@ -639,7 +640,7 @@ export const AdminHero: React.FC = () => {
 
               <div className="aspect-video w-full rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#171717]">
                 {bg.image ? (
-                  <img src={bg.image} alt={`Background ${idx + 1} preview`} className="w-full h-full object-cover" />
+                  <img src={cloudinaryImageUrl(bg.image, 'thumb')} alt={`Background ${idx + 1} preview`} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-[#6B6B6B]">
                     <ImageOff className="w-5 h-5" />

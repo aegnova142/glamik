@@ -18,6 +18,7 @@ import {
   formatDate,
 } from '../AccountUI';
 import { WriteReviewModal } from './OrderActionModals';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface ReviewsSectionProps {
   onExploreShop: () => void;
@@ -122,7 +123,7 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {pending.map((item) => (
                   <AccountCard key={item.productId} className="p-4 flex gap-4">
-                    <ProductImage src={item.productImage} alt="" className="w-16 h-20 object-cover border border-[#E8D5A8] rounded shrink-0" />
+                    <ProductImage preset="thumb" src={item.productImage} alt="" className="w-16 h-20 object-cover border border-[#E8D5A8] rounded shrink-0" />
                     <div className="min-w-0 flex-1 flex flex-col">
                       <h3 className="font-serif text-sm text-[#121212] leading-snug">{item.productName}</h3>
                       <p className="text-[11px] text-[#6B6B6B] mt-0.5">
@@ -153,7 +154,7 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
                   return (
                     <AccountCard key={item.productId} className="p-5">
                       <div className="flex gap-4">
-                        <ProductImage src={item.productImage} alt="" className="w-14 h-16 object-cover border border-[#E8D5A8] rounded shrink-0" />
+                        <ProductImage preset="thumb" src={item.productImage} alt="" className="w-14 h-16 object-cover border border-[#E8D5A8] rounded shrink-0" />
                         <div className="min-w-0 flex-1 space-y-2">
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div className="min-w-0">
@@ -196,8 +197,10 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
                                     </>
                                   ) : (
                                     <img
-                                      src={m.url}
+                                      src={cloudinaryImageUrl(m.url, 'thumb')}
                                       alt={`Your photo ${idx + 1} of ${item.productName}`}
+                                      loading="lazy"
+                                      decoding="async"
                                       className="w-full h-full object-cover"
                                     />
                                   )}

@@ -8,6 +8,7 @@ import { Star, ShieldCheck } from 'lucide-react';
 import { Review } from '@glamirk/shared/types';
 import { apiFetch } from '@glamirk/shared/utils/cmsClient';
 import { formatDate } from '@glamirk/shared/utils/dateFormat';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 type SortOption = 'newest' | 'highest' | 'lowest';
 
@@ -140,7 +141,7 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({
                 {rev.title && <h4 className="text-sm font-bold text-[#121212]">{rev.title}</h4>}
                 <p className="text-xs text-[#6B6B6B] leading-relaxed">{rev.comment}</p>
                 {rev.photoUrl && (
-                  <img src={rev.photoUrl} alt="Customer upload" className="w-16 h-16 object-cover rounded-lg border border-[#E8D5A8]" />
+                  <img src={cloudinaryImageUrl(rev.photoUrl, 'thumb')} alt="Customer upload" loading="lazy" decoding="async" className="w-16 h-16 object-cover rounded-lg border border-[#E8D5A8]" />
                 )}
                 <div className="pt-1 flex items-center justify-between text-[10.5px] text-[#6B6B6B]">
                   <span>{rev.customerName}</span>

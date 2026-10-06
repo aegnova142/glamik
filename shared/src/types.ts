@@ -1613,16 +1613,42 @@ export interface CMSCategory {
   subCategories: string[];
 }
 
+/**
+ * One asset in the Media Library.
+ *
+ * Every field added after the original six is optional, and that is load
+ * bearing rather than lazy typing: entries written before those fields
+ * existed are still in the live CMS document and must keep rendering. Nothing
+ * may require `width`, `format` or `contentHash` to be present — the only
+ * field the storefront has ever actually needed is `url`.
+ */
 export interface CMSMediaItem {
   id: string;
   name: string;
+  /** Cloudinary secure (HTTPS) delivery URL of the stored original. */
   url: string;
   size: number;
   mimeType: string;
   altText: string;
+  /** Legacy free-text form, e.g. "1200 × 1200". Superseded by width/height. */
   dimensions?: string;
   uploadedAt: string;
   publicId?: string;
+  /** Intrinsic pixel size of the stored original, when it could be determined. */
+  width?: number;
+  height?: number;
+  /** Cloudinary's name for the stored format: 'jpg', 'png', 'webp', 'avif', 'gif'. */
+  format?: string;
+  resourceType?: 'image' | 'video';
+  /**
+   * sha256 of the uploaded bytes.
+   *
+   * Lets a repeat upload of a file already in the library return the existing
+   * entry instead of storing a second copy of identical pixels. Matching is
+   * strictly on exact bytes — no perceptual similarity, no re-encoding — so it
+   * cannot mistake two different images for each other.
+   */
+  contentHash?: string;
 }
 
 export interface CMSAnnouncementMessage {

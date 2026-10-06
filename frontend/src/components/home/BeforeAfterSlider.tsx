@@ -7,6 +7,7 @@
 // the Find Your Perfect Match section. Broken-image guards added 2026-10-05.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, ImageOff } from 'lucide-react';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface BeforeAfterSliderProps {
   beforeImage?: string;
@@ -86,15 +87,17 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
 
       {/* AFTER (base) */}
       {showAfter && (
-        <img src={afterImage} alt={`${alt} — ${afterLabel}`} draggable={false} onError={() => setAfterOk(false)} className="absolute inset-0 w-full h-full object-cover" />
+        <img {...responsiveImage(afterImage, 'gallery')} alt={`${alt} — ${afterLabel}`} draggable={false} loading="lazy" decoding="async" onError={() => setAfterOk(false)} className="absolute inset-0 w-full h-full object-cover" />
       )}
 
       {/* BEFORE (clipped to the left of the divider) */}
       {showBefore && (
         <img
-          src={beforeImage}
+          {...responsiveImage(beforeImage, 'gallery')}
           alt={`${alt} — ${beforeLabel}`}
           draggable={false}
+          loading="lazy"
+          decoding="async"
           onError={() => setBeforeOk(false)}
           className="absolute inset-0 w-full h-full object-cover"
           style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}

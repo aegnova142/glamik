@@ -34,6 +34,7 @@ import { ShadeComparison } from './ShadeComparison';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { BeautyJourneySection } from './BeautyJourneySection';
 import { ProductImage } from '../product/ProductImage';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface FindMyShadePageProps {
   onExploreShop: () => void;
@@ -293,8 +294,11 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
               <div className="lg:col-span-5">
                 <div className="relative aspect-[4/5] bg-[#E8D5A8] border border-[#E8D5A8] p-3 shadow-xl">
                   <img
-                    src={hero.image}
+                    {...responsiveImage(hero.image, 'gallery', '(max-width: 1024px) 100vw, 42vw')}
                     alt="Glamirk Shade Consultation"
+                    loading="eager"
+                    fetchPriority="high"
+                    decoding="async"
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute -bottom-5 -left-5 bg-[#FAF9F6] p-4 border border-[#E8D5A8] shadow-lg max-w-[220px]">
@@ -882,7 +886,7 @@ export const FindMyShadePage: React.FC<FindMyShadePageProps> = ({
             {/* Left Image & Shade Swatch */}
             <div className="lg:col-span-6 bg-[#FAF9F6] p-8 sm:p-12 relative flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-[#E8D5A8]">
               <div className="relative aspect-square max-w-md mx-auto overflow-hidden bg-[#FAF9F6] border border-[#E8D5A8]">
-                <ProductImage
+                <ProductImage preset="gallery"
                   src={matchResult.primaryProduct.images.primary}
                   alt={matchResult.primaryProduct.name}
                   className="w-full h-full object-cover"

@@ -183,7 +183,7 @@ export const ShadeHistorySection: React.FC<ShadeHistorySectionProps> = ({
                           onClick={() => onSelectProduct(product)}
                           className="flex gap-3 text-left w-full group cursor-pointer"
                         >
-                          <ProductImage
+                          <ProductImage preset="thumb"
                             src={product.images?.primary}
                             alt=""
                             className="w-14 h-16 object-cover border border-[#E8D5A8] rounded shrink-0"

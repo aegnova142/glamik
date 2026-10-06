@@ -181,7 +181,7 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
                     className="w-full h-full object-contain"
                   />
                 ) : (
-                  <ProductImage
+                  <ProductImage preset="gallery"
                     src={look.image}
                     alt={look.title}
                     className="w-full h-full object-contain"
@@ -232,7 +232,7 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
                           className="p-3 bg-[#FAF9F6] border border-[#E8D5A8] flex items-center gap-3 cursor-pointer hover:border-[#0B0B0B] transition-all"
                         >
                           <div className="w-12 h-14 bg-[#FAF9F6] overflow-hidden flex-shrink-0 border border-[#E8D5A8]">
-                            <ProductImage
+                            <ProductImage preset="thumb"
                               src={item.product.images.primary}
                               alt={item.product.name}
                               className="w-full h-full object-cover"

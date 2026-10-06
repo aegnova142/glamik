@@ -18,6 +18,7 @@ import { updatePageSeo } from '../../utils/seo';
 import { trackEvent } from '../../utils/analytics';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { ProductImage } from '../product/ProductImage';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface BeautyGuidesPageProps {
   initialGuideId?: string;
@@ -148,8 +149,10 @@ export const BeautyGuidesPage: React.FC<BeautyGuidesPageProps> = ({
 
               <div className="lg:col-span-6 relative min-h-[350px] lg:min-h-full bg-[#FAF9F6]">
                 <img
-                  src={activeGuide.heroImage}
+                  {...responsiveImage(activeGuide.heroImage, 'gallery', '(max-width: 1024px) 100vw, 50vw')}
                   alt={activeGuide.title}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover"
                 />
               </div>

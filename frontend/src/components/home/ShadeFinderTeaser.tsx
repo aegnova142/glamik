@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Sparkles, ArrowRight, Droplet, Gift, Smile, Heart } from 'lucide-react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { BeforeAfterSlider } from './BeforeAfterSlider';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface ShadeFinderTeaserProps {
   onOpenShadeFinderModal: () => void;
@@ -129,7 +130,7 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
                       >
                         <span className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 overflow-hidden ${isSel ? 'bg-white/20' : 'bg-[#FCE8ED]'}`}>
                           {lt.iconUrl ? (
-                            <img src={lt.iconUrl} alt="" className="w-full h-full object-cover" />
+                            <img src={cloudinaryImageUrl(lt.iconUrl, 'thumb')} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                           ) : (
                             <Icon className={`w-3.5 h-3.5 ${isSel ? 'text-white' : 'text-[#E0265F]'}`} />
                           )}

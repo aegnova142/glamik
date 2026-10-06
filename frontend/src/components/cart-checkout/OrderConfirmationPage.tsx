@@ -201,7 +201,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({
               {order.items.map((item, idx) => (
                 <div key={idx} className="py-3.5 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
-                    <ProductImage
+                    <ProductImage preset="thumb"
                       src={item.productImage}
                       alt={item.productName}
                       className="w-14 h-16 object-cover bg-[#FAF9F6] border border-[#E8D5A8]"

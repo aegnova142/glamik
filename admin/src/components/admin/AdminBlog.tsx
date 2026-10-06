@@ -9,6 +9,7 @@ import { JournalArticle, CMSJournalSectionCopy } from '@glamirk/shared/types';
 import { Plus, Trash2, Save, Check, ArrowLeft } from 'lucide-react';
 import { ImageCropUploadModal } from './ImageCropUploadModal';
 import { useSyncOnce } from '../../hooks/useSyncOnce';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const CATEGORY_OPTIONS = ['BEAUTY GUIDES', 'MAKEUP', 'SKIN', 'NAILS', 'GLAMIRK STORIES', 'TRENDS'];
 
@@ -267,7 +268,7 @@ export const AdminBlog: React.FC = () => {
             </div>
             {editingArticle.image && (
               <div className="mt-2 w-full h-28 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B]">
-                <img src={editingArticle.image} alt="Cover" className="w-full h-full object-cover" />
+                <img src={cloudinaryImageUrl(editingArticle.image, 'tile')} alt="Cover" className="w-full h-full object-cover" />
               </div>
             )}
             {isUploadOpen && (
@@ -446,7 +447,7 @@ export const AdminBlog: React.FC = () => {
             className="rounded-xl bg-[#171717] border border-[#E8D5A8]/30 overflow-hidden flex flex-col justify-between"
           >
             <div className="h-44 relative bg-[#0B0B0B]">
-              <img src={art.image} alt={art.title} className="w-full h-full object-cover" />
+              <img src={cloudinaryImageUrl(art.image, 'thumb')} alt={art.title} className="w-full h-full object-cover" />
               <div className="absolute top-2 left-2 flex gap-1.5">
                 {art.status === 'draft' && (
                   <span className="px-2 py-0.5 bg-[#6B6B6B] text-white text-[9px] font-bold uppercase tracking-wider rounded-full">Draft</span>

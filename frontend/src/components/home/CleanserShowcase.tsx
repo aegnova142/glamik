@@ -4,6 +4,7 @@ import { Droplets, Sparkles, ArrowRight, Check, ShieldCheck } from 'lucide-react
 import { Product } from '@glamirk/shared/types';
 import { GLAMIRK_PRODUCTS } from '@glamirk/shared/data/products';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface CleanserShowcaseProps {
   onDiscoverCleanser: (product: Product) => void;
@@ -58,8 +59,10 @@ export const CleanserShowcase: React.FC<CleanserShowcaseProps> = ({ onDiscoverCl
           <div className="lg:col-span-6 space-y-5">
             <div className="relative aspect-[4/5] sm:aspect-[1/1] lg:aspect-[4/5] overflow-hidden rounded-3xl bg-white border border-[#E8D5A8] shadow-[0_16px_40px_rgba(240, 90, 126,0.1)]">
               <img
-                src={steps[activeStep].image}
+                {...responsiveImage(steps[activeStep].image, 'gallery', '(max-width: 1024px) 100vw, 50vw')}
                 alt={`Glamirk Balm to Water Transformation - ${steps[activeStep].title}`}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover transition-all duration-700"
               />
               

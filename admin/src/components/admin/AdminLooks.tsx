@@ -9,6 +9,7 @@ import { Look, LookProductItem } from '@glamirk/shared/types';
 import { Plus, Trash2, Save, Check, ArrowLeft, Video, Loader2 } from 'lucide-react';
 import { ImageCropUploadModal } from './ImageCropUploadModal';
 import { useFileUpload } from '../../hooks/useFileUpload';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const CATEGORY_OPTIONS = ['EVERYDAY GLAM', 'DATE NIGHT', 'WEDDING GLAM', 'MINIMAL GLAM'];
 
@@ -176,7 +177,7 @@ export const AdminLooks: React.FC = () => {
               </button>
             </div>
             {editingLook.image && (
-              <img src={editingLook.image} alt="" className="mt-2 w-full h-40 object-contain bg-[#0B0B0B] rounded-lg border border-[#E8D5A8]/20" />
+              <img src={cloudinaryImageUrl(editingLook.image, 'tile')} alt="" className="mt-2 w-full h-40 object-contain bg-[#0B0B0B] rounded-lg border border-[#E8D5A8]/20" />
             )}
             {isUploadOpen && (
               <ImageCropUploadModal
@@ -327,7 +328,7 @@ export const AdminLooks: React.FC = () => {
             className="rounded-xl bg-[#171717] border border-[#E8D5A8]/30 overflow-hidden flex flex-col justify-between"
           >
             <div className="h-44 relative bg-[#0B0B0B] flex items-center justify-center">
-              <img src={look.image} alt={look.title} className="w-full h-full object-contain" />
+              <img src={cloudinaryImageUrl(look.image, 'thumb')} alt={look.title} className="w-full h-full object-contain" />
               <span className="absolute top-2 left-2 px-2 py-0.5 bg-[#C9972B] text-[#0B0B0B] text-[9px] font-bold uppercase tracking-wider rounded-full">
                 {look.category}
               </span>

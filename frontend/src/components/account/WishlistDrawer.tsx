@@ -97,7 +97,7 @@ export const WishlistDrawer: React.FC<WishlistDrawerProps> = ({
                         onQuickView(product);
                       }}
                     >
-                      <ProductImage
+                      <ProductImage preset="thumb"
                         src={product.images.primary}
                         alt={product.name}
                         className="w-full h-full object-cover"

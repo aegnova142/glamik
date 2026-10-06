@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { CMSFooterLink, CMSGlobalSettings } from '@glamirk/shared/types';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 /** Footer's own logo slot — independent of the navbar's `logoUrl`, since the
  * footer sits on a dark background and usually needs a light/reversed mark
@@ -35,8 +36,10 @@ const FooterBrandMark: React.FC<{ globalSettings: CMSGlobalSettings | null | und
 }) =>
   globalSettings?.footerLogoUrl ? (
     <img
-      src={globalSettings.footerLogoUrl}
+      src={cloudinaryImageUrl(globalSettings.footerLogoUrl, 'logo')}
       alt={globalSettings.logoText || globalSettings.brandName || 'Logo'}
+      loading="lazy"
+      decoding="async"
       className="h-12 w-auto max-w-[200px] object-contain"
     />
   ) : (

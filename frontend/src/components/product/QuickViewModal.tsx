@@ -110,7 +110,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
               <div className="space-y-4">
                 {/* Main Large Visual */}
                 <div className="relative aspect-[4/5] bg-white rounded-2xl overflow-hidden border border-[#E8D5A8] shadow-sm flex items-center justify-center">
-                  <ProductImage
+                  <ProductImage preset="gallery"
                     src={imagesList[activeImageIndex] || product.images.primary}
                     alt={product.name}
                     className="w-full h-full object-contain transition-all duration-500"
@@ -135,7 +135,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                             : 'border-[#E8D5A8] opacity-70 hover:opacity-100'
                         }`}
                       >
-                        <ProductImage src={img} alt="Thumbnail" className="w-full h-full object-contain" />
+                        <ProductImage preset="thumb" src={img} alt="Thumbnail" className="w-full h-full object-contain" />
                       </button>
                     ))}
                   </div>

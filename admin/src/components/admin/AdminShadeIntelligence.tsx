@@ -6,6 +6,7 @@ import { ImageCropUploadModal } from './ImageCropUploadModal';
 import { MediaUploadField } from './MediaUploadField';
 import { useSyncOnce } from '../../hooks/useSyncOnce';
 import { useDragReorder } from '../../hooks/useDragReorder';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const DEFAULT_TEASER: CMSShadeFinderTeaser = {
   badgeText: 'Shade Intelligence',
@@ -218,7 +219,7 @@ export const AdminShadeIntelligence: React.FC = () => {
           <div key={lt.id} className="p-4 bg-[#0B0B0B] border border-[#E8D5A8]/20 rounded-xl space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="w-9 h-9 rounded-full bg-[#171717] border border-[#E8D5A8]/20 overflow-hidden shrink-0 flex items-center justify-center">
-                {lt.iconUrl ? <img src={lt.iconUrl} alt="" className="w-full h-full object-cover" /> : <ImageOff className="w-3.5 h-3.5 text-[#6B6B6B]" />}
+                {lt.iconUrl ? <img src={cloudinaryImageUrl(lt.iconUrl, 'thumb')} alt="" className="w-full h-full object-cover" /> : <ImageOff className="w-3.5 h-3.5 text-[#6B6B6B]" />}
               </span>
               <input type="text" value={lt.name} onChange={(e) => updateLookType(lt.id, { name: e.target.value })} placeholder="Option name" className="flex-1 min-w-[140px] px-3 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]" />
               <button onClick={() => moveLookType(idx, -1)} disabled={idx === 0} className="px-2 py-1 text-xs bg-[#171717] border border-[#E8D5A8]/20 rounded text-[#6B6B6B] hover:text-[#FAF9F6] disabled:opacity-30 cursor-pointer">↑</button>
@@ -335,12 +336,12 @@ export const AdminShadeIntelligence: React.FC = () => {
                   <div className="space-y-2">
                     <MediaUploadField kind="image" label="Before Image" value={cfg.beforeImage || ''} onChange={(url) => up({ beforeImage: url })} />
                     <input type="text" value={cfg.beforeLabel || ''} onChange={(e) => up({ beforeLabel: e.target.value })} placeholder="Before label (e.g. Original)" className={inputClass} />
-                    {cfg.beforeImage && <img src={cfg.beforeImage} alt="" className="w-full h-28 object-cover rounded-lg border border-[#E8D5A8]/20" />}
+                    {cfg.beforeImage && <img src={cloudinaryImageUrl(cfg.beforeImage, 'thumb')} alt="" className="w-full h-28 object-cover rounded-lg border border-[#E8D5A8]/20" />}
                   </div>
                   <div className="space-y-2">
                     <MediaUploadField kind="image" label="After Image" value={cfg.afterImage || ''} onChange={(url) => up({ afterImage: url })} />
                     <input type="text" value={cfg.afterLabel || ''} onChange={(e) => up({ afterLabel: e.target.value })} placeholder="After label (e.g. Matched)" className={inputClass} />
-                    {cfg.afterImage && <img src={cfg.afterImage} alt="" className="w-full h-28 object-cover rounded-lg border border-[#E8D5A8]/20" />}
+                    {cfg.afterImage && <img src={cloudinaryImageUrl(cfg.afterImage, 'thumb')} alt="" className="w-full h-28 object-cover rounded-lg border border-[#E8D5A8]/20" />}
                   </div>
                 </div>
 
@@ -475,7 +476,7 @@ export const AdminShadeIntelligence: React.FC = () => {
               <div className="flex items-center gap-3">
                 <div className="w-16 aspect-[4/5] rounded-lg overflow-hidden border border-[#E8D5A8]/30 bg-[#171717] shrink-0 flex items-center justify-center">
                   {profile.visual ? (
-                    <img src={profile.visual} alt="Visual preview" className="w-full h-full object-contain" />
+                    <img src={cloudinaryImageUrl(profile.visual, 'tile')} alt="Visual preview" className="w-full h-full object-contain" />
                   ) : (
                     <ImageOff className="w-4 h-4 text-[#6B6B6B]" />
                   )}

@@ -28,6 +28,7 @@ import {
 import { AccountSection } from '@glamirk/shared/types';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { useClickOutside } from '../../hooks/useClickOutside';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 export interface AccountNavItem {
   id: AccountSection;
@@ -174,8 +175,10 @@ export const AccountLayout: React.FC<AccountLayoutProps> = ({
               <div className="flex items-center gap-4 min-w-0">
                 {customerUser?.avatarUrl ? (
                   <img
-                    src={customerUser.avatarUrl}
+                    src={cloudinaryImageUrl(customerUser.avatarUrl, 'avatar')}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
                     className="w-14 h-14 rounded-full object-cover border border-[#C9972B]/50 shrink-0"
                   />
                 ) : (

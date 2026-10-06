@@ -11,6 +11,7 @@ import { Product, Shade, CartItem } from '@glamirk/shared/types';
 import { GLAMIRK_JOURNAL_ARTICLES_EXTENDED, GLAMIRK_BEAUTY_GUIDES } from '@glamirk/shared/data/editorial';
 import { resolveVariantGallery, variantGalleryResetKey, getCurrentPrice, getCurrentCompareAtPrice, getDefaultShade, getActiveSizeOptions } from '@glamirk/shared/utils/productVariant';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 /** The size to preselect for a given shade: that shade's own first size
  * option if it has any (a shade with exactly one size just uses it
@@ -444,7 +445,7 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                               <div className="space-y-2">
                                 <p>{step.text}</p>
                                 {step.image && (
-                                  <img src={step.image} alt={`Step ${i + 1}`} className="w-20 h-20 rounded-xl object-cover border border-[#E8D5A8]" />
+                                  <img src={cloudinaryImageUrl(step.image, 'thumb')} alt={`Step ${i + 1}`} loading="lazy" decoding="async" className="w-20 h-20 rounded-xl object-cover border border-[#E8D5A8]" />
                                 )}
                               </div>
                             </li>
@@ -542,8 +543,10 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                 >
                   <div className="w-20 h-24 overflow-hidden rounded-xl bg-[#FCE8ED] flex-shrink-0">
                     <img
-                      src={art.image}
+                      src={cloudinaryImageUrl(art.image, 'thumb')}
                       alt={art.title}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />
                   </div>

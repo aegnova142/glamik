@@ -19,6 +19,7 @@ import { updatePageSeo } from '../../utils/seo';
 import { trackEvent } from '../../utils/analytics';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { CMSAboutContent } from '@glamirk/shared/types';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface AboutPageProps {
   onExploreShop: () => void;
@@ -322,7 +323,13 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onExploreShop, onNavigateS
                 className="h-full bg-white rounded-3xl border border-[#E8D5A8] shadow-[0_4px_16px_rgba(240,90,126,0.04)] overflow-hidden text-center"
               >
                 <div className="aspect-[3/4] w-full overflow-hidden bg-[#FCE8ED]">
-                  <img src={founder.image} alt={founder.name} className="w-full h-full object-cover" loading="lazy" />
+                  <img
+                    {...responsiveImage(founder.image, 'card', '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw')}
+                    alt={founder.name}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </div>
                 <div className="p-7 space-y-2">
                   <h3 className="text-lg font-bold text-[#121212] leading-snug">{founder.name}</h3>

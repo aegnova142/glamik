@@ -1,8 +1,13 @@
 import express, { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
+import {
+  createUploadMiddleware,
+  validateMediaFile,
+  uploadToCloudinary,
+  respondToUploadError,
+} from '../services/media.service';
 import { pool, loadDatabase } from '../db/db';
 import { requireCustomer, AuthenticatedCustomerRequest } from '../middleware/requireCustomer';
 import { rateLimit } from '../middleware/rateLimit';
@@ -55,126 +60,18 @@ const router = express.Router();
 
 cloudinary.config();
 
+const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+
 // Avatars are photos, not media-library assets: images only, and small.
-const avatarUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-    if (allowed.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Profile photos must be a JPEG, PNG or WebP image.'));
-    }
-  },
-});
+// The ceiling is passed to multer; which formats are actually acceptable is
+// decided from the bytes by validateMediaFile, not from the client-declared
+// mimetype that a fileFilter would have seen.
+const avatarUpload = createUploadMiddleware({ maxBytes: AVATAR_MAX_BYTES });
 
 // Review media: photos and short clips attached to a written review. Larger
 // ceiling than an avatar because a video is allowed, and the per-type limit
 // is enforced below once the real type is known.
-const reviewMediaUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: REVIEW_VIDEO_MAX_BYTES },
-  fileFilter: (_req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime', 'video/webm'];
-    if (allowed.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Review media must be a JPEG, PNG or WebP image, or an MP4, MOV or WebM video.'));
-    }
-  },
-});
-
-/** Magic-byte check. mimetype and filename both come from the client and can
- * say anything; this reads what the bytes actually are before the file is
- * ever stored or served back. */
-function isRealImageBuffer(buffer: Buffer): boolean {
-  if (buffer.length < 12) return false;
-  const jpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
-  const png = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-  const webp = buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
-  return jpeg || png || webp;
-}
-
-/** Same idea as isRealImageBuffer, for the video formats reviews accept.
- * MP4/MOV share the ISO base-media container ('ftyp' at offset 4); WebM is a
- * Matroska EBML stream. */
-function isRealVideoBuffer(buffer: Buffer): boolean {
-  if (buffer.length < 12) return false;
-  const isoBmff = buffer.subarray(4, 8).toString('ascii') === 'ftyp';
-  const webm = buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
-  return isoBmff || webm;
-}
-
-function uploadReviewMediaToCloudinary(
-  buffer: Buffer,
-  kind: 'image' | 'video'
-): Promise<{ url: string; publicId: string }> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    // Videos are transcoded server-side by Cloudinary, so they get a longer
-    // ceiling than the 30s an avatar needs.
-    const timeoutMs = kind === 'video' ? 120000 : 30000;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      reject(new Error(`Cloudinary upload timed out after ${timeoutMs / 1000}s`));
-    }, timeoutMs);
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'glamirk-beauty/reviews',
-        // Pinned to the type the bytes were actually verified as — never
-        // 'auto', which would let an unexpected format land as a raw asset.
-        resource_type: kind,
-        // No fixed public_id: unlike an avatar (one per customer, overwritten)
-        // a review can carry several items and they must not clobber each
-        // other. Cloudinary assigns a unique id.
-        transformation:
-          kind === 'image'
-            ? [{ width: 1280, height: 1280, crop: 'limit', quality: 'auto', fetch_format: 'auto' }]
-            : [{ width: 720, height: 1280, crop: 'limit', quality: 'auto' }],
-      },
-      (err, result) => {
-        if (settled) return;
-        clearTimeout(timer);
-        settled = true;
-        if (err || !result) return reject(err || new Error('Cloudinary upload failed'));
-        resolve({ url: result.secure_url, publicId: result.public_id });
-      }
-    );
-    stream.end(buffer);
-  });
-}
-
-function uploadAvatarToCloudinary(buffer: Buffer, userId: string): Promise<{ url: string; publicId: string }> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      reject(new Error('Cloudinary upload timed out after 30s'));
-    }, 30000);
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: 'glamirk-beauty/avatars',
-        // resource_type is pinned to 'image' (not 'auto') so nothing that
-        // slipped past the checks above can land as an executable/raw asset.
-        resource_type: 'image',
-        public_id: `avatar-${userId}`,
-        overwrite: true,
-        transformation: [{ width: 512, height: 512, crop: 'fill', gravity: 'face', quality: 'auto', fetch_format: 'auto' }],
-      },
-      (err, result) => {
-        if (settled) return;
-        clearTimeout(timer);
-        settled = true;
-        if (err || !result) return reject(err || new Error('Cloudinary upload failed'));
-        resolve({ url: result.secure_url, publicId: result.public_id });
-      }
-    );
-    stream.end(buffer);
-  });
-}
+const reviewMediaUpload = createUploadMiddleware({ maxBytes: REVIEW_VIDEO_MAX_BYTES });
 
 /** Formats a Postgres DATE as YYYY-MM-DD.
  *
@@ -294,16 +191,39 @@ router.put('/account/profile', requireCustomer, async (req: AuthenticatedCustome
 router.post(
   '/account/profile/avatar',
   requireCustomer,
-  avatarUpload.single('file'),
+  (req, res, next) => {
+    avatarUpload.single('file')(req, res, (err) => {
+      if (err) return respondToUploadError(err, res);
+      next();
+    });
+  },
   async (req: AuthenticatedCustomerRequest, res: Response) => {
-    if (!req.file) return res.status(400).json({ error: 'No image was uploaded.' });
-    if (!isRealImageBuffer(req.file.buffer)) {
-      return res.status(400).json({ error: 'That file is not a valid JPEG, PNG or WebP image.' });
+    // A profile photo is a photograph. GIF and SVG are refused here regardless
+    // of the global configuration: an animated avatar is not a feature anyone
+    // asked for, and XML is not a photograph.
+    const result = validateMediaFile(req.file, {
+      accept: 'image',
+      allowGif: false,
+      allowSvg: false,
+      maxImageBytes: AVATAR_MAX_BYTES,
+    });
+    if (result.outcome === 'rejected') {
+      console.warn(`[avatar] rejected upload for customer ${req.customer!.id}: ${result.error.logDetail}`);
+      return res.status(result.error.status).json({ error: result.error.message });
     }
 
-    let uploaded: { url: string; publicId: string };
+    let uploaded: { url: string };
     try {
-      uploaded = await uploadAvatarToCloudinary(req.file.buffer, req.customer!.id);
+      uploaded = await uploadToCloudinary(result.file, {
+        folder: 'glamirk-beauty/avatars',
+        // One avatar per customer, overwritten in place. Unlike the media
+        // library this is a true replacement, so a fixed id is correct — and
+        // the old asset genuinely is superseded rather than merely unused.
+        publicId: `avatar-${req.customer!.id}`,
+        transformation: [
+          { width: 512, height: 512, crop: 'fill', gravity: 'face', quality: 'auto:good', fetch_format: 'auto' },
+        ],
+      });
     } catch (err) {
       console.error('Avatar upload failed:', err);
       return res.status(502).json({ error: 'Could not upload your photo right now. Please try again.' });
@@ -1225,46 +1145,59 @@ router.post(
   '/account/reviews/media',
   requireCustomer,
   rateLimit({ scope: 'review-media', windowMs: 60 * 60 * 1000, max: 40 }),
-  reviewMediaUpload.single('file'),
+  (req, res, next) => {
+    reviewMediaUpload.single('file')(req, res, (err) => {
+      if (err) return respondToUploadError(err, res);
+      next();
+    });
+  },
   async (req: AuthenticatedCustomerRequest, res: Response) => {
-    if (!req.file) return res.status(400).json({ error: 'No file was uploaded.' });
-
-    const declaredVideo = req.file.mimetype.startsWith('video/');
-
     // What the bytes actually are decides how it is stored — not the
-    // mimetype, which the client controls. A file claiming to be an image
-    // while carrying video bytes (or neither) is rejected outright.
-    const kind: 'image' | 'video' | null = isRealImageBuffer(req.file.buffer)
-      ? 'image'
-      : isRealVideoBuffer(req.file.buffer)
-      ? 'video'
-      : null;
-
-    if (!kind) {
-      return res.status(400).json({ error: 'That file is not a readable image or video.' });
+    // mimetype, which the client controls. The per-type ceiling is applied
+    // inside the validator, once the real type is known: multer's single
+    // limit has to be the video one, which is five times too generous for a
+    // photo.
+    const declaredVideo = (req.file?.mimetype || '').startsWith('video/');
+    const result = validateMediaFile(req.file, {
+      accept: 'image-or-video',
+      allowGif: false,
+      allowSvg: false,
+      maxImageBytes: REVIEW_IMAGE_MAX_BYTES,
+      maxVideoBytes: REVIEW_VIDEO_MAX_BYTES,
+    });
+    if (result.outcome === 'rejected') {
+      console.warn(`[review-media] rejected upload from customer ${req.customer!.id}: ${result.error.logDetail}`);
+      return res.status(result.error.status).json({ error: result.error.message });
     }
-    if (declaredVideo !== (kind === 'video')) {
+
+    const file = result.file;
+    if (declaredVideo !== (file.kind === 'video')) {
       return res.status(400).json({ error: 'That file does not match the type it claims to be.' });
-    }
-
-    // multer's limit is the video ceiling (the larger of the two), so images
-    // are re-checked against their own smaller limit now the type is known.
-    const maxBytes = kind === 'video' ? REVIEW_VIDEO_MAX_BYTES : REVIEW_IMAGE_MAX_BYTES;
-    if (req.file.size > maxBytes) {
-      return res.status(400).json({
-        error: `${kind === 'video' ? 'Videos' : 'Photos'} must be under ${Math.round(maxBytes / (1024 * 1024))}MB.`,
-      });
     }
 
     let uploaded: { url: string; publicId: string };
     try {
-      uploaded = await uploadReviewMediaToCloudinary(req.file.buffer, kind);
+      uploaded = await uploadToCloudinary(file, {
+        folder: 'glamirk-beauty/reviews',
+        // No fixed public_id: unlike an avatar (one per customer, overwritten)
+        // a review can carry several items and they must not clobber each
+        // other. Cloudinary assigns a unique id.
+        //
+        // Review media IS downscaled on storage, unlike admin media. A
+        // customer's phone photo has no second life as source material for a
+        // future crop, and a 4000px snapshot of a lipstick is pure storage
+        // cost for something displayed in a 400px card.
+        transformation:
+          file.kind === 'image'
+            ? [{ width: 1280, height: 1280, crop: 'limit', quality: 'auto:good', fetch_format: 'auto' }]
+            : [{ width: 720, height: 1280, crop: 'limit', quality: 'auto' }],
+      });
     } catch (err) {
       console.error('Review media upload failed:', err);
       return res.status(502).json({ error: 'Could not upload that file right now. Please try again.' });
     }
 
-    const media: ReviewMedia = { type: kind, url: uploaded.url, publicId: uploaded.publicId };
+    const media: ReviewMedia = { type: file.kind, url: uploaded.url, publicId: uploaded.publicId };
     res.json({ media });
   }
 );

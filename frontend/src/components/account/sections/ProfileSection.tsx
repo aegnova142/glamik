@@ -18,6 +18,7 @@ import {
   formatDate,
   inputClass,
 } from '../AccountUI';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface ProfileSectionProps {
   showToast: (message: string) => void;
@@ -199,7 +200,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
       <AccountCard className="p-5">
         <div className="flex items-center gap-5 flex-wrap">
           {data?.avatarUrl ? (
-            <img src={data.avatarUrl} alt="" className="w-20 h-20 rounded-full object-cover border border-[#E8D5A8]" />
+            <img src={cloudinaryImageUrl(data.avatarUrl, 'avatar')} alt="" loading="lazy" decoding="async" className="w-20 h-20 rounded-full object-cover border border-[#E8D5A8]" />
           ) : (
             <div className="w-20 h-20 rounded-full bg-[#FAF9F6] border border-[#E8D5A8] flex items-center justify-center">
               <span className="font-serif text-2xl text-[#C9972B]">{initial}</span>

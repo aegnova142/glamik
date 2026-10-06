@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ImageOff } from 'lucide-react';
+import { responsiveImage, type ImagePreset } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface ProductImageProps {
   src?: string;
@@ -7,11 +8,35 @@ interface ProductImageProps {
   className?: string;
   loading?: 'lazy' | 'eager';
   draggable?: boolean;
+  /**
+   * How large this image is actually displayed. Decides the ceiling of the
+   * generated srcset — see shared/utils/cloudinaryImage.
+   *
+   * Defaults to 'card', which covers the overwhelming majority of uses (grid
+   * tiles, carousels, recommendation rails). Set it explicitly for the two
+   * ends: 'thumb' for cart lines and search rows, 'detail' or 'gallery' for a
+   * full-width product view.
+   */
+  preset?: ImagePreset;
+  /**
+   * The `sizes` attribute, if the default derived from `preset` is wrong for
+   * this layout. Worth setting for anything inside a responsive grid, where
+   * the displayed width is a fraction of the viewport rather than all of it.
+   */
+  sizes?: string;
+  /**
+   * Marks this as the Largest Contentful Paint candidate: loads eagerly, at
+   * high priority, and is never lazy-loaded. Use on the one hero/above-the-fold
+   * image of a page and nowhere else — the value of a priority hint comes from
+   * being scarce.
+   */
+  priority?: boolean;
 }
 
 /**
  * A product <img> that degrades to a branded placeholder instead of the
- * browser's broken-image icon.
+ * browser's broken-image icon, and that asks the CDN for a size appropriate
+ * to where it is being rendered.
  *
  * This exists because image URLs in the CMS can outlive the files behind them:
  * a media-library entry deleted in the admin leaves every product field still
@@ -23,6 +48,11 @@ interface ProductImageProps {
  * Failure is tracked per *URL*, not per component instance. A card swaps
  * between its primary and secondary image on hover, and those fail
  * independently — one being dead says nothing about the other.
+ *
+ * The responsive delivery added on top is deliberately invisible to callers:
+ * `src` is still whatever the CMS stored, and a URL the transform does not
+ * recognise (a legacy record, an external host, a relative path) is rendered
+ * exactly as it always was, with no srcset at all.
  */
 export const ProductImage: React.FC<ProductImageProps> = ({
   src,
@@ -30,6 +60,9 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   className = '',
   loading = 'lazy',
   draggable,
+  preset = 'card',
+  sizes,
+  priority = false,
 }) => {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
@@ -58,11 +91,23 @@ export const ProductImage: React.FC<ProductImageProps> = ({
     );
   }
 
+  const optimised = responsiveImage(src, preset, sizes);
+
   return (
     <img
-      src={src}
+      src={optimised.src}
+      // Both absent for a URL the transform left alone, which is the correct
+      // markup for "there is only one size of this image".
+      srcSet={optimised.srcSet}
+      sizes={optimised.sizes}
       alt={alt}
-      loading={loading}
+      // A priority image must never be lazy: deferring the LCP element is the
+      // single most common way a page loses its Core Web Vitals score.
+      loading={priority ? 'eager' : loading}
+      fetchPriority={priority ? 'high' : undefined}
+      // Off the main thread, so decoding a large product photo doesn't stall
+      // scrolling on the rest of the grid.
+      decoding={priority ? 'sync' : 'async'}
       draggable={draggable}
       onError={() => setFailedSrc(src)}
       className={className}

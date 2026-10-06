@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { ImageCropUploadModal } from './ImageCropUploadModal';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Sparkles,
@@ -198,7 +199,7 @@ export const AdminBenefits: React.FC = () => {
               <p className="text-[10px] text-[#6B6B6B] mb-2">Or upload a custom icon image instead:</p>
               {editing.imageUrl ? (
                 <div className="flex items-center gap-2">
-                  <img src={editing.imageUrl} alt="Custom icon" className="w-10 h-10 rounded-lg object-cover border border-[#E8D5A8]/30" />
+                  <img src={cloudinaryImageUrl(editing.imageUrl, 'thumb')} alt="Custom icon" className="w-10 h-10 rounded-lg object-cover border border-[#E8D5A8]/30" />
                   <button
                     type="button"
                     onClick={() => setEditing({ ...editing, imageUrl: undefined, imagePublicId: undefined })}
@@ -257,7 +258,7 @@ export const AdminBenefits: React.FC = () => {
             <div className="flex items-start gap-4 p-6 bg-white rounded-3xl border border-[#E8D5A8] shadow-[0_4px_16px_rgba(240,90,126,0.04)]">
               <div className="p-3 bg-[#FCE8ED] text-[#F05A7E] rounded-2xl flex-shrink-0 border border-[#E8D5A8] overflow-hidden w-11 h-11 flex items-center justify-center">
                 {editing.imageUrl ? (
-                  <img src={editing.imageUrl} alt="" className="w-full h-full object-cover rounded-xl" />
+                  <img src={cloudinaryImageUrl(editing.imageUrl, 'thumb')} alt="" className="w-full h-full object-cover rounded-xl" />
                 ) : (
                   <PreviewIcon className="w-5 h-5 stroke-[2]" />
                 )}
@@ -377,7 +378,7 @@ export const AdminBenefits: React.FC = () => {
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-[#FCE8ED]/10 border border-[#E8D5A8]/20 flex items-center justify-center text-[#C9972B] shrink-0 overflow-hidden">
                         {benefit.imageUrl ? (
-                          <img src={benefit.imageUrl} alt="" className="w-full h-full object-cover" />
+                          <img src={cloudinaryImageUrl(benefit.imageUrl, 'thumb')} alt="" className="w-full h-full object-cover" />
                         ) : (
                           <Icon className="w-4 h-4" />
                         )}

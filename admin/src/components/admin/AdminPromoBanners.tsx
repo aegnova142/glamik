@@ -5,6 +5,7 @@ import { CMSPromoBannerConfig, CMSPromoBanner } from '@glamirk/shared/types';
 import { useSyncOnce } from '../../hooks/useSyncOnce';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { useFileUpload } from '../../hooks/useFileUpload';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const MAX_BANNERS = 15;
 
@@ -219,7 +220,7 @@ export const AdminPromoBanners: React.FC = () => {
               <div className="aspect-video w-full rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#171717] flex items-center justify-center">
                 {banner.image ? (
                   <img
-                    src={banner.image}
+                    src={cloudinaryImageUrl(banner.image, 'tile')}
                     alt={banner.altText || `Banner ${idx + 1} preview`}
                     className="max-w-full max-h-full object-contain"
                   />

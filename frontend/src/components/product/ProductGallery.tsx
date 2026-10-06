@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, ImageOff, Sparkles, ZoomIn, X } from 'lucide-react';
+import { cloudinaryImageUrl, cloudinarySrcSet } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface ProductGalleryProps {
   images: { url: string; alt?: string }[];
@@ -96,9 +97,14 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
             }`}
             aria-label={`View image ${idx + 1}`}
           >
+            {/* An 80px-wide chip. Serving the full original here meant the
+                gallery downloaded every product photo at full resolution
+                twice over — once for the strip, once for the main frame. */}
             <img
-              src={img}
+              src={cloudinaryImageUrl(img, 'thumb')}
               alt={`${productName} thumbnail ${idx + 1}`}
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-contain"
             />
           </button>
@@ -113,10 +119,18 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
         onTouchEnd={handleTouchEnd}
       >
         <AnimatePresence mode="wait">
+          {/* The product page's main image, and its LCP element: eager, high
+              priority, never lazy. Delivered at the 'gallery' tier
+              (q_auto:best) because this is where a customer judges a shade. */}
           <motion.img
             key={activeIndex}
-            src={imagesList[activeIndex]}
+            src={cloudinaryImageUrl(imagesList[activeIndex], 'gallery')}
+            srcSet={cloudinarySrcSet(imagesList[activeIndex], 'gallery') || undefined}
+            sizes="(max-width: 768px) 100vw, 45vw"
             alt={`${productName} view ${activeIndex + 1}`}
+            loading={activeIndex === 0 ? 'eager' : 'lazy'}
+            fetchPriority={activeIndex === 0 ? 'high' : undefined}
+            decoding="async"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -243,9 +257,14 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({
             )}
 
             <AnimatePresence mode="wait">
+              {/* The zoom view: the largest tier, because the whole point of
+                  opening it is to look closely at texture and colour. */}
               <motion.img
                 key={activeIndex}
-                src={imagesList[activeIndex]}
+                src={cloudinaryImageUrl(imagesList[activeIndex], 'detail')}
+                srcSet={cloudinarySrcSet(imagesList[activeIndex], 'detail') || undefined}
+                sizes="100vw"
+                decoding="async"
                 alt={`${productName} fullscreen view ${activeIndex + 1}`}
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}

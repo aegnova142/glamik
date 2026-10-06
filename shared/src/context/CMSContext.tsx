@@ -118,6 +118,11 @@ export interface CMSContextType {
   deleteFaq: (id: string) => Promise<boolean>;
   saveGlobalSettings: (settings: Partial<CMSGlobalSettings>) => Promise<boolean>;
   uploadMedia: (file: File, name?: string, altText?: string) => Promise<CMSMediaItem | null>;
+  /** Upload with progress reporting and the server's own error text. Prefer this. */
+  uploadMediaDetailed: (
+    file: File,
+    options?: { name?: string; altText?: string; onProgress?: (percent: number) => void }
+  ) => Promise<{ item: CMSMediaItem | null; error: string | null }>;
   deleteMedia: (id: string) => Promise<{ success: boolean; error?: string }>;
   refreshPublicContent: () => Promise<void>;
 }
@@ -710,47 +715,99 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
-  const uploadMedia = async (file: File, name?: string, altText?: string): Promise<CMSMediaItem | null> => {
+  /**
+   * Uploads one file and reports both progress and the server's own reason
+   * for any refusal.
+   *
+   * Built on XMLHttpRequest rather than fetch, and that is the whole point of
+   * the function: fetch has no upload-progress event. On a 20 MB banner over
+   * a hotel connection the difference is a progress bar versus a spinner that
+   * looks identical to a hang, which is what makes an admin retry mid-upload
+   * and create a duplicate.
+   *
+   * The error string is passed through verbatim from the API. The server
+   * already writes those for an admin to read ("Maximum image size is 20 MB."),
+   * so replacing them here with a generic "Upload failed" — which is what the
+   * previous implementation did by returning null — threw away the only part
+   * that told them what to do next.
+   */
+  const uploadMediaDetailed = (
+    file: File,
+    options: { name?: string; altText?: string; onProgress?: (percent: number) => void } = {}
+  ): Promise<{ item: CMSMediaItem | null; error: string | null }> => {
     const formData = new FormData();
     formData.append('file', file);
-    if (name) formData.append('name', name);
-    if (altText) formData.append('altText', altText);
+    if (options.name) formData.append('name', options.name);
+    if (options.altText) formData.append('altText', options.altText);
 
     const token = getAdminToken();
-    // Without a client-side timeout, a stalled request (dropped connection,
-    // server-side hang) leaves the caller's "Uploading..." spinner stuck
-    // forever with no feedback — abort and surface an error instead.
-    // Kept comfortably above the server's own worst-case legitimate runtime
-    // (30s Cloudinary + 10s DB connect + 15s + 15s query timeouts ≈ 70s) so
-    // a slow-but-successful upload isn't aborted client-side while the
-    // server is still about to succeed.
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 90000);
-    try {
-      const res = await fetch('/api/admin/media/upload', {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-        signal: controller.signal,
-      });
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `Upload failed (${res.status})`);
-      }
+    return new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/admin/media/upload');
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
-      const mediaItem = await res.json();
-      return mediaItem;
-    } catch (err: any) {
-      if (err?.name === 'AbortError') {
-        console.error('Media upload error: timed out after 45s');
-      } else {
-        console.error('Media upload error:', err);
-      }
-      return null;
-    } finally {
-      clearTimeout(timer);
-    }
+      // Without a client-side timeout, a stalled request (dropped connection,
+      // server-side hang) leaves the caller's progress bar stuck forever with
+      // no feedback. Kept comfortably above the server's own worst-case
+      // legitimate runtime (45s Cloudinary for an image, 120s for a video,
+      // plus DB write) so a slow-but-successful upload isn't abandoned
+      // client-side while the server is still about to succeed.
+      xhr.timeout = 180000;
+
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable || !options.onProgress) return;
+        // Capped at 99: the bytes being delivered is not the job being done.
+        // Cloudinary still has to accept and store the file after the last
+        // byte arrives, and showing 100% during that wait is why people
+        // assume it has frozen. The caller moves to its "processing" state
+        // instead, and 100% means the response came back.
+        options.onProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+      };
+
+      xhr.onload = () => {
+        let body: any = {};
+        try {
+          body = JSON.parse(xhr.responseText || '{}');
+        } catch {
+          // A non-JSON body means something upstream (a proxy, a gateway)
+          // answered instead of the API. Its HTML is not for an admin to read.
+          body = {};
+        }
+        if (xhr.status >= 200 && xhr.status < 300 && body?.url) {
+          options.onProgress?.(100);
+          resolve({ item: body as CMSMediaItem, error: null });
+          return;
+        }
+        console.error('Media upload failed:', xhr.status, body);
+        resolve({
+          item: null,
+          error:
+            body?.error ||
+            (xhr.status === 401 || xhr.status === 403
+              ? 'Your session has expired. Sign in again and retry.'
+              : `Upload failed (${xhr.status}). Please try again.`),
+        });
+      };
+
+      xhr.onerror = () => {
+        console.error('Media upload error: network failure');
+        resolve({ item: null, error: 'Network error during upload. Check your connection and try again.' });
+      };
+      xhr.ontimeout = () => {
+        console.error('Media upload error: timed out');
+        resolve({ item: null, error: 'The upload timed out. Please try again.' });
+      };
+      xhr.onabort = () => resolve({ item: null, error: 'Upload cancelled.' });
+
+      xhr.send(formData);
+    });
+  };
+
+  /** Back-compatible wrapper: null on any failure, no progress. */
+  const uploadMedia = async (file: File, name?: string, altText?: string): Promise<CMSMediaItem | null> => {
+    const { item } = await uploadMediaDetailed(file, { name, altText });
+    return item;
   };
 
   const deleteMedia = async (id: string): Promise<{ success: boolean; error?: string }> => {
@@ -832,6 +889,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     deleteFaq,
     saveGlobalSettings,
     uploadMedia,
+    uploadMediaDetailed,
     deleteMedia,
     refreshPublicContent: loadPublicContent,
   };

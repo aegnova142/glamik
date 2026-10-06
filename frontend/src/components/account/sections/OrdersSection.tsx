@@ -196,7 +196,7 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
               <ul className="divide-y divide-[#F1EBDD]">
                 {order.items.map((item, idx) => (
                   <li key={`${item.productId}-${idx}`} className="px-4 sm:px-5 py-4 flex gap-3.5">
-                    <ProductImage
+                    <ProductImage preset="thumb"
                       src={item.productImage}
                       alt=""
                       className="w-14 h-16 object-cover border border-[#E8D5A8] rounded shrink-0"

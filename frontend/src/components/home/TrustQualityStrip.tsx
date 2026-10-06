@@ -1,6 +1,7 @@
 import React from 'react';
 import { Sparkles, Shield, Feather, Award, Heart, ShieldCheck, Leaf } from 'lucide-react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Sparkles,
@@ -51,7 +52,7 @@ export const TrustQualityStrip: React.FC = () => {
               >
                 <div className="w-11 h-11 bg-[#FCE8ED] text-[#F05A7E] rounded-2xl flex-shrink-0 border border-[#E8D5A8] overflow-hidden flex items-center justify-center">
                   {benefit.imageUrl ? (
-                    <img src={benefit.imageUrl} alt="" className="w-full h-full object-cover" />
+                    <img src={cloudinaryImageUrl(benefit.imageUrl, 'thumb')} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   ) : (
                     <Icon className="w-5 h-5 stroke-[2]" />
                   )}

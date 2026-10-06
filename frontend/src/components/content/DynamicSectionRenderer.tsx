@@ -8,6 +8,7 @@ import { CMSPageSection, Product, Shade } from '@glamirk/shared/types';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { LiveOfferCountdown } from '@glamirk/shared/components';
 import { Sparkles, ArrowRight, ShieldCheck, Check, Heart, Eye } from 'lucide-react';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface DynamicSectionRendererProps {
   section: CMSPageSection;
@@ -38,9 +39,15 @@ export const DynamicSectionRenderer: React.FC<DynamicSectionRendererProps> = ({
         <section className="relative min-h-[500px] md:min-h-[600px] flex items-center justify-center overflow-hidden bg-[#0B0B0B] text-[#FAF9F6]">
           {props.image && (
             <div className="absolute inset-0 z-0">
+              {/* A full-bleed section banner, and the first thing visible on
+                  any CMS page built from these blocks — so it loads eagerly
+                  rather than being deferred below the fold it defines. */}
               <img
-                src={props.image}
+                {...responsiveImage(props.image, 'hero', '100vw')}
                 alt={props.heading || 'Hero Banner'}
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
                 className="w-full h-full object-cover object-center opacity-60"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B] via-[#0B0B0B]/60 to-transparent" />

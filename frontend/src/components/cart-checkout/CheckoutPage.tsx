@@ -1203,7 +1203,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                       return (
                         <div key={i} className="p-3.5 flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
-                            <ProductImage
+                            <ProductImage preset="thumb"
                               src={item.product.images.primary}
                               alt={item.product.name}
                               className="w-12 h-14 object-cover border border-[#E8D5A8]"
@@ -1294,7 +1294,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   return (
                     <div key={index} className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2.5">
-                        <ProductImage
+                        <ProductImage preset="thumb"
                           src={item.product.images.primary}
                           alt={item.product.name}
                           className="w-9 h-11 object-cover border border-[#E8D5A8]"

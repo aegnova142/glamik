@@ -21,6 +21,7 @@ import {
   Smile,
   GripVertical,
 } from 'lucide-react';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Sparkles,
@@ -264,7 +265,7 @@ export const AdminShadeFinder: React.FC = () => {
             </div>
             {heroState.image && (
               <div className="mt-2 w-24 aspect-[4/5] rounded-lg overflow-hidden border border-[#E8D5A8]/30 bg-[#0B0B0B]">
-                <img src={heroState.image} alt="Hero preview" className="w-full h-full object-cover" />
+                <img src={cloudinaryImageUrl(heroState.image, 'tile')} alt="Hero preview" className="w-full h-full object-cover" />
               </div>
             )}
           </div>

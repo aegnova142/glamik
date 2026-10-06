@@ -305,7 +305,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                             }}
                           >
                             <div className="flex items-center gap-3">
-                              <ProductImage
+                              <ProductImage preset="thumb"
                                 src={p.images.primary}
                                 alt={p.name}
                                 className="w-12 h-14 object-cover border border-[#E8D5A8]"

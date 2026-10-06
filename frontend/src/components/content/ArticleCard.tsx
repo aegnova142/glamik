@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { JournalArticle } from '@glamirk/shared/types';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface ArticleCardProps {
   article: JournalArticle;
@@ -26,10 +27,11 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({ article, onOpen }) => 
     >
       <div className="w-full aspect-[4/3] overflow-hidden rounded-[16px] shrink-0">
         <img
-          src={article.image}
+          {...responsiveImage(article.image, 'tile', '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw')}
           alt={article.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
           loading="lazy"
+          decoding="async"
         />
       </div>
 

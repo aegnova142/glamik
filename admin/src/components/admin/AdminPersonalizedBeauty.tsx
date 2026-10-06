@@ -10,6 +10,7 @@ import {
 import { useSyncOnce } from '../../hooks/useSyncOnce';
 import { MediaUploadField } from './MediaUploadField';
 import { Plus, Trash2, Save, Check, Image as ImageIcon, Film, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 const DEFAULT_CARD = (badge = ''): CMSPersonalizedBeautyCard => ({
   title: '',
@@ -63,7 +64,7 @@ const LivePreview: React.FC<{ label: string; card: CMSPersonalizedBeautyCard; ac
       {card.mediaUrl && card.mediaType === 'video' ? (
         <video src={card.mediaUrl} poster={card.posterUrl || undefined} muted loop autoPlay playsInline className="w-full h-full object-cover" />
       ) : card.mediaUrl ? (
-        <img src={card.mediaUrl} alt={card.title} className="w-full h-full object-cover" />
+        <img src={cloudinaryImageUrl(card.mediaUrl, 'thumb')} alt={card.title} className="w-full h-full object-cover" />
       ) : (
         <ImageIcon className="w-5 h-5 text-[#C9972B]/40" />
       )}

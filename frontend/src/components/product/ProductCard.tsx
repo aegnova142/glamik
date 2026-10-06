@@ -92,6 +92,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         src={displayImage}
         alt={product.name}
         loading="lazy"
+        // A card is at most half the viewport on a phone and roughly a
+        // quarter of it on desktop, where the grid is 3-4 across. Telling the
+        // browser that is what lets it pick a 320px variant on mobile instead
+        // of assuming the image spans the full width.
+        sizes={
+          viewMode === 'list'
+            ? '(max-width: 640px) 112px, 160px'
+            : '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw'
+        }
         className="h-full w-full object-contain object-center transition-transform duration-500 ease-out group-hover:scale-[1.04]"
       />
 

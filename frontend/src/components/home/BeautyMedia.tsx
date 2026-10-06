@@ -7,6 +7,7 @@
 // CMS-driven Personalized Beauty cards. Verified & hardened 2026-10-05.
 import React from 'react';
 import { ImageOff } from 'lucide-react';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface BeautyMediaProps {
   mediaType?: 'image' | 'video';
@@ -63,7 +64,7 @@ export const BeautyMedia: React.FC<BeautyMediaProps> = ({ mediaType, mediaUrl, p
     <div className={box}>
       <img
         className="absolute inset-0 w-full h-full object-cover"
-        src={mediaUrl}
+        {...responsiveImage(mediaUrl, 'tile')}
         alt={alt}
         loading="lazy"
         decoding="async"

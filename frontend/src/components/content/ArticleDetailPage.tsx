@@ -22,6 +22,7 @@ import { updatePageSeo } from '../../utils/seo';
 import { trackEvent } from '../../utils/analytics';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { ProductImage } from '../product/ProductImage';
+import { cloudinaryImageUrl, responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface ArticleDetailPageProps {
   articleId: string;
@@ -170,11 +171,15 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
       {/* Hero Cover Visual */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 mb-12">
         <div className="relative aspect-[16/9] sm:aspect-[21/9] bg-[#FAF9F6] overflow-hidden border border-[#E8D5A8] shadow-xl">
+          {/* The article page's LCP element — already eager, now also
+              priority-hinted and delivered at a width the device can use. */}
           <img
-            src={article.heroImageLarge || article.image}
+            {...responsiveImage(article.heroImageLarge || article.image, 'detail', '(max-width: 1024px) 100vw, 1024px')}
             alt={article.title}
             className="w-full h-full object-cover"
             loading="eager"
+            fetchPriority="high"
+            decoding="sync"
           />
         </div>
       </div>
@@ -276,10 +281,11 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
                     <figure className="my-6 space-y-2">
                       <div className="overflow-hidden border border-[#E8D5A8] aspect-[16/10] bg-[#FAF9F6]">
                         <img
-                          src={section.image}
+                          {...responsiveImage(section.image, 'gallery', '(max-width: 768px) 100vw, 720px')}
                           alt={section.heading || 'Editorial Visual'}
                           className="w-full h-full object-cover"
                           loading="lazy"
+                          decoding="async"
                         />
                       </div>
                       {section.imageCaption && (
@@ -390,7 +396,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
                     className="group cursor-pointer bg-[#FAF9F6] border border-[#E8D5A8] p-4 flex gap-4 items-center hover:border-[#C9972B] transition-all"
                   >
                     <div className="w-20 h-24 overflow-hidden bg-[#FAF9F6] flex-shrink-0">
-                      <img src={look.image} alt={look.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      <img src={cloudinaryImageUrl(look.image, 'thumb')} alt={look.title} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     </div>
                     <div className="space-y-1">
                       <span className="text-[9px] uppercase tracking-wider text-[#6B6B6B] font-semibold">{look.category}</span>

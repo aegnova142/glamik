@@ -69,7 +69,7 @@ export const LookDetailModal: React.FC<LookDetailModalProps> = ({
 
             {/* Left Image */}
             <div className="md:col-span-5 relative aspect-[3/4] md:aspect-auto overflow-hidden bg-[#FAF9F6] flex items-center justify-center">
-              <ProductImage
+              <ProductImage preset="gallery"
                 src={look.image}
                 alt={look.title}
                 className="w-full h-full object-contain"
@@ -113,7 +113,7 @@ export const LookDetailModal: React.FC<LookDetailModalProps> = ({
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-14 bg-[#FAF9F6] overflow-hidden flex-shrink-0 border border-[#E8D5A8]">
-                          <ProductImage
+                          <ProductImage preset="thumb"
                             src={item.product.images.primary}
                             alt={item.product.name}
                             className="w-full h-full object-cover"

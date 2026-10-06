@@ -17,8 +17,11 @@ interface ImageCropUploadModalProps {
   outputHeight?: number;
 }
 
-const ACCEPTED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+// What the browser can decode into a <canvas> for cropping. AVIF and GIF are
+// included because every current browser decodes both; the crop output is
+// always WebP regardless of what went in.
+const ACCEPTED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/avif', 'image/gif'];
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB — matches the server's image limit
 const MAX_VIEWPORT_W = 480;
 const MIN_VIEWPORT_W = 240;
 
@@ -35,8 +38,9 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
   outputWidth = 1200,
   outputHeight = 600,
 }) => {
-  const { uploadMedia } = useCMS();
+  const { uploadMediaDetailed } = useCMS();
   const [step, setStep] = useState<'pick' | 'crop' | 'uploading' | 'done'>('pick');
+  const [uploadPercent, setUploadPercent] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [imgEl, setImgEl] = useState<HTMLImageElement | null>(null);
@@ -57,6 +61,7 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
       setImgEl(null);
       setZoom(1);
       setOffset({ x: 0, y: 0 });
+      setUploadPercent(0);
     }
   }, [isOpen]);
 
@@ -99,11 +104,15 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
     if (!file) return;
 
     if (!ACCEPTED_TYPES.includes(file.type)) {
-      setError('Only JPG, PNG, or WebP images are supported.');
+      setError('Only JPG, PNG, WebP, AVIF or GIF images are supported.');
       return;
     }
     if (file.size > MAX_FILE_SIZE) {
-      setError(`Image is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum file size is 5MB.`);
+      setError(
+        `Image is too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum file size is ${
+          MAX_FILE_SIZE / 1024 / 1024
+        }MB.`
+      );
       return;
     }
 
@@ -153,6 +162,9 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
     if (!imgEl) return;
     setStep('uploading');
     setError(null);
+    // Cleared so a retry after a failure doesn't flash the previous attempt's
+    // percentage before the first progress event lands.
+    setUploadPercent(0);
 
     try {
       const cropX = -offset.x / scale;
@@ -173,15 +185,20 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
       if (!blob) throw new Error('Failed to generate cropped image');
 
       const file = new File([blob], `cropped-${Date.now()}.webp`, { type: 'image/webp' });
-      const mediaItem = await uploadMedia(file);
-      if (!mediaItem) throw new Error('Upload failed');
+      const { item, error: serverError } = await uploadMediaDetailed(file, {
+        onProgress: setUploadPercent,
+      });
+      // The server's own wording, when there is one — it says what to do
+      // ("Maximum image size is 20 MB"), which a generic failure line cannot.
+      if (!item) throw new Error(serverError || 'Upload failed');
 
-      onUploaded({ url: mediaItem.url, publicId: mediaItem.publicId });
+      onUploaded({ url: item.url, publicId: item.publicId });
       setStep('done');
       setTimeout(() => onClose(), 900);
     } catch (err) {
       console.error('Crop/upload failed:', err);
-      setError('Upload failed. Please try again.');
+      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+      setUploadPercent(0);
       setStep('crop');
     }
   };
@@ -226,14 +243,16 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
               <Upload className="w-8 h-8 text-[#C9972B]" />
               <div className="text-center">
                 <span className="text-sm font-semibold text-[#FAF9F6] block">Click to choose an image</span>
-                <span className="text-[11px] text-[#6B6B6B] block mt-1">JPG, PNG, or WebP · Max 5MB</span>
+                <span className="text-[11px] text-[#6B6B6B] block mt-1">
+                  JPG, PNG, WebP, AVIF or GIF · Max {MAX_FILE_SIZE / 1024 / 1024}MB
+                </span>
                 <span className="text-[11px] text-[#6B6B6B] block">
                   Recommended {recommendedWidth}×{recommendedHeight}px ({aspectRatio}:1) · Minimum {minWidth}×{minHeight}px
                 </span>
               </div>
               <input
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept={ACCEPTED_TYPES.join(',')}
                 className="hidden"
                 onChange={(e) => handleFileSelect(e.target.files?.[0])}
               />
@@ -290,6 +309,25 @@ export const ImageCropUploadModal: React.FC<ImageCropUploadModalProps> = ({
                 <span>Original: {imgEl.naturalWidth}×{imgEl.naturalHeight}px</span>
                 <span className="text-[#C9972B]">Output: {outputWidth}×{outputHeight}px · {aspectRatio}:1 exact</span>
               </div>
+
+              {step === 'uploading' && (
+                <div role="status" aria-live="polite">
+                  <div className="flex items-center justify-between text-[10px] text-[#6B6B6B] mb-1">
+                    <span className="text-[#E8D5A8]">
+                      {uploadPercent >= 99 ? 'Processing image…' : 'Uploading…'}
+                    </span>
+                    {uploadPercent < 99 && <span className="font-mono">{uploadPercent}%</span>}
+                  </div>
+                  <div className="h-1 w-full rounded-full overflow-hidden bg-[#0B0B0B]">
+                    <div
+                      className={`h-full bg-[#C9972B] transition-[width] duration-200 ease-out ${
+                        uploadPercent >= 99 ? 'animate-pulse' : ''
+                      }`}
+                      style={{ width: `${Math.max(uploadPercent, 2)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </>
           )}
 

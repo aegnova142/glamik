@@ -9,6 +9,7 @@ import { X, Star, ImagePlus, Loader2, Video } from 'lucide-react';
 import { Order, OrderItem, ReviewMedia, REVIEW_MEDIA_MAX_ITEMS } from '@glamirk/shared/types';
 import { useAccount } from '../../../context/AccountContext';
 import { AccountButton, AccountFormMessage, AccountField, inputClass } from '../AccountUI';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 // Shared modal chrome for the three order actions that need confirmation.
 // Kept in one file because they share the same shell, the same submit/error
@@ -433,7 +434,7 @@ export const WriteReviewModal: React.FC<{
                 {item.type === 'video' ? (
                   <video src={item.url} className="w-full h-full object-cover" muted playsInline />
                 ) : (
-                  <img src={item.url} alt={`Review attachment ${idx + 1}`} className="w-full h-full object-cover" />
+                  <img src={cloudinaryImageUrl(item.url, 'thumb')} alt={`Review attachment ${idx + 1}`} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 )}
                 {item.type === 'video' && (
                   <span className="absolute bottom-1 left-1 bg-[#0B0B0B]/75 text-white rounded-full p-1">

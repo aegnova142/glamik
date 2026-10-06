@@ -4,6 +4,7 @@ import { X, ShoppingBag, Heart, Share2, Check, Sparkles, ExternalLink, BadgeChec
 import { SocialPost, Product, Shade } from '@glamirk/shared/types';
 import { getCurrentPrice } from '@glamirk/shared/utils/productVariant';
 import { trackEvent } from '../../utils/analytics';
+import { cloudinaryImageUrl, responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface SocialPostModalProps {
   isOpen: boolean;
@@ -68,8 +69,9 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
           {/* Left Media Column */}
           <div className="md:col-span-7 bg-[#0B0B0B] relative flex items-center justify-center min-h-[300px] md:min-h-[520px] overflow-hidden">
             <img
-              src={post.mediaUrl}
+              {...responsiveImage(post.mediaUrl, 'gallery', '(max-width: 768px) 100vw, 58vw')}
               alt={post.caption}
+              decoding="async"
               className="w-full h-full object-cover"
             />
             {post.lookTitle && (
@@ -87,8 +89,10 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-[#E8D5A8] overflow-hidden border border-[#E8D5A8] flex-shrink-0">
                     <img
-                      src={post.creatorAvatar || post.mediaUrl}
+                      src={cloudinaryImageUrl(post.creatorAvatar || post.mediaUrl, 'avatar')}
                       alt={post.creatorName}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover"
                     />
                   </div>
@@ -149,8 +153,10 @@ export const SocialPostModal: React.FC<SocialPostModalProps> = ({
                         >
                           <div className="w-12 h-14 bg-[#FAF9F6] overflow-hidden flex-shrink-0 border border-[#E8D5A8]">
                             <img
-                              src={tp.image}
+                              src={cloudinaryImageUrl(tp.image, 'thumb')}
                               alt={tp.productName}
+                              loading="lazy"
+                              decoding="async"
                               className="w-full h-full object-cover"
                             />
                           </div>

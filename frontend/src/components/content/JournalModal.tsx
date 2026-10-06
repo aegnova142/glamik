@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Clock, ArrowRight, Share2, Sparkles } from 'lucide-react';
 import { JournalArticle } from '@glamirk/shared/types';
+import { responsiveImage } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface JournalModalProps {
   article: JournalArticle | null;
@@ -51,8 +52,10 @@ export const JournalModal: React.FC<JournalModalProps> = ({
             {/* Header Hero Image */}
             <div className="relative aspect-[16/9] bg-[#FAF9F6] overflow-hidden">
               <img
-                src={article.image}
+                {...responsiveImage(article.image, 'gallery', '(max-width: 768px) 100vw, 768px')}
                 alt={article.title}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#0B0B0B]/80 via-transparent to-transparent" />

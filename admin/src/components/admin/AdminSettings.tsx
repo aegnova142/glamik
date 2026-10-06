@@ -8,6 +8,7 @@ import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { CMSGlobalSettings, CMSAnnouncementMessage } from '@glamirk/shared/types';
 import { Settings, Save, Check, Plus, Trash2, ShieldCheck, Palette, Copy, Upload, Loader2, ImageOff } from 'lucide-react';
 import { useFileUpload } from '../../hooks/useFileUpload';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 export const AdminSettings: React.FC = () => {
   const { globalSettings, saveGlobalSettings } = useCMS();
@@ -233,7 +234,7 @@ export const AdminSettings: React.FC = () => {
             <div className="flex items-center gap-3">
               <div className="w-20 h-20 shrink-0 rounded-lg bg-[#0B0B0B] border border-[#E8D5A8]/30 flex items-center justify-center overflow-hidden">
                 {settings.logoUrl ? (
-                  <img src={settings.logoUrl} alt="Navbar logo preview" className="w-full h-full object-contain" />
+                  <img src={cloudinaryImageUrl(settings.logoUrl, 'logo')} alt="Navbar logo preview" className="w-full h-full object-contain" />
                 ) : (
                   <ImageOff className="w-5 h-5 text-[#6B6B6B]" />
                 )}
@@ -268,7 +269,7 @@ export const AdminSettings: React.FC = () => {
             <div className="flex items-center gap-3">
               <div className="w-20 h-20 shrink-0 rounded-lg bg-[#171717] border border-[#E8D5A8]/30 flex items-center justify-center overflow-hidden">
                 {settings.footerLogoUrl ? (
-                  <img src={settings.footerLogoUrl} alt="Footer logo preview" className="w-full h-full object-contain" />
+                  <img src={cloudinaryImageUrl(settings.footerLogoUrl, 'logo')} alt="Footer logo preview" className="w-full h-full object-contain" />
                 ) : (
                   <ImageOff className="w-5 h-5 text-[#6B6B6B]" />
                 )}

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CMSHeroBackground } from '@glamirk/shared/types';
+import { cloudinaryImageUrl, cloudinarySrcSet } from '@glamirk/shared/utils/cloudinaryImage';
 
 const DEFAULT_INTERVAL_MS = 3000;
 const TRANSITION_MS = 900;
@@ -51,9 +52,22 @@ export const HeroBackgroundCarousel: React.FC<HeroBackgroundCarouselProps> = ({ 
       {activeImages.map((bg, i) => (
         <img
           key={bg.id}
-          src={bg.image}
+          src={cloudinaryImageUrl(bg.image, 'hero')}
+          srcSet={cloudinarySrcSet(bg.image, 'hero') || undefined}
+          // Full-bleed at every breakpoint, so the browser should pick purely
+          // on viewport width and device pixel ratio.
+          sizes="100vw"
           alt=""
           draggable={false}
+          // The first slide is above the fold and is the page's LCP candidate:
+          // eager, high priority, never deferred. The rest are decorative
+          // frames that will not be seen for at least three seconds, so they
+          // are lazy and must not compete with it for bandwidth — lazy-loading
+          // the LCP image is the classic way to wreck the metric, and eagerly
+          // loading the ones behind it is the other way.
+          loading={i === 0 ? 'eager' : 'lazy'}
+          fetchPriority={i === 0 ? 'high' : 'low'}
+          decoding="async"
           onError={() => handleImageError(bg.id)}
           className="absolute inset-0 h-full w-full object-cover"
           style={{

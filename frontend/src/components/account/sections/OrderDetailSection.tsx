@@ -173,7 +173,7 @@ export const OrderDetailSection: React.FC<OrderDetailSectionProps> = ({
         <ul className="divide-y divide-[#F1EBDD]">
           {order.items.map((item, idx) => (
             <li key={`${item.productId}-${idx}`} className="px-5 py-4 flex gap-4">
-              <ProductImage src={item.productImage} alt="" className="w-16 h-20 object-cover border border-[#E8D5A8] rounded shrink-0" />
+              <ProductImage preset="thumb" src={item.productImage} alt="" className="w-16 h-20 object-cover border border-[#E8D5A8] rounded shrink-0" />
               <div className="min-w-0 flex-1">
                 <h3 className="font-serif text-sm text-[#121212]">{item.productName}</h3>
                 <p className="text-[11.5px] text-[#6B6B6B] mt-0.5">

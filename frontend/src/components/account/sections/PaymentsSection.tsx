@@ -200,7 +200,7 @@ export const PaymentsSection: React.FC<PaymentsSectionProps> = ({ onOpenOrder, o
                 <AccountCard key={r.returnId} className="p-4 sm:p-5 space-y-4">
                   <div className="flex items-start gap-3.5">
                     <div className="w-14 h-14 rounded-lg bg-[#FAF9F6] border border-[#E8D5A8] overflow-hidden shrink-0">
-                      <ProductImage src={r.productImage} alt={r.productName} className="w-full h-full object-cover" />
+                      <ProductImage preset="thumb" src={r.productImage} alt={r.productName} className="w-full h-full object-cover" />
                     </div>
                     <div className="min-w-0 flex-1 space-y-1">
                       <p className="font-serif text-[14.5px] text-[#121212] leading-snug">{r.productName}</p>

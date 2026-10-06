@@ -386,7 +386,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
               {selectedOrder.items.map((item, idx) => (
                 <div key={idx} className="p-4 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3.5">
-                    <ProductImage
+                    <ProductImage preset="thumb"
                       src={item.productImage}
                       alt={item.productName}
                       className="w-12 h-14 object-cover bg-white border border-[#E8D5A8]"

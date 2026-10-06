@@ -8,6 +8,7 @@ import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { CMSCategory } from '@glamirk/shared/types';
 import { Layers, Plus, Trash2, Edit2, Save, Check, ArrowLeft } from 'lucide-react';
 import { ImageCropUploadModal } from './ImageCropUploadModal';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 export const AdminCategories: React.FC = () => {
   const { categories, saveCategory, deleteCategory } = useCMS();
@@ -127,7 +128,7 @@ export const AdminCategories: React.FC = () => {
             </div>
             {editingCategory.image && (
               <div className="mt-2 w-full h-28 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B]">
-                <img src={editingCategory.image} alt="Cover" className="w-full h-full object-cover" />
+                <img src={cloudinaryImageUrl(editingCategory.image, 'tile')} alt="Cover" className="w-full h-full object-cover" />
               </div>
             )}
             {isUploadOpen && (
@@ -195,7 +196,7 @@ export const AdminCategories: React.FC = () => {
           >
             <div className="h-40 relative bg-[#0B0B0B]">
               {cat.image ? (
-                <img src={cat.image} alt={cat.name} className="w-full h-full object-cover" />
+                <img src={cloudinaryImageUrl(cat.image, 'thumb')} alt={cat.name} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-[#6B6B6B]">
                   No Image

@@ -32,6 +32,7 @@ import { useDragReorder } from '../../hooks/useDragReorder';
 import { PRODUCT_TAXONOMY } from '@glamirk/shared/data/taxonomy';
 import { apiFetch } from '@glamirk/shared/utils/cmsClient';
 import { InventoryPanel, ReadOnlyStockField } from './InventoryPanel';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 type ProductImageSlot = 'primary' | 'secondary' | 'detail' | 'texture' | 'lifestyle' | 'swatch';
 
@@ -835,7 +836,7 @@ export const AdminProducts: React.FC = () => {
                       className="flex-1 px-2.5 py-1.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
                     />
                     {step.image && (
-                      <img src={step.image} alt="" className="w-9 h-9 rounded object-cover border border-[#E8D5A8]/30 shrink-0" />
+                      <img src={cloudinaryImageUrl(step.image, 'thumb')} alt="" className="w-9 h-9 rounded object-cover border border-[#E8D5A8]/30 shrink-0" />
                     )}
                     <label className="px-2 py-1.5 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-[10px] font-semibold text-[#FAF9F6] transition-colors cursor-pointer whitespace-nowrap shrink-0">
                       {uploadingStepId === step.id ? '...' : step.image ? 'Replace' : 'Image'}
@@ -1293,7 +1294,7 @@ export const AdminProducts: React.FC = () => {
                                   </div>
                                 ) : (
                                   <img
-                                    src={img.url}
+                                    src={cloudinaryImageUrl(img.url, 'thumb')}
                                     alt={img.alt || shade.name}
                                     className="w-full h-full object-contain cursor-pointer"
                                     onClick={() => {
@@ -1725,7 +1726,7 @@ export const AdminProducts: React.FC = () => {
                           </div>
                         ) : (
                           <img
-                            src={url}
+                            src={cloudinaryImageUrl(url, 'thumb')}
                             alt={slot.label}
                             className="w-full h-full object-contain"
                             onError={() => setBrokenSlotKeys((prev) => new Set(prev).add(slot.key))}
@@ -1987,7 +1988,7 @@ export const AdminProducts: React.FC = () => {
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg overflow-hidden border border-[#E8D5A8]/20 bg-[#0B0B0B] shrink-0 flex items-center justify-center">
                         <img
-                          src={p.images.primary}
+                          src={cloudinaryImageUrl(p.images.primary, 'thumb')}
                           alt={p.name}
                           className="w-full h-full object-contain"
                         />

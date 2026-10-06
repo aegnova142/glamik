@@ -2,6 +2,7 @@ import React from 'react';
 import { Home, Sparkles, ShoppingBag, LayoutGrid, User } from 'lucide-react';
 import { PageRoute } from '@glamirk/shared/types';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface MobileBottomNavProps {
   currentRoute: PageRoute;
@@ -138,8 +139,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           <div className="relative">
             {isCustomerLoggedIn && customerUser?.avatarUrl ? (
               <img
-                src={customerUser.avatarUrl}
+                src={cloudinaryImageUrl(customerUser.avatarUrl, 'avatar')}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className={`w-5 h-5 rounded-full object-cover border ${
                   isAccount ? 'border-[#F05A7E]' : 'border-[#E8D5A8]'
                 }`}

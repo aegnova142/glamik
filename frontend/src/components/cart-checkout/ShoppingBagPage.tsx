@@ -256,7 +256,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                         onClick={() => onOpenProduct(item.product)}
                         className="w-24 h-28 sm:w-28 sm:h-32 bg-[#FAF9F6] border border-[#E8D5A8] overflow-hidden flex-shrink-0 cursor-pointer relative"
                       >
-                        <ProductImage
+                        <ProductImage preset="thumb"
                           src={item.product.images.primary}
                           alt={item.product.name}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -391,7 +391,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                           onClick={() => onOpenProduct(item.product)}
                           className="w-16 h-19 bg-white border border-[#E8D5A8] overflow-hidden flex-shrink-0 cursor-pointer"
                         >
-                          <ProductImage src={item.product.images.primary} alt={item.product.name} className="w-full h-full object-cover" />
+                          <ProductImage preset="thumb" src={item.product.images.primary} alt={item.product.name} className="w-full h-full object-cover" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <h4

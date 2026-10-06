@@ -17,11 +17,26 @@ import {
   ExternalLink,
   Sparkles,
 } from 'lucide-react';
+import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
+
+/** What a batch upload is currently doing, for the progress strip. */
+interface BatchState {
+  index: number;
+  total: number;
+  name: string;
+  percent: number;
+  processing: boolean;
+}
 
 export const AdminMediaLibrary: React.FC = () => {
-  const { uploadMedia, deleteMedia } = useCMS();
+  const { uploadMediaDetailed, deleteMedia } = useCMS();
   const [mediaList, setMediaList] = useState<CMSMediaItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [batch, setBatch] = useState<BatchState | null>(null);
+  // Per-file, because a batch is usually "these nine are fine, that one is a
+  // PDF" — collapsing them into one message would hide which file failed and
+  // why, which is the only part the admin can act on.
+  const [uploadErrors, setUploadErrors] = useState<{ name: string; message: string }[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -48,13 +63,35 @@ export const AdminMediaLibrary: React.FC = () => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    // A second batch while one is running would interleave two sets of
+    // progress updates into one bar and read as nonsense.
+    if (isUploading) return;
 
     setIsUploading(true);
+    setUploadErrors([]);
+    const failures: { name: string; message: string }[] = [];
+
+    // Sequential, not Promise.all. Ten parallel 20 MB uploads saturate the
+    // connection so every one of them crawls, and the server would be holding
+    // ten full buffers in memory at once. One at a time also makes the
+    // progress number mean something.
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      await uploadMedia(file, file.name, file.name.replace(/\.[^/.]+$/, ''));
+      setBatch({ index: i + 1, total: files.length, name: file.name, percent: 0, processing: false });
+      const { error } = await uploadMediaDetailed(file, {
+        name: file.name,
+        altText: file.name.replace(/\.[^/.]+$/, ''),
+        onProgress: (percent) =>
+          setBatch((prev) => (prev ? { ...prev, percent, processing: percent >= 99 } : prev)),
+      });
+      // A rejected file does not abandon the rest of the batch — the other
+      // nine photos the admin selected should still land.
+      if (error) failures.push({ name: file.name, message: error });
     }
+
+    setBatch(null);
     setIsUploading(false);
+    setUploadErrors(failures);
     if (fileInputRef.current) fileInputRef.current.value = '';
     fetchMedia();
   };
@@ -103,7 +140,11 @@ export const AdminMediaLibrary: React.FC = () => {
             ref={fileInputRef}
             onChange={handleFileUpload}
             multiple
-            accept="image/*"
+            // Explicit rather than image/*, so the OS dialog greys out the
+            // formats the API will refuse instead of letting one be picked
+            // and failing afterwards.
+            accept="image/jpeg,image/png,image/webp,image/avif,image/gif,image/svg+xml"
+            disabled={isUploading}
             className="hidden"
           />
           <button
@@ -123,10 +164,45 @@ export const AdminMediaLibrary: React.FC = () => {
         </p>
       )}
 
+      {uploadErrors.length > 0 && (
+        <div className="rounded-lg bg-[#F05A7E]/10 border border-[#F05A7E]/30 px-3 py-2 space-y-1">
+          {uploadErrors.map((f) => (
+            <p key={f.name} className="text-xs text-[#F05A7E]">
+              <span className="font-semibold">{f.name}</span> — {f.message}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {batch && (
+        <div className="rounded-xl bg-[#171717] border border-[#E8D5A8]/20 px-4 py-3" role="status" aria-live="polite">
+          <div className="flex items-center justify-between text-[11px] mb-2">
+            <span className="text-[#FAF9F6] truncate pr-3">
+              {batch.processing ? 'Processing' : 'Uploading'}{' '}
+              <span className="text-[#6B6B6B]">{batch.name}</span>
+            </span>
+            <span className="font-mono text-[#C9972B] shrink-0">
+              {batch.total > 1 ? `${batch.index}/${batch.total} · ` : ''}
+              {batch.processing ? '…' : `${batch.percent}%`}
+            </span>
+          </div>
+          <div className="h-1 w-full rounded-full overflow-hidden bg-[#0B0B0B]">
+            <div
+              className={`h-full bg-[#C9972B] transition-[width] duration-200 ease-out ${
+                batch.processing ? 'animate-pulse' : ''
+              }`}
+              style={{ width: `${batch.processing ? 100 : batch.percent}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Drag & Drop Area */}
       <div
-        onClick={() => fileInputRef.current?.click()}
-        className="p-8 rounded-xl bg-[#171717] border-2 border-dashed border-[#E8D5A8]/30 hover:border-[#C9972B] transition-colors flex flex-col items-center justify-center text-center cursor-pointer group"
+        onClick={() => !isUploading && fileInputRef.current?.click()}
+        className={`p-8 rounded-xl bg-[#171717] border-2 border-dashed border-[#E8D5A8]/30 transition-colors flex flex-col items-center justify-center text-center group ${
+          isUploading ? 'opacity-50 cursor-not-allowed' : 'hover:border-[#C9972B] cursor-pointer'
+        }`}
       >
         <div className="w-12 h-12 rounded-full bg-[#C9972B]/10 flex items-center justify-center text-[#C9972B] mb-2 group-hover:scale-110 transition-transform">
           <Upload className="w-6 h-6" />
@@ -134,7 +210,9 @@ export const AdminMediaLibrary: React.FC = () => {
         <p className="text-xs font-semibold text-[#FAF9F6]">
           Click to upload or drag and drop image files
         </p>
-        <p className="text-[10px] text-[#6B6B6B] mt-1">PNG, JPG, WEBP, GIF up to 20MB</p>
+        <p className="text-[10px] text-[#6B6B6B] mt-1">
+          JPG, PNG, WebP, AVIF, GIF or SVG up to 20MB · optimised and resized automatically
+        </p>
       </div>
 
       {/* Search */}
@@ -157,7 +235,16 @@ export const AdminMediaLibrary: React.FC = () => {
             className="group relative rounded-xl bg-[#171717] border border-[#E8D5A8]/20 overflow-hidden flex flex-col"
           >
             <div className="h-36 bg-[#0B0B0B] relative overflow-hidden">
-              <img src={m.url} alt={m.altText || m.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+              {/* A 300px thumbnail, not the stored original. This grid used to
+                  download every full-resolution asset in the library at once
+                  just to render 36px-tall tiles. */}
+              <img
+                src={cloudinaryImageUrl(m.url, 'thumb')}
+                alt={m.altText || m.name}
+                loading="lazy"
+                decoding="async"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              />
             </div>
 
             <div className="p-3 bg-[#171717] flex-1 flex flex-col justify-between">
@@ -166,6 +253,11 @@ export const AdminMediaLibrary: React.FC = () => {
               </p>
               <span className="text-[9px] text-[#6B6B6B] font-mono">
                 {new Date(m.uploadedAt || Date.now()).toLocaleDateString()}
+                {/* Only for records that carry them — entries uploaded before
+                    these fields existed simply show the date, as they always
+                    have. */}
+                {m.width && m.height ? ` · ${m.width}×${m.height}` : ''}
+                {m.format ? ` · ${m.format.toUpperCase()}` : ''}
               </span>
 
               <div className="pt-2 mt-2 border-t border-[#E8D5A8]/10 flex items-center justify-between">

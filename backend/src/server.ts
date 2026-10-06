@@ -17,7 +17,7 @@ import webhooksRouter, {
 import { ensureSchema } from './db/db';
 import { setupSocketIO } from './services/realtime.service';
 import { purgeExpiredOtpCodes } from './services/otp.service';
-import { registerShiprocketTracking } from './services/shiprocket.service';
+import { registerDelhiveryTracking } from './services/couriers/delhivery.service';
 import {
   releaseExpiredReservations,
   sqlInventoryEnabled,
@@ -99,10 +99,10 @@ async function startServer() {
   setupSocketIO(httpServer);
 
   // Courier tracking is served through the provider registry in
-  // shipping.service.ts; registering Shiprocket here is the whole integration
+  // shipping.service.ts; registering Delhivery here is the whole integration
   // as far as the tracking UI is concerned. A no-op in production when live
   // mode is off, which leaves the existing internal-status tracking in place.
-  registerShiprocketTracking();
+  registerDelhiveryTracking();
 
   // ------------------------------------------------------------------
   // Webhooks are mounted BEFORE express.json() and parse their own raw body.

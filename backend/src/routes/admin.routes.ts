@@ -35,16 +35,15 @@ import { grantOrderPoints } from '../services/rewards.service';
 import {
   createShipmentForOrder,
   cancelShipmentForOrder,
-  ensureShipmentPickup,
-  generateShipmentManifest,
-  ensureShipmentInvoice,
+  ensureWarehousePickup,
+  ensureShipmentLabel,
   recordTrackingEvents,
   refundOrderPayment,
   restoreOrderStock,
   applyShippingStatus,
   shipmentsEnabled,
 } from '../services/fulfillment.service';
-import { getShippingProvider } from '../services/shiprocket.service';
+import { getShipmentProvider } from '../services/couriers/delhivery.service';
 import {
   getProductInventory,
   getInventoryTransactions,
@@ -690,7 +689,7 @@ router.post('/admin/orders/:id/shipment/create', requireAdmin, async (req: Authe
 
   if (!shipmentsEnabled()) {
     return res.status(503).json({
-      error: 'Shipping is not enabled. Set SHIPROCKET_LIVE_MODE=true with credentials to create real shipments.',
+      error: 'Shipping is not enabled. Set DELHIVERY_LIVE_MODE=true with credentials to create real shipments.',
     });
   }
 
@@ -708,24 +707,25 @@ router.post('/admin/orders/:id/shipment/create', requireAdmin, async (req: Authe
 });
 
 /**
- * The post-AWB shipment documents and the pickup request.
+ * Post-creation shipment actions, exposed so an operator can retry a step that
+ * failed independently of the booking itself. Each is individually idempotent:
+ * pressing one twice is a no-op, not a second van or a reissued label.
  *
- * All four are exposed as explicit admin actions as well as being run
- * automatically after booking, because each can fail independently of the
- * shipment itself and each is individually idempotent. Pressing any of them
- * twice is a no-op rather than a second pickup or a reissued manifest.
+ * Manifest and invoice are gone, not renamed. Delhivery has no endpoint for
+ * either — they were Shiprocket concepts, and keeping buttons that could only
+ * ever fail would be worse than not offering them.
  *
- * None of these moves inventory, payment, or the order's own status — the one
- * exception is the pickup, which advances the parcel's shipping lifecycle
- * through applyShippingStatus like any other courier event.
+ * `pickup` ignores its orderId: Delhivery books collections per warehouse per
+ * day, so one request covers every parcel waiting there. The signature keeps
+ * the argument only so every action in this table looks the same to the route
+ * below.
  */
 const SHIPMENT_DOCUMENT_ACTIONS: Record<
   string,
   { run: (orderId: string) => Promise<{ ok: boolean; error?: string }>; audit: string; label: string }
 > = {
-  pickup: { run: ensureShipmentPickup, audit: 'GENERATE_PICKUP', label: 'pickup requested' },
-  manifest: { run: generateShipmentManifest, audit: 'GENERATE_MANIFEST', label: 'manifest generated' },
-  invoice: { run: ensureShipmentInvoice, audit: 'GENERATE_INVOICE', label: 'invoice generated' },
+  pickup: { run: () => ensureWarehousePickup(), audit: 'REQUEST_PICKUP', label: 'warehouse pickup requested' },
+  label: { run: ensureShipmentLabel, audit: 'GENERATE_LABEL', label: 'shipping label generated' },
 };
 
 router.post('/admin/orders/:id/shipment/:action', requireAdmin, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -775,12 +775,18 @@ router.post('/admin/orders/:id/shipment/cancel', requireAdmin, async (req: Authe
 
 /** Pulls the latest courier scan on demand, rather than waiting for a webhook. */
 router.get('/admin/orders/:id/shipment/track', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
-  const shipmentRes = await pool.query('SELECT id, awb_code FROM shipments WHERE order_id = $1', [req.params.id]);
-  const awb = shipmentRes.rows[0]?.awb_code;
-  if (!awb) return res.status(404).json({ error: 'This order has no AWB yet.' });
+  const shipmentRes = await pool.query(
+    'SELECT id, awb_code, waybill, provider_order_id FROM shipments WHERE order_id = $1',
+    [req.params.id]
+  );
+  // `waybill` is Delhivery's; `awb_code` still carries it too, and carries
+  // Shiprocket's on historical rows. Reading both keeps an old shipment
+  // trackable through whichever provider is registered for its courier.
+  const waybill = shipmentRes.rows[0]?.waybill || shipmentRes.rows[0]?.awb_code;
+  if (!waybill) return res.status(404).json({ error: 'This order has no tracking number yet.' });
 
-  const provider = getShippingProvider();
-  const tracking = await provider.track(awb);
+  const provider = getShipmentProvider();
+  const tracking = await provider.track(waybill, shipmentRes.rows[0]?.provider_order_id || undefined);
   if (!tracking.ok || !tracking.value) {
     return res.status(502).json({ error: tracking.error || 'Could not reach the courier.' });
   }
@@ -791,24 +797,27 @@ router.get('/admin/orders/:id/shipment/track', requireAdmin, async (req: Authent
   await recordTrackingEvents({
     orderId: req.params.id,
     shipmentRowId: shipmentRes.rows[0].id,
-    awb,
+    awb: waybill,
     scans: tracking.value.scans || [],
     source: 'tracking_api',
-    providerStatus: tracking.value.status,
+    providerStatus: tracking.value.providerStatus,
     mappedStatus: tracking.value.status,
   });
 
   // A manual check also reconciles, so pressing "track" fixes an order whose
-  // webhook was missed.
-  await applyShippingStatus({
-    orderId: req.params.id,
-    status: tracking.value.status,
-    awbCode: awb,
-    courierName: tracking.value.courierName,
-    deliveredAt: tracking.value.deliveredAt,
-  });
+  // webhook was missed. An unrecognised provider status maps to null, and that
+  // must not move the order — it is recorded above and nothing more.
+  if (tracking.value.status) {
+    await applyShippingStatus({
+      orderId: req.params.id,
+      status: tracking.value.status,
+      awbCode: waybill,
+      courierName: tracking.value.courierName,
+      deliveredAt: tracking.value.deliveredAt,
+    });
+  }
 
-  res.json({ awb, status: tracking.value.status, events: tracking.value.events, courierName: tracking.value.courierName });
+  res.json({ awb: waybill, waybill, providerStatus: tracking.value.providerStatus, status: tracking.value.status, events: tracking.value.events, courierName: tracking.value.courierName });
 });
 
 // --- Refunds ---

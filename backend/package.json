@@ -20,13 +20,13 @@
     "inventory:verify": "tsx src/db/cli-inventory.ts verify",
     "inventory:health": "tsx src/db/cli-inventory.ts health",
     "inventory:mirror-check": "tsx src/db/cli-inventory.ts mirror-check",
-    "shiprocket:check": "tsx src/db/cli-shiprocket.ts",
     "inventory:inspect": "tsx src/db/cli-inspect-production.ts",
     "inventory:validate": "tsx src/db/cli-validate-migration.ts",
     "inventory:resync": "tsx src/db/cli-inventory.ts resync",
     "inventory:rollback": "tsx src/db/cli-inventory.ts rollback",
     "inventory:repair-flags": "tsx src/db/cli-inventory.ts repair-flags",
-    "images:cleanup": "tsx src/db/cli-cleanup-seed-images.ts"
+    "images:cleanup": "tsx src/db/cli-cleanup-seed-images.ts",
+    "delhivery:check": "tsx src/db/cli-delhivery.ts"
   },
   "dependencies": {
     "@glamirk/shared": "*",

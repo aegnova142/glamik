@@ -3,14 +3,14 @@ import crypto from 'crypto';
 import { pool } from '../db/db';
 import { env } from '../config/env';
 import { rateLimit } from '../middleware/rateLimit';
-import { verifyWebhookSignature, fromMinorUnits } from '../services/payment.service';
 import {
-  verifyShiprocketWebhook,
-  mapShiprocketStatusStrict,
-  parseShiprocketWebhook,
-  statusDedupeKey,
-  ShiprocketWebhookPayload,
-} from '../services/shiprocket.service';
+  verifyDelhiveryWebhook,
+  parseDelhiveryScanPush,
+  mapDelhiveryStatus,
+  delhiveryStatusKey,
+  DelhiveryScanPayload,
+} from '../services/couriers/delhivery.service';
+import { verifyWebhookSignature, fromMinorUnits } from '../services/payment.service';
 import {
   markOrderPaid,
   markOrderPaymentFailed,
@@ -254,37 +254,23 @@ router.post('/webhooks/razorpay', rawJson, async (req: Request, res: Response) =
 });
 
 // ==========================================
-// SHIPROCKET
+// DELHIVERY — Scan Push
 // ==========================================
 
 /**
- * Resolves which Glamirk order a Shiprocket delivery is about, and refuses to
- * guess.
+ * Resolves which Glamirk order a Delhivery push is about.
  *
- * Three identifiers arrive, and they mean different things:
+ * Two identifiers arrive and they mean different things: the waybill is the
+ * tracking number we drew and stored, and the reference is the order number we
+ * sent at creation. Both are values Glamirk wrote, so both are checked against
+ * what we hold rather than either being taken on trust.
  *
- *   channel_order_id — the id WE gave Shiprocket at creation, i.e. our
- *                      order_number. This is the authoritative mapping.
- *   order_id         — SHIPROCKET's own order id. Despite the name it is not
- *                      a Glamirk order number, and treating it as one would
- *                      look up an order that does not exist (or, worse, a
- *                      different one that happens to collide).
- *   awb              — the courier's tracking number, which we stored when we
- *                      bought it.
- *
- * The mapping is taken from channel_order_id, then cross-checked against the
- * shipment row we wrote ourselves. Any identifier that is present on both sides
- * and disagrees stops processing: a payload that claims one order's number and
- * another order's AWB is either a provider bug or someone probing, and acting
- * on either identifier alone would move the wrong parcel's order.
+ * Any identifier present on both sides that disagrees stops processing. A push
+ * claiming one order's number and another's waybill is either a provider bug
+ * or someone probing, and acting on either alone moves the wrong parcel's
+ * order.
  */
-/**
- * One open shape rather than a discriminated union on `ok`, matching the
- * convention in shiprocket.service.ts: this project compiles without `strict`,
- * where narrowing on a literal-boolean discriminant is unreliable. Callers
- * check `ok` and then read the fields belonging to that branch.
- */
-interface ResolvedShiprocketOrder {
+interface ResolvedDelhiveryOrder {
   ok: boolean;
   orderId?: string;
   shipmentRowId?: string | null;
@@ -292,207 +278,160 @@ interface ResolvedShiprocketOrder {
   reason?: string;
 }
 
-async function resolveShiprocketOrder(payload: ShiprocketWebhookPayload): Promise<ResolvedShiprocketOrder> {
+async function resolveDelhiveryOrder(payload: DelhiveryScanPayload): Promise<ResolvedDelhiveryOrder> {
   const candidates: { orderId: string; via: string }[] = [];
 
-  if (payload.channelOrderId) {
-    const res = await pool.query('SELECT id FROM orders WHERE order_number = $1 LIMIT 1', [payload.channelOrderId]);
-    if (res.rows[0]) candidates.push({ orderId: res.rows[0].id, via: 'channel_order_id' });
+  if (payload.waybill) {
+    // waybill first, then awb_code — a historical Shiprocket row only has the
+    // latter, and this route must not resurrect one by accident.
+    const res = await pool.query(
+      `SELECT order_id FROM shipments WHERE waybill = $1 OR (waybill IS NULL AND awb_code = $1) LIMIT 1`,
+      [payload.waybill]
+    );
+    if (res.rows[0]) candidates.push({ orderId: res.rows[0].order_id, via: 'waybill' });
   }
-  if (payload.awb) {
-    const res = await pool.query('SELECT order_id FROM shipments WHERE awb_code = $1 LIMIT 1', [payload.awb]);
-    if (res.rows[0]) candidates.push({ orderId: res.rows[0].order_id, via: 'awb' });
-  }
-  if (payload.providerOrderId) {
-    const res = await pool.query('SELECT order_id FROM shipments WHERE provider_order_id = $1 LIMIT 1', [
-      payload.providerOrderId,
-    ]);
-    if (res.rows[0]) candidates.push({ orderId: res.rows[0].order_id, via: 'provider_order_id' });
+  if (payload.orderRef) {
+    const res = await pool.query('SELECT id FROM orders WHERE order_number = $1 LIMIT 1', [payload.orderRef]);
+    if (res.rows[0]) candidates.push({ orderId: res.rows[0].id, via: 'order_ref' });
   }
 
   if (candidates.length === 0) {
-    return { ok: false, reason: 'No Glamirk order matches any identifier in this delivery' };
+    return { ok: false, reason: 'No Glamirk order matches any identifier in this push' };
   }
 
-  // Two identifiers that resolve to different orders. Refuse rather than pick.
   const distinct = [...new Set(candidates.map((c) => c.orderId))];
   if (distinct.length > 1) {
-    return {
-      ok: false,
-      reason: `Identifiers disagree: ${candidates.map((c) => `${c.via}→${c.orderId}`).join(', ')}`,
-    };
+    return { ok: false, reason: `Identifiers disagree: ${candidates.map((c) => `${c.via}→${c.orderId}`).join(', ')}` };
   }
 
   const orderId = distinct[0];
-  // Prefer the documented channel mapping when it is one of the matches.
-  const matchedBy = candidates.find((c) => c.via === 'channel_order_id')?.via || candidates[0].via;
-
   const shipmentRes = await pool.query(
-    'SELECT id, awb_code, provider_order_id FROM shipments WHERE order_id = $1 LIMIT 1',
+    'SELECT id, waybill, awb_code FROM shipments WHERE order_id = $1 LIMIT 1',
     [orderId]
   );
   const shipment = shipmentRes.rows[0];
 
-  // Cross-check against what we stored. Only fields present on both sides are
-  // compared — a webhook that arrives before we recorded an AWB is normal.
-  if (shipment) {
-    if (payload.awb && shipment.awb_code && String(shipment.awb_code) !== payload.awb) {
-      return { ok: false, reason: 'AWB in the delivery does not match the AWB stored for this order' };
-    }
-    if (
-      payload.providerOrderId &&
-      shipment.provider_order_id &&
-      String(shipment.provider_order_id) !== payload.providerOrderId
-    ) {
-      return { ok: false, reason: 'Shiprocket order id does not match the one stored for this order' };
+  if (shipment && payload.waybill) {
+    const stored = shipment.waybill || shipment.awb_code;
+    if (stored && String(stored) !== payload.waybill) {
+      return { ok: false, reason: 'Waybill in the push does not match the one stored for this order' };
     }
   }
 
-  return { ok: true, orderId, shipmentRowId: shipment?.id || null, matchedBy };
+  return {
+    ok: true,
+    orderId,
+    shipmentRowId: shipment?.id || null,
+    matchedBy: candidates.find((c) => c.via === 'waybill')?.via || candidates[0].via,
+  };
 }
 
 /**
- * Shiprocket shipment tracking.
+ * Delhivery Scan Push.
  *
- * Rate limited despite being authenticated: the key check is the cheapest thing
- * here, but an unauthenticated flood still costs a request parse and a log
- * line each. The ceiling is high enough that a genuine burst of courier scans
- * across many parcels passes untouched.
+ * NOT production-enabled. Delhivery configures Scan Push through its own
+ * webhook request process and tests the endpoint before switching it on, so
+ * this is ready to receive but has not been exercised by Delhivery yet. Until
+ * they have, nothing arrives here in production.
+ *
+ * Deliberately a separate route from the Shiprocket one rather than a reused
+ * path with a renamed secret: the two providers authenticate differently, send
+ * different payloads, and are configured by different people. Sharing a URL
+ * would mean one provider's retry storm rate-limiting the other.
  */
-/**
- * Both paths serve the same handler.
- *
- * Shiprocket's own webhook form asks you not to put the words "shiprocket",
- * "kartrocket", "sr" or "kr" in the URL you give it — it is validated at their
- * end, so the obvious path is the one path that may be refused. `/courier` is
- * the address to configure.
- *
- * `/shiprocket` is kept and still works: it is what the tests, the docs and
- * any already-configured integration use, and removing a webhook URL that
- * something might still be calling is how deliveries get silently dropped.
- */
-export const SHIPROCKET_WEBHOOK_PATHS = ['/webhooks/courier', '/webhooks/shiprocket'];
-
 router.post(
-  SHIPROCKET_WEBHOOK_PATHS,
-  rateLimit({
-    windowMs: 60 * 1000,
-    max: 600,
-    scope: 'webhook-shiprocket',
-    message: 'Too many requests.',
-  }),
+  '/webhooks/delhivery',
+  rateLimit({ windowMs: 60 * 1000, max: 600, scope: 'webhook-delhivery', message: 'Too many requests.' }),
   rawJson,
   async (req: Request, res: Response) => {
     const body = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
 
-    // Shiprocket authenticates with a shared token header rather than an HMAC
-    // over the body, so this is a constant-time secret comparison. Checked
-    // before the body is even parsed: an unverified payload is attacker input.
-    if (!verifyShiprocketWebhook(req.get('x-api-key'))) {
-      // No detail about why, so this cannot be used as an oracle. The key
-      // itself is never logged.
-      console.warn('[webhook] rejected a Shiprocket delivery with a missing or invalid x-api-key');
+    // Checked before the body is parsed — an unverified payload is attacker
+    // input. Fails closed with no secret configured, in every environment.
+    if (!verifyDelhiveryWebhook(req.get('x-api-key') || req.get('authorization'))) {
+      console.warn('[webhook] rejected a Delhivery delivery with a missing or invalid key');
       return res.status(401).json({ error: 'Unauthorized.' });
     }
 
     const parsedBody = parseJsonBody(body);
-    const payload = parseShiprocketWebhook(parsedBody);
+    const payload = parseDelhiveryScanPush(parsedBody);
     if (!payload) return res.status(400).json({ error: 'Malformed payload.' });
 
-    // Shiprocket sends current_status/current_status_id; shipment_status mirrors
-    // it on most events. The current_* pair is authoritative, with the
-    // shipment_* pair as the fallback for deliveries that only carry it.
-    const statusId = payload.currentStatusId ?? payload.shipmentStatusId;
-    const statusText = payload.currentStatus || payload.shipmentStatus;
+    const resolved = await resolveDelhiveryOrder(payload);
+    const orderId = resolved.ok ? resolved.orderId! : null;
 
-    const resolved = await resolveShiprocketOrder(payload);
-    const orderId = resolved.ok ? resolved.orderId : null;
-
-    // Shiprocket sends no event id of its own. One is derived from the fields
-    // it does send — AWB, status and timestamp — so an identical redelivery
-    // collapses onto the same row while a genuine next status does not. When
-    // the delivery carries too little to key on, the body hash is the fallback.
+    // Delhivery sends no event id. One is derived from the fields it does
+    // send, so an identical redelivery collapses onto the same row while a
+    // genuine next status does not.
     const eventId =
-      payload.awb && (statusText || statusId !== null)
-        ? statusDedupeKey({
-            awb: payload.awb,
-            orderId: orderId || payload.channelOrderId || '',
-            statusId: statusId ?? null,
-            status: statusText,
-            timestamp: payload.currentTimestampRaw,
+      payload.waybill && (payload.status || payload.statusType)
+        ? delhiveryStatusKey({
+            waybill: payload.waybill,
+            orderId: orderId || payload.orderRef || '',
+            statusType: payload.statusType,
+            status: payload.status,
+            timestamp: payload.statusDateTimeRaw,
           })
-        : deterministicEventId('shiprocket', body);
+        : deterministicEventId('delhivery', body);
 
     const claim = await claimEvent({
-      source: 'shiprocket',
+      source: 'delhivery',
       eventId,
-      eventType: statusText || 'unknown',
+      eventType: payload.status || 'unknown',
       orderId,
       payload: parsedBody,
     });
 
     // Acknowledged before the work starts. A duplicate is a success from
-    // Shiprocket's point of view: it asked us to be sure we have the event.
+    // Delhivery's point of view: it asked us to be sure we have the event.
     res.json({ received: true, duplicate: !claim.fresh });
     if (!claim.fresh) return;
 
     try {
       if (!resolved.ok) {
-        // Recorded in full and acted on in no way. An unmappable or
-        // self-contradictory delivery is a reconciliation question, never a
-        // reason to modify an order.
-        console.warn(`[webhook] shiprocket delivery not applied: ${resolved.reason}`);
+        console.warn(`[webhook] delhivery push not applied: ${resolved.reason}`);
         await finishEvent(claim.rowId, 'IGNORED', resolved.reason);
         return;
       }
 
-      const { shipmentRowId } = resolved;
+      const shipmentRowId = resolved.shipmentRowId ?? null;
 
-      // Heard-from timestamp moves on every delivery, duplicate or not — it is
-      // how "are webhooks still arriving for this parcel?" stays answerable.
       if (shipmentRowId) {
         await pool.query('UPDATE shipments SET last_webhook_at = now(), updated_at = now() WHERE id = $1', [
           shipmentRowId,
         ]);
       }
 
-      // Strict mapping: null when Shiprocket reports something we do not
+      // Strict mapping: null when Delhivery reports a pair this build does not
       // recognise. Unknown statuses are recorded but never approximated —
-      // guessing DELIVERED here would convert reserved stock to sold.
-      const mapped = mapShiprocketStatusStrict(statusId ?? undefined, statusText);
+      // guessing DELIVERED converts reserved stock to sold.
+      const mapped = mapDelhiveryStatus(payload.statusType, payload.status);
 
-      // The courier's own words, stored verbatim alongside the mapped status so
-      // an unrecognised status is still visible to an operator.
       if (shipmentRowId) {
         await pool.query(
           `UPDATE shipments SET tracking_status = COALESCE($2, tracking_status),
-                  tracking_status_id = COALESCE($3, tracking_status_id),
+                  provider_status_type = COALESCE($3, provider_status_type),
                   tracking_updated_at = COALESCE($4, tracking_updated_at),
-                  etd = COALESCE($5, etd),
-                  courier_name = COALESCE($6, courier_name),
                   updated_at = now()
            WHERE id = $1`,
           [
             shipmentRowId,
-            statusText,
-            statusId ?? null,
-            payload.currentTimestamp ? payload.currentTimestamp.toISOString() : null,
-            payload.etd ? payload.etd.toISOString() : null,
-            payload.courierName,
+            payload.status,
+            payload.statusType,
+            payload.statusDateTime ? payload.statusDateTime.toISOString() : null,
           ]
         );
       }
 
-      // Scan history. Idempotent at the database level, so the full scan list
-      // Shiprocket resends on every delivery inserts only what is new.
+      // Scan history. Idempotent at the database level, so the full list
+      // Delhivery resends on every push inserts only what is new.
       const newScans = await recordTrackingEvents({
-        orderId: resolved.orderId,
+        orderId: resolved.orderId!,
         shipmentRowId,
-        awb: payload.awb,
+        awb: payload.waybill,
         scans: payload.scans,
         source: 'webhook',
-        providerStatus: statusText,
-        providerStatusId: statusId ?? null,
+        providerStatus: payload.status,
         mappedStatus: mapped,
       });
 
@@ -500,31 +439,24 @@ router.post(
         await finishEvent(
           claim.rowId,
           'PROCESSED',
-          `Unrecognised courier status "${statusText || statusId}" — recorded, order state unchanged`
+          `Unrecognised status "${payload.statusType}/${payload.status}" — recorded, order state unchanged`
         );
         return;
       }
 
-      // The order lifecycle moves through applyShippingStatus and nothing else.
-      // That function owns the status transition, the refusal to drag a
-      // terminal order backwards, the COD cash-collected-on-delivery rule, and
-      // the reservation→sold conversion through the existing inventory mirror.
-      // Duplicating any of it here is how a webhook ends up double-consuming
-      // stock.
+      // The order lifecycle moves through applyShippingStatus and nothing
+      // else. That function owns the transition, the refusal to drag a
+      // terminal order backwards, the COD cash-collected rule, and the
+      // reservation→sold conversion through the inventory mirror.
       const changed = await applyShippingStatus({
-        orderId: resolved.orderId,
+        orderId: resolved.orderId!,
         status: mapped,
-        awbCode: payload.awb || undefined,
-        courierName: payload.courierName || undefined,
-        note: statusText ? `Courier update: ${statusText}` : undefined,
-        deliveredAt:
-          mapped === 'DELIVERED'
-            ? (payload.currentTimestamp || new Date()).toISOString()
-            : undefined,
+        awbCode: payload.waybill || undefined,
+        courierName: 'Delhivery',
+        note: payload.status ? `Courier update: ${payload.status}` : undefined,
+        deliveredAt: mapped === 'DELIVERED' ? (payload.statusDateTime || new Date()).toISOString() : undefined,
       });
 
-      // "Nothing changed" is the normal outcome for a repeated status, and is
-      // still a success — the scans may well have been new.
       await finishEvent(
         claim.rowId,
         'PROCESSED',
@@ -532,7 +464,7 @@ router.post(
       );
     } catch (err: any) {
       await finishEvent(claim.rowId, 'FAILED', err?.message || 'Unknown error');
-      console.error('[webhook] shiprocket processing failed:', err);
+      console.error('[webhook] delhivery processing failed:', err);
     }
   }
 );
@@ -592,46 +524,49 @@ export async function reconcileStuckWebhookEvents(): Promise<{ examined: number;
       }
 
       if (row.source === 'shiprocket') {
+        // Shiprocket is no longer an active provider. Historical events stay in
+        // the ledger for audit, but there is nothing left to replay them
+        // through — and reviving a dead integration to re-apply a months-old
+        // scan would be worse than leaving it recorded and closed.
+        await finishEvent(row.id, 'IGNORED', 'Shiprocket integration retired; historical event left as-is');
+        continue;
+      }
+
+      if (row.source === 'delhivery') {
         // Replayed through the same parser and the same strict mapping as a
-        // live delivery, so a stored payload cannot take a more permissive path
-        // on its second attempt than it would have on its first.
-        const payload = parseShiprocketWebhook(row.payload);
+        // live push, so a stored payload cannot take a more permissive path on
+        // its second attempt than it would have on its first.
+        const payload = parseDelhiveryScanPush(row.payload);
         if (!payload) {
-          await finishEvent(row.id, 'IGNORED', 'Stored payload is not a Shiprocket webhook body');
+          await finishEvent(row.id, 'IGNORED', 'Stored payload is not a Delhivery Scan Push body');
           continue;
         }
-        const statusId = payload.currentStatusId ?? payload.shipmentStatusId;
-        const statusText = payload.currentStatus || payload.shipmentStatus;
-        const status = mapShiprocketStatusStrict(statusId ?? undefined, statusText);
-
+        const status = mapDelhiveryStatus(payload.statusType, payload.status);
         const shipmentRes = await pool.query('SELECT id FROM shipments WHERE order_id = $1 LIMIT 1', [row.order_id]);
         await recordTrackingEvents({
           orderId: row.order_id,
           shipmentRowId: shipmentRes.rows[0]?.id || null,
-          awb: payload.awb,
+          awb: payload.waybill,
           scans: payload.scans,
           source: 'webhook',
-          providerStatus: statusText,
-          providerStatusId: statusId ?? null,
+          providerStatus: payload.status,
           mappedStatus: status,
         });
-
         if (!status) {
-          await finishEvent(row.id, 'PROCESSED', `Unrecognised courier status "${statusText || statusId}" on replay`);
+          await finishEvent(row.id, 'PROCESSED', `Unrecognised status "${payload.statusType}/${payload.status}" on replay`);
           recovered++;
           continue;
         }
         await applyShippingStatus({
           orderId: row.order_id,
           status,
-          awbCode: payload.awb || undefined,
-          courierName: payload.courierName || undefined,
+          awbCode: payload.waybill || undefined,
+          courierName: 'Delhivery',
         });
         await finishEvent(row.id, 'PROCESSED');
         recovered++;
         continue;
       }
-
       await finishEvent(row.id, 'IGNORED', 'No reconciliation rule for this event');
     } catch (err: any) {
       await finishEvent(row.id, 'FAILED', err?.message || 'Replay failed');

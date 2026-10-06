@@ -24,6 +24,12 @@
 // this script writes orders, mutates stock and cancels shipments. It refuses
 // to start unless the target is unmistakably a local throwaway.
 // ==========================================
+// Pinned before any import. mailer.ts refuses to open an SMTP connection under
+// NODE_ENV=test and hands back a capturing stub instead. The repo's .env holds
+// working Gmail credentials, so without this a suite run authenticates against
+// the live mailbox and emails real customers — which is what it used to do.
+process.env.NODE_ENV = 'test';
+
 const url = process.env.DATABASE_URL || '';
 const isLocal = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
 const looksLikeTestDb = /test/i.test(url);
@@ -48,7 +54,7 @@ process.env.DELHIVERY_WEBHOOK_SECRET = WEBHOOK_KEY;
 // Delhivery is the active provider now, and it refuses to create a shipment
 // without a registered warehouse name. Pinned here so these suites exercise
 // the booking flow rather than its fail-closed guard.
-process.env.DELHIVERY_PICKUP_LOCATION = 'Test Warehouse';
+process.env.DELHIVERY_PICKUP_NAME = 'Test Warehouse';
 process.env.DELHIVERY_LIVE_MODE = 'false';
 
 import crypto from 'crypto';

@@ -15,6 +15,10 @@
  *      the rule is an allowlist of things to delete, not a blocklist of things
  *      to keep, and that distinction is the whole safety argument)
  */
+// Pinned before any import — mailer.ts will not open an SMTP connection under
+// NODE_ENV=test. See checkout.e2e.ts for why that matters.
+process.env.NODE_ENV = 'test';
+
 import { GLAMIRK_PRODUCTS } from '@glamirk/shared/data/products';
 import {
   isPlaceholderImage,

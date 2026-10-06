@@ -1,4 +1,4 @@
-import { pool, loadDatabase, saveDatabase, withStockLock } from '../db/db';
+import { pool, loadDatabase, saveDatabase, withStockLock, withOrderShipmentLock } from '../db/db';
 import { env } from '../config/env';
 import {
   OrderStatus,
@@ -328,7 +328,7 @@ export async function markOrderPaid(input: {
   });
 
   // Fulfilment is attempted immediately but never blocks the response: a
-  // Shiprocket outage must not turn a successful payment into a failed
+  // courier outage must not turn a successful payment into a failed
   // checkout. The reconciliation sweep retries anything that did not stick.
   void createShipmentForOrder(input.orderId).catch((err) =>
     console.error(`[fulfillment] shipment creation failed for ${input.orderId}:`, err)
@@ -406,8 +406,26 @@ export async function recordRefund(input: { orderId: string; amount: number }): 
  *
  * Partial failure is expected. The shipment row keeps whatever succeeded and
  * records the error, so a retry resumes rather than restarting.
+ *
+ * Serialised per order by an advisory lock. The unique index alone was not
+ * enough: it decides only who INSERTs the shipments row, and the caller that
+ * loses then reads that same row and carries on — two callers holding one
+ * shipmentRowId, each drawing a waybill, the second overwriting the first with
+ * an UPDATE that no unique index can catch. Two create.json calls, two real
+ * parcels, one orphaned waybill. The lock is what makes the sequence below
+ * single-threaded for a given order; the indexes remain the backstop.
  */
 export async function createShipmentForOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  const run = await withOrderShipmentLock(orderId, () => bookShipmentForOrder(orderId));
+  if (!run.acquired) {
+    // Someone else is mid-flight on this exact order. Refusing is the safe
+    // answer — queueing behind them would book the parcel a second time.
+    return { ok: false, error: 'A shipment booking for this order is already in progress.' };
+  }
+  return run.value!;
+}
+
+async function bookShipmentForOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
   const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
   const order = orderRes.rows[0];
   if (!order) return { ok: false, error: 'Order not found.' };
@@ -560,13 +578,38 @@ export async function createShipmentForOrder(orderId: string): Promise<{ ok: boo
     );
   }
 
+  // A pincode can be serviceable for prepaid and still refuse cash. Delhivery
+  // reports the two separately and we were asking for the answer without
+  // reading it — booking a COD parcel into a prepaid-only area gets it refused
+  // at the door and returned as an RTO. Caught here instead, while it is still
+  // a message to an operator rather than a parcel on a van.
+  //
+  // Strictly `=== false`: undefined means the provider did not say, and a
+  // missing answer must not block a sale.
+  if (isCod && serviceability.value.codAvailable === false) {
+    return fail(
+      `Pincode ${payload.address.pinCode} does not accept Cash on Delivery. The order must be prepaid, or the delivery address changed.`,
+      true
+    );
+  }
+
   // 2. Draw a waybill and persist it BEFORE creating anything. See the note at
   //    the top of this function — this is what makes a timeout recoverable.
   let waybill = existingWaybill;
   if (!waybill) {
     if (!provider.fetchWaybill) return fail('Provider cannot allocate a waybill.');
     const drawn = await provider.fetchWaybill();
-    if (!drawn.ok || !drawn.value?.waybill) return fail(`Waybill fetch failed: ${drawn.error}`);
+    if (!drawn.ok || !drawn.value?.waybill) {
+      // An ambiguous outcome is reported in its own words. The order is still
+      // retryable and a retry still draws a fresh number — but the previous
+      // one may have been allocated and lost, and that is worth an operator
+      // seeing in last_error rather than discovering on a Delhivery invoice.
+      return fail(
+        drawn.ambiguous
+          ? `Waybill allocation outcome unknown: ${drawn.error} A retry will draw a fresh number.`
+          : `Waybill fetch failed: ${drawn.error}`
+      );
+    }
     waybill = drawn.value.waybill;
 
     await pool.query(
@@ -846,7 +889,14 @@ export async function applyShippingStatus(input: {
 
   const impliedOrderStatus = SHIPPING_TO_ORDER_STATUS[status];
   if (impliedOrderStatus) {
-    const currentStatus = orderUpdate.rows[0]?.status;
+    // Read the order's status directly rather than from the UPDATE above. That
+    // statement returns a row only when shipping_status actually changed, so a
+    // push that moves the shipment while the order's shipping_status already
+    // matched left `current` undefined — skipping the terminal check below and
+    // letting a late in-transit scan drag a DELIVERED order back to SHIPPED,
+    // re-sending its "on the way" email.
+    const orderRes = await pool.query('SELECT status FROM orders WHERE id = $1', [orderId]);
+    const currentStatus = orderRes.rows[0]?.status;
     const current = currentStatus ? canonicalOrderStatus(currentStatus) : undefined;
     // Never drag an order backwards: a late "in transit" scan arriving after
     // delivery must not un-deliver the order.

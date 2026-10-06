@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { env } from '../../config/env';
 import { httpJson } from '../http.client';
-import { ShippingStatus, OrderStatus, OrderTimelineEvent } from '@glamirk/shared/types';
+import { ShippingStatus, OrderTimelineEvent, SHIPPING_TO_ORDER_STATUS } from '@glamirk/shared/types';
 import { registerCourierProvider, CourierProvider, CourierShipment } from '../shipping.service';
 import {
   ShipmentProvider,
@@ -124,15 +124,10 @@ export function mapDelhiveryStatus(statusType: string | null | undefined, status
   return DELHIVERY_STATUS_MAP[`${type}/${value}`] ?? null;
 }
 
-/** Shipping status → the order timeline status it should appear as. */
-const SHIPPING_TIMELINE_STATUS: Partial<Record<ShippingStatus, OrderStatus>> = {
-  PICKED_UP: 'SHIPPED',
-  IN_TRANSIT: 'SHIPPED',
-  OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
-  DELIVERED: 'DELIVERED',
-  RTO_INITIATED: 'RTO',
-  RTO_DELIVERED: 'RTO',
-};
+// Shipping status → the order timeline status it should appear as. This was a
+// local copy of SHIPPING_TO_ORDER_STATUS, identical entry for entry. The two
+// drifting apart would mean the timeline a customer sees disagrees with the
+// status the order is actually in, so there is only one table now.
 
 /** Glamirk payment mode → Delhivery's `payment_mode`. */
 const PAYMENT_MODE: Record<ShipmentPaymentMode, string> = {
@@ -160,6 +155,19 @@ export function scrubDelhiverySecrets(text: string): string {
   const token = env.delhivery.apiToken;
   if (token && token.length >= 8) out = out.split(token).join('[redacted]');
   return out;
+}
+
+/**
+ * Whether a failed call may nonetheless have been carried out.
+ *
+ * Status 0 is httpJson's network/timeout case: the request was aborted or the
+ * connection dropped, and either could have happened after Delhivery already
+ * acted. A 5xx can equally be a failure reported after the work was done. A
+ * 4xx is the one honest "nothing happened" — the request was rejected on
+ * sight, so retrying it cannot duplicate anything.
+ */
+export function outcomeIsAmbiguous(status: number): boolean {
+  return status === 0 || status >= 500;
 }
 
 async function delhiveryRequest<T = any>(
@@ -196,6 +204,65 @@ export function parseDelhiveryDate(value: unknown): Date | null {
   const utcMs = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s || '0'));
   const parsed = new Date(utcMs - (5 * 60 + 30) * 60 * 1000);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * The only fields this adapter will forward to /api/p/edit.
+ *
+ * An allowlist, not a spread. `changes` is a caller-supplied bag and spreading
+ * it put whatever it held directly into an authenticated request — including
+ * `cancellation`, which would quietly turn an address correction into a
+ * cancelled parcel. Nothing reaches Delhivery unless it is named here.
+ *
+ * `cancellation` is deliberately absent. cancelShipment owns that flag, builds
+ * its own body, and checks the refusal case; routing it through a generic edit
+ * would bypass both.
+ *
+ * `waybill` is absent too — it identifies the shipment being edited and is set
+ * by the adapter, never by the caller's changes.
+ */
+const EDITABLE_SHIPMENT_FIELDS = [
+  'name',
+  'add',
+  'phone',
+  'pin',
+  'city',
+  'state',
+  'country',
+  'weight',
+  'shipment_length',
+  'shipment_width',
+  'shipment_height',
+  'products_desc',
+  'total_amount',
+  'cod_amount',
+  'seller_inv',
+] as const;
+
+/**
+ * Splits a caller's change set into what will be sent and what was dropped.
+ *
+ * Exported so the rule is testable on its own — the interesting cases are all
+ * about what does NOT come back.
+ */
+export function pickEditableShipmentFields(changes: Record<string, unknown> | null | undefined): {
+  fields: Record<string, unknown>;
+  rejected: string[];
+} {
+  const allowed = EDITABLE_SHIPMENT_FIELDS as readonly string[];
+  const fields: Record<string, unknown> = {};
+  const rejected: string[] = [];
+
+  for (const [key, value] of Object.entries(changes || {})) {
+    // An explicit undefined is dropped silently rather than rejected: it is
+    // the shape an optional field takes when a caller has nothing to say about
+    // it, not an attempt to send something unsupported.
+    if (value === undefined) continue;
+    if (allowed.includes(key)) fields[key] = value;
+    else rejected.push(key);
+  }
+
+  return { fields, rejected };
 }
 
 const CAPABILITIES: ProviderCapabilities = {
@@ -270,12 +337,28 @@ const liveProvider: ShipmentProvider = {
     const token = env.delhivery.apiToken;
     if (!token) return { ok: false, error: 'DELHIVERY_TOKEN is not configured.', retryable: false };
 
+    // Exactly one attempt, for the same reason createShipment takes one.
+    // Allocation is not idempotent: every call hands out a NEW number from the
+    // client's pool, so an automatic retry after a timeout draws a second
+    // waybill and permanently strands the first — a number the client paid for
+    // that no parcel will ever carry. httpJson cannot tell "the request never
+    // arrived" from "it was answered and we hung up first", so it is not
+    // allowed to guess on this endpoint.
     const res = await transport<any>(
       `${apiBase()}/waybill/api/fetch/json/?token=${encodeURIComponent(token)}`,
-      { timeoutMs: 15000, attempts: 2 }
+      { timeoutMs: 15000, attempts: 1 }
     );
     if (!res.ok) {
-      return { ok: false, error: scrubDelhiverySecrets(res.error || 'Waybill fetch failed.'), retryable: !!res.retryable };
+      const ambiguous = outcomeIsAmbiguous(res.status);
+      return {
+        ok: false,
+        error: scrubDelhiverySecrets(
+          (res.error || 'Waybill fetch failed.') +
+            (ambiguous ? ' — outcome unknown; a waybill may have been allocated and lost.' : '')
+        ),
+        retryable: !!res.retryable,
+        ambiguous,
+      };
     }
 
     // The endpoint answers with a bare quoted string rather than an object.
@@ -424,7 +507,7 @@ const liveProvider: ShipmentProvider = {
       .map((scan) => {
         const scanStatus = mapDelhiveryStatus(scan.providerStatusType, scan.providerStatus);
         return {
-          status: (scanStatus && SHIPPING_TIMELINE_STATUS[scanStatus]) || 'SHIPPED',
+          status: (scanStatus && SHIPPING_TO_ORDER_STATUS[scanStatus]) || 'SHIPPED',
           timestamp: (scan.scanAt || new Date()).toISOString(),
           note: scan.activity || '',
           completed: true,
@@ -518,10 +601,20 @@ const liveProvider: ShipmentProvider = {
   },
 
   async editShipment({ waybill, changes }) {
+    const { fields, rejected } = pickEditableShipmentFields(changes);
+    if (rejected.length > 0) {
+      // Logged, not returned as an error: an edit that carried one unsupported
+      // key alongside three good ones should still apply the three.
+      console.warn(`[delhivery] edit ignored unsupported field(s): ${rejected.join(', ')}`);
+    }
+    if (Object.keys(fields).length === 0) {
+      return { ok: false, error: 'No supported fields to edit.', retryable: false };
+    }
+
     const res = await delhiveryRequest<any>('/api/p/edit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: { waybill, ...changes },
+      body: { waybill, ...fields },
       timeoutMs: 20000,
       attempts: 2,
     });
@@ -579,6 +672,13 @@ export const mockDelhiveryProvider: ShipmentProvider & {
   /** Test seam: advances a mock shipment, as a courier scan would. */
   simulateScan(waybill: string, statusType: string, status: string, note?: string): void;
   pickupCount(): number;
+  /** Parcels the mock actually created. Two for one order is the duplicate
+   * booking failure, and it is invisible to a row count — a second create
+   * against a second waybill writes no second shipments row. */
+  shipmentCount(): number;
+  /** Waybills drawn from the pool. One per order; more means a retry leaked
+   * one, which costs the client real numbers. */
+  waybillsDrawn(): number;
   reset(): void;
 } = {
   name: 'delhivery-mock',
@@ -596,6 +696,22 @@ export const mockDelhiveryProvider: ShipmentProvider & {
     }
     if (deliveryPincode.startsWith('98')) {
       return { ok: true, value: { serviceable: false, temporary: true, remark: 'Embargo', raw: { mock: true } } };
+    }
+    // Deliverable, but cash is refused there. A real range Delhivery reports
+    // and the one case where `serviceable` alone is not enough to book.
+    if (deliveryPincode.startsWith('97')) {
+      return {
+        ok: true,
+        value: {
+          serviceable: true,
+          temporary: false,
+          city: 'Mock City',
+          state: 'MC',
+          codAvailable: false,
+          prepaidAvailable: true,
+          raw: { mock: true },
+        },
+      };
     }
     return {
       ok: true,
@@ -657,13 +773,15 @@ export const mockDelhiveryProvider: ShipmentProvider & {
         providerStatus: state.status,
         providerStatusType: state.statusType,
         scans: state.scans,
-        events: state.scans.map((s) => ({
-          status: (mapDelhiveryStatus(s.providerStatusType, s.providerStatus) &&
-            SHIPPING_TIMELINE_STATUS[mapDelhiveryStatus(s.providerStatusType, s.providerStatus)!]) || 'SHIPPED',
-          timestamp: (s.scanAt || new Date()).toISOString(),
-          note: s.activity || '',
-          completed: true,
-        })),
+        events: state.scans.map((s) => {
+          const scanStatus = mapDelhiveryStatus(s.providerStatusType, s.providerStatus);
+          return {
+            status: (scanStatus && SHIPPING_TO_ORDER_STATUS[scanStatus]) || 'SHIPPED',
+            timestamp: (s.scanAt || new Date()).toISOString(),
+            note: s.activity || '',
+            completed: true,
+          };
+        }),
         courierName: 'Delhivery',
         deliveredAt: mapped === 'DELIVERED' ? new Date().toISOString() : undefined,
         raw: { mock: true },
@@ -722,6 +840,14 @@ export const mockDelhiveryProvider: ShipmentProvider & {
     return mockPickups.length;
   },
 
+  shipmentCount() {
+    return mockShipments.size;
+  },
+
+  waybillsDrawn() {
+    return mockWaybillCounter;
+  },
+
   reset() {
     mockShipments.clear();
     mockPickups.length = 0;
@@ -765,7 +891,7 @@ export function registerDelhiveryTracking(): void {
         courierPartner: result.value.courierName || 'Delhivery',
         trackingUrl: `https://www.delhivery.com/track/package/${encodeURIComponent(trackingNumber)}`,
         events: result.value.events,
-        currentStatus: result.value.status ? SHIPPING_TIMELINE_STATUS[result.value.status] : undefined,
+        currentStatus: result.value.status ? SHIPPING_TO_ORDER_STATUS[result.value.status] : undefined,
       };
     },
   };
@@ -790,7 +916,7 @@ export function registerDelhiveryTracking(): void {
  * length pre-check because timingSafeEqual throws on a length mismatch.
  *
  * Fails closed: with no secret configured nothing is accepted, in any
- * environment. The Shiprocket route once fell back to a constant committed in
+ * environment. An earlier courier webhook here fell back to a constant committed in
  * this repository, and that is not repeated here.
  */
 export function verifyDelhiveryWebhook(providedKey: string | undefined | null): boolean {

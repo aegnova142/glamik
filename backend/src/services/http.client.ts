@@ -80,7 +80,13 @@ export async function httpJson<T = any>(url: string, options: HttpRequestOptions
           ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
           ...headers,
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        // A string body is already encoded and is passed through untouched.
+        // JSON.stringify would wrap it in quotes, which silently corrupts any
+        // form-encoded payload — Delhivery's create.json takes
+        // `format=json&data=<json>` as x-www-form-urlencoded, and a quoted
+        // body means the provider never sees the `format` parameter at all.
+        // Callers sending an object still get it serialised as JSON.
+        body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
         signal: controller.signal,
       });
       clearTimeout(timer);

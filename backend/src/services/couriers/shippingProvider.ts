@@ -1,8 +1,8 @@
 // ==========================================
 // SHIPPING PROVIDER — provider-neutral contract
 //
-// The previous interface lived inside shiprocket.service.ts and was shaped by
-// Shiprocket's own model: pick a courier from quoted rates, create a shipment,
+// The previous interface lived inside the old courier adapter and was shaped by
+// an aggregator model: pick a courier from quoted rates, create a shipment,
 // then buy an AWB for it, then generate a manifest and an invoice as separate
 // documents. That is one aggregator's workflow, not a general one.
 //
@@ -35,6 +35,16 @@ export interface ProviderResult<T> {
   error?: string;
   /** True when retrying could plausibly succeed: timeout, network, 5xx, 429. */
   retryable?: boolean;
+  /**
+   * True when the request may have been carried out even though we never saw
+   * the answer — a timeout, a dropped connection, a 5xx.
+   *
+   * Distinct from `retryable`, which asks whether a retry could work. This asks
+   * whether a retry is *safe*. They differ exactly where it matters most: a
+   * timed-out waybill allocation is retryable and unsafe, because the number
+   * was probably handed out and is now lost.
+   */
+  ambiguous?: boolean;
 }
 
 /**

@@ -16,6 +16,10 @@
  * a real van that somebody has to cancel.
  */
 
+// Pinned before any import — mailer.ts will not open an SMTP connection under
+// NODE_ENV=test. See checkout.e2e.ts for why that matters.
+process.env.NODE_ENV = 'test';
+
 const url = process.env.DATABASE_URL || '';
 if (!/@(localhost|127\.0\.0\.1)[:/]/.test(url) || !/test/i.test(url)) {
   console.error('\nREFUSING TO RUN — DATABASE_URL must be a local database whose name contains "test".\n');
@@ -49,10 +53,20 @@ import {
   delhiveryScanKey,
   delhiveryStatusKey,
   scrubDelhiverySecrets,
+  outcomeIsAmbiguous,
+  pickEditableShipmentFields,
   __setDelhiveryTransportForTests,
 } from '../services/couriers/delhivery.service';
+import {
+  emailDeliveryEnabled,
+  getMailTransporter,
+  __getSentTestEmails,
+  __resetMailTransportForTests,
+} from '../services/mailer';
+import { sendOrderStatusEmail } from '../services/email.service';
 import { resolveDelhiveryBaseUrl, DELHIVERY_DEFAULT_BASE_URL } from '../config/env';
-import { createShipmentForOrder, ensureWarehousePickup, commitOrderStock } from '../services/fulfillment.service';
+import { createShipmentForOrder, ensureWarehousePickup, commitOrderStock, applyShippingStatus } from '../services/fulfillment.service';
+import { httpJson } from '../services/http.client';
 import { ensureProductInventory } from '../services/inventory.service';
 import webhooksRouter from '../routes/webhooks.routes';
 
@@ -72,12 +86,19 @@ function check(name: string, condition: boolean, detail?: string): void {
 }
 const section = (t: string) => console.log(`\n${t}`);
 
-/** A scripted stand-in for httpJson. Routes match by substring of the URL. */
-interface FakeCall { url: string; method: string; body: any; headers: Record<string, string> }
+/**
+ * A scripted stand-in for httpJson. Routes match by substring of the URL.
+ *
+ * `attempts` is recorded because this double REPLACES httpJson, retry loop
+ * included — so a route is called once however many attempts were requested.
+ * Asserting on call count therefore proves nothing about retry behaviour; the
+ * only observable fact is what the adapter asked for, which is this field.
+ */
+interface FakeCall { url: string; method: string; body: any; headers: Record<string, string>; attempts?: number }
 function makeTransport(routes: { match: string; respond: (call: FakeCall) => any }[]) {
   const calls: FakeCall[] = [];
   const transport = (async (requestUrl: string, options: any = {}) => {
-    calls.push({ url: requestUrl, method: options.method || 'GET', body: options.body, headers: options.headers || {} });
+    calls.push({ url: requestUrl, method: options.method || 'GET', body: options.body, headers: options.headers || {}, attempts: options.attempts });
     const route = routes.find((r) => requestUrl.includes(r.match));
     if (!route) return { ok: false, status: 404, error: `No fake route for ${requestUrl}` };
     return route.respond(calls[calls.length - 1]);
@@ -233,6 +254,9 @@ async function run(): Promise<void> {
     const authHeader = calls[0]?.headers?.Authorization;
     check('the token is sent as a Token header', typeof authHeader === 'string' && authHeader.startsWith('Token '));
     check('one pincode per call', calls[0].url.includes('filter_codes=302020'));
+    // The single-attempt rule is targeted at allocation, not blanket: a read
+    // changes nothing upstream, so retrying it is free and still allowed.
+    check('a read-only lookup is still allowed to retry', (calls[0].attempts || 0) > 1, `attempts=${calls[0].attempts}`);
     restore();
   }
   {
@@ -282,6 +306,7 @@ async function run(): Promise<void> {
     check('a waybill is returned', r.ok === true && r.value!.waybill === '1234567890123');
     check('surrounding quotes are stripped', !r.value!.waybill.includes('"'));
     check('the token goes in the query string for this endpoint', calls[0].url.includes('token='));
+    check('a successful allocation also asks for one attempt', calls[0].attempts === 1, `attempts=${calls[0].attempts}`);
     restore();
   }
   {
@@ -292,6 +317,51 @@ async function run(): Promise<void> {
     check('...and is retryable', r.retryable === true);
     restore();
   }
+
+  // --- allocation is never retried blindly (M8) ---------------------------
+  // The pool hands out a NEW number per call. A retry after a timeout draws a
+  // second waybill and strands the first — a number the client paid for that
+  // no parcel will ever carry.
+  {
+    const { transport, calls } = makeTransport([
+      { match: '/waybill/api/fetch/json/', respond: () => ({ ok: false, status: 0, error: 'Request timed out after 15000ms', retryable: true }) },
+    ]);
+    const restore = __setDelhiveryTransportForTests(transport);
+    const r = await getShipmentProvider().fetchWaybill!();
+    check('allocation asks httpJson for exactly ONE attempt', calls[0].attempts === 1, `attempts=${calls[0].attempts}`);
+    check('...and reported as a failure', r.ok === false);
+    check('...flagged ambiguous — a waybill may have been allocated', r.ambiguous === true);
+    check('...and says the outcome is unknown', /outcome unknown/i.test(r.error || ''));
+    restore();
+  }
+  {
+    const { transport, calls } = makeTransport([
+      { match: '/waybill/api/fetch/json/', respond: () => ({ ok: false, status: 503, error: 'Service Unavailable', retryable: true }) },
+    ]);
+    const restore = __setDelhiveryTransportForTests(transport);
+    const r = await getShipmentProvider().fetchWaybill!();
+    check('a 5xx allocation is never auto-retried either', calls[0].attempts === 1, `attempts=${calls[0].attempts}`);
+    check('...and is ambiguous too — 5xx can follow completed work', r.ambiguous === true);
+    restore();
+  }
+  {
+    // A 4xx is the one honest "nothing happened": rejected on sight.
+    const { transport, calls } = makeTransport([
+      { match: '/waybill/api/fetch/json/', respond: () => ({ ok: false, status: 401, error: 'Unauthorized', retryable: false }) },
+    ]);
+    const restore = __setDelhiveryTransportForTests(transport);
+    const r = await getShipmentProvider().fetchWaybill!();
+    check('a 4xx allocation asks for one attempt too', calls[0].attempts === 1, `attempts=${calls[0].attempts}`);
+    check('...and is NOT ambiguous — nothing was allocated', r.ambiguous === false);
+    check('...so the error carries no "outcome unknown" wording', !/outcome unknown/i.test(r.error || ''));
+    restore();
+  }
+  check('status 0 (network/timeout) is ambiguous', outcomeIsAmbiguous(0) === true);
+  check('500 is ambiguous', outcomeIsAmbiguous(500) === true);
+  check('502 is ambiguous', outcomeIsAmbiguous(502) === true);
+  check('400 is not ambiguous', outcomeIsAmbiguous(400) === false);
+  check('404 is not ambiguous', outcomeIsAmbiguous(404) === false);
+  check('429 is not ambiguous — the request was refused, not performed', outcomeIsAmbiguous(429) === false);
 
   // ========================================
   section('4. Shipment creation');
@@ -568,12 +638,33 @@ async function run(): Promise<void> {
   ship = (await pool.query(`SELECT * FROM shipments WHERE order_id = 'bk-1'`)).rows[0];
   check('the waybill did not change', ship.waybill === firstWaybill);
 
+  // --- concurrency --------------------------------------------------------
+  // A row count alone does not prove this. The unique index decides only who
+  // INSERTs the shipments row; a caller that loses it used to read that same
+  // row and carry on, so two callers drew two waybills, each created a parcel,
+  // and the second overwrote the first on one row. One row, two parcels. These
+  // assertions count what the courier was actually asked to do.
   await seedOrder({ id: 'bk-2', orderNumber: 'GLM-DLV-2' });
   await commitOrderStock('bk-2');
+  const shipmentsBefore = mockDelhiveryProvider.shipmentCount();
+  const waybillsBefore = mockDelhiveryProvider.waybillsDrawn();
   const racing = await Promise.all(Array.from({ length: 5 }, () => createShipmentForOrder('bk-2')));
   const racedRows = await pool.query(`SELECT COUNT(*)::int n FROM shipments WHERE order_id = 'bk-2'`);
-  check('5 concurrent bookings produce exactly one shipment', racedRows.rows[0].n === 1, String(racedRows.rows[0].n));
+  check('5 concurrent bookings produce exactly one shipment row', racedRows.rows[0].n === 1, String(racedRows.rows[0].n));
   check('at least one concurrent caller succeeded', racing.some((r) => r.ok));
+  check(
+    '...and the courier was asked to create exactly ONE parcel',
+    mockDelhiveryProvider.shipmentCount() - shipmentsBefore === 1,
+    String(mockDelhiveryProvider.shipmentCount() - shipmentsBefore)
+  );
+  check(
+    '...drawing exactly ONE waybill from the pool',
+    mockDelhiveryProvider.waybillsDrawn() - waybillsBefore === 1,
+    String(mockDelhiveryProvider.waybillsDrawn() - waybillsBefore)
+  );
+  check('the losers say a booking is already in progress', racing.some((r) => /already in progress/i.test(r.error || '')));
+  const racedShip = (await pool.query(`SELECT waybill, awb_code FROM shipments WHERE order_id = 'bk-2'`)).rows[0];
+  check('the stored waybill is the one that was actually booked', racedShip.waybill === racedShip.awb_code);
 
   // --- unserviceable ------------------------------------------------------
   await seedOrder({ id: 'bk-3', orderNumber: 'GLM-DLV-3', pinCode: '990001' });
@@ -589,6 +680,23 @@ async function run(): Promise<void> {
   const embargoed = await createShipmentForOrder('bk-4');
   check('an embargoed pincode blocks booking', embargoed.ok === false);
   check('...and is described as temporary', /temporarily/i.test(embargoed.error || ''));
+
+  // --- COD serviceability -------------------------------------------------
+  // Deliverable, but cash is refused there. Serviceability alone said yes, so
+  // the parcel used to be booked and then returned as an RTO.
+  await seedOrder({ id: 'bk-5', orderNumber: 'GLM-DLV-5', pinCode: '970001', paymentMethod: 'cod' });
+  const codBefore = mockDelhiveryProvider.shipmentCount();
+  const codBlocked = await createShipmentForOrder('bk-5');
+  check('a COD order into a prepaid-only pincode is blocked', codBlocked.ok === false);
+  check('...and names Cash on Delivery as the reason', /cash on delivery/i.test(codBlocked.error || ''));
+  check('...before any parcel is created', mockDelhiveryProvider.shipmentCount() === codBefore);
+  const codOrder = (await pool.query(`SELECT * FROM orders WHERE id = 'bk-5'`)).rows[0];
+  check('...and the Glamirk order is left intact', codOrder.status !== 'CANCELLED' && codOrder.stock_restored === false);
+
+  // The same pincode is fine when the money has already been taken.
+  await seedOrder({ id: 'bk-6', orderNumber: 'GLM-DLV-6', pinCode: '970001', paymentMethod: 'card', paymentStatus: 'PAID' });
+  const prepaidThere = await createShipmentForOrder('bk-6');
+  check('a PREPAID order into the same pincode still books', prepaidThere.ok === true, prepaidThere.error);
 
   // --- pickup idempotency -------------------------------------------------
   const pickupRows = await pool.query(`SELECT COUNT(*)::int n FROM shipment_pickup_requests WHERE status = 'OPEN'`);
@@ -617,7 +725,7 @@ async function run(): Promise<void> {
   check('verify accepts the configured secret', verifyDelhiveryWebhook(TEST_WEBHOOK_SECRET) === true);
   {
     // Fails closed with nothing configured — in every environment, unlike the
-    // Shiprocket route it replaces.
+    // courier webhook it replaces.
     const saved = process.env.DELHIVERY_WEBHOOK_SECRET;
     delete process.env.DELHIVERY_WEBHOOK_SECRET;
     check('with no secret configured NOTHING is accepted', verifyDelhiveryWebhook('anything') === false);
@@ -741,6 +849,18 @@ async function run(): Promise<void> {
   const stillDelivered = (await pool.query(`SELECT * FROM orders WHERE id = 'wh-1'`)).rows[0];
   check('a late IN_TRANSIT scan did not un-deliver the order', stillDelivered.status === 'DELIVERED');
 
+  // The same rule, on the path that used to slip past it. The terminal guard
+  // read the order status out of the shipping_status UPDATE's RETURNING, and
+  // that returns nothing when shipping_status already matched — so a push that
+  // moved only the shipment left the guard with no status to check and
+  // transitioned anyway. Set up exactly that divergence: shipment behind,
+  // order's shipping_status already where the push wants it.
+  await pool.query(`UPDATE shipments SET status = 'DELIVERED' WHERE order_id = 'wh-1'`);
+  await pool.query(`UPDATE orders SET shipping_status = 'IN_TRANSIT' WHERE id = 'wh-1'`);
+  await applyShippingStatus({ orderId: 'wh-1', status: 'IN_TRANSIT', courierName: 'Delhivery' });
+  const guarded = (await pool.query(`SELECT status FROM orders WHERE id = 'wh-1'`)).rows[0];
+  check('a shipment-only change cannot drag a DELIVERED order backwards', guarded.status === 'DELIVERED', guarded.status);
+
   // ========================================
   section('11. Secrets never leak');
   // ========================================
@@ -756,6 +876,174 @@ async function run(): Promise<void> {
   check('no webhook secret was persisted', !allPayloads.includes(TEST_WEBHOOK_SECRET));
   const errs = await pool.query(`SELECT COALESCE(last_error,'') AS e FROM shipments`);
   check('no token leaked into a stored shipment error', !errs.rows.map((r) => r.e).join(' ').includes('supersecrettoken'));
+
+  // ========================================
+  section('12. Shipment edit is an allowlist, not a spread (L14)');
+  // ========================================
+  {
+    const { fields, rejected } = pickEditableShipmentFields({
+      name: 'New Name',
+      add: '2 Other Road',
+      phone: '9111111111',
+      pin: '110001',
+      weight: 500,
+    });
+    check('documented edit fields pass through', Object.keys(fields).length === 5);
+    check('...with their values intact', fields.name === 'New Name' && fields.weight === 500);
+    check('...and nothing is rejected', rejected.length === 0);
+  }
+  {
+    // The field that made the spread dangerous: an address correction that
+    // quietly cancels the parcel.
+    const { fields, rejected } = pickEditableShipmentFields({ add: '2 Other Road', cancellation: 'true' });
+    check('`cancellation` is NOT an editable field', fields.cancellation === undefined);
+    check('...it is rejected by name', rejected.includes('cancellation'));
+    check('...while the legitimate change survives', fields.add === '2 Other Road');
+  }
+  {
+    const { fields, rejected } = pickEditableShipmentFields({
+      waybill: 'ATTACKER-WAYBILL',
+      pickup_location: 'Somebody Elses Warehouse',
+      __proto__: 'x',
+      token: 'leak-me',
+    });
+    check('a caller cannot redirect the edit to another waybill', fields.waybill === undefined);
+    check('a caller cannot change the pickup location', fields.pickup_location === undefined);
+    check('a caller cannot smuggle a token field', fields.token === undefined);
+    check('nothing unknown survives at all', Object.keys(fields).length === 0);
+    check('...and every dropped key is named', rejected.length > 0);
+  }
+  {
+    const { fields, rejected } = pickEditableShipmentFields({ name: undefined, add: '1 Rd' });
+    check('an explicit undefined is dropped, not rejected', !rejected.includes('name') && fields.name === undefined);
+    check('...and does not reach the request body', Object.keys(fields).length === 1);
+  }
+  check('a null change set is handled', pickEditableShipmentFields(null).rejected.length === 0);
+  check('an empty change set is handled', Object.keys(pickEditableShipmentFields({}).fields).length === 0);
+  // End to end through the live adapter: what actually goes on the wire.
+  // Section 11 cleared the token, and delhiveryRequest refuses before calling
+  // the transport without one, so live mode is re-armed just for these blocks.
+  const editLive = process.env.DELHIVERY_LIVE_MODE;
+  const editToken = process.env.DELHIVERY_TOKEN;
+  process.env.DELHIVERY_LIVE_MODE = 'true';
+  process.env.DELHIVERY_TOKEN = 'fake-token-for-tests-only';
+  {
+    const { transport, calls } = makeTransport([{ match: '/api/p/edit', respond: () => ({ ok: true, status: 200, data: { status: true } }) }]);
+    const restore = __setDelhiveryTransportForTests(transport);
+    const r = await getShipmentProvider().editShipment!({
+      waybill: 'WB1',
+      changes: { add: '2 Other Road', cancellation: 'true', nonsense: 1 },
+    });
+    check('a valid edit still succeeds', r.ok === true);
+    check('the request body carries the allowed field', calls[0].body.add === '2 Other Road');
+    check('the request body carries the waybill being edited', calls[0].body.waybill === 'WB1');
+    check('`cancellation` never reaches Delhivery', calls[0].body.cancellation === undefined);
+    check('nor does an unknown field', calls[0].body.nonsense === undefined);
+    restore();
+  }
+  {
+    const { transport, calls } = makeTransport([{ match: '/api/p/edit', respond: () => ({ ok: true, status: 200, data: { status: true } }) }]);
+    const restore = __setDelhiveryTransportForTests(transport);
+    const r = await getShipmentProvider().editShipment!({ waybill: 'WB1', changes: { cancellation: 'true' } });
+    check('an edit of nothing but rejected fields is refused', r.ok === false);
+    check('...without calling Delhivery at all', calls.length === 0, `${calls.length} call(s)`);
+    restore();
+  }
+  if (editLive === undefined) delete process.env.DELHIVERY_LIVE_MODE; else process.env.DELHIVERY_LIVE_MODE = editLive;
+  if (editToken === undefined) delete process.env.DELHIVERY_TOKEN; else process.env.DELHIVERY_TOKEN = editToken;
+
+  // ========================================
+  section('13. No real email is sent during tests (SMTP isolation)');
+  // ========================================
+  {
+    // Credentials deliberately present: the gate must hold because this is a
+    // test run, not because the mailbox happens to be unconfigured.
+    const savedHost = process.env.SMTP_HOST;
+    const savedUser = process.env.SMTP_USER;
+    const savedPass = process.env.SMTP_PASS;
+    process.env.SMTP_HOST = 'smtp.gmail.com';
+    process.env.SMTP_USER = 'real-looking@glamirk.com';
+    process.env.SMTP_PASS = 'real-looking-app-password';
+    __resetMailTransportForTests();
+
+    check('NODE_ENV is test for this run', process.env.NODE_ENV === 'test');
+    check('delivery is disabled even with SMTP fully configured', emailDeliveryEnabled() === false);
+
+    const t = getMailTransporter();
+    check('a transport is still handed out, so callers run their templates', !!t);
+    check('...but it is NOT a nodemailer transport', !!t && typeof (t as any).verify !== 'function');
+
+    await sendOrderStatusEmail({
+      toEmail: 'customer@example.com',
+      customerName: 'Test Customer',
+      orderId: 'bk-1',
+      orderNumber: 'GLM-DLV-1',
+      status: 'SHIPPED',
+      total: 500,
+    });
+    const captured = __getSentTestEmails();
+    check('the message was composed and captured', captured.length === 1, `${captured.length} captured`);
+    check('...addressed to the right recipient', captured[0]?.to === 'customer@example.com');
+    check('...with the real subject line', /Shipped/i.test(captured[0]?.subject || ''));
+    check('...and a rendered body, so a broken template would fail here', (captured[0]?.html || '').includes('GLM-DLV-1'));
+
+    // Flip the suppression off and the same configuration builds a real
+    // transport — proving the gate is what stopped it, not a missing mailbox.
+    __resetMailTransportForTests();
+    process.env.NODE_ENV = 'development';
+    check('delivery would be enabled outside a test run', emailDeliveryEnabled() === true);
+    const real = getMailTransporter();
+    check('...and a real nodemailer transport is built there', !!real && typeof (real as any).verify === 'function');
+
+    // Restore: back to suppressed, with the original environment.
+    process.env.NODE_ENV = 'test';
+    __resetMailTransportForTests();
+    if (savedHost === undefined) delete process.env.SMTP_HOST; else process.env.SMTP_HOST = savedHost;
+    if (savedUser === undefined) delete process.env.SMTP_USER; else process.env.SMTP_USER = savedUser;
+    if (savedPass === undefined) delete process.env.SMTP_PASS; else process.env.SMTP_PASS = savedPass;
+    check('the gate is closed again after restoring', emailDeliveryEnabled() === false);
+  }
+
+  // ========================================
+  section('14. Outbound body encoding (real httpJson, local echo server)');
+  // ========================================
+  // The scripted transport above records `options.body` before httpJson ever
+  // touches it, so every assertion in section 4 passes whatever httpJson then
+  // puts on the wire. create.json is the one endpoint that takes
+  // x-www-form-urlencoded rather than JSON, and httpJson used to JSON.stringify
+  // it — wrapping `format=json&data=...` in quotes, so Delhivery never saw the
+  // `format` parameter and every live booking failed. Nothing short of a real
+  // request through httpJson can catch that, so this makes one.
+  {
+    const echoApp = express();
+    echoApp.use(express.text({ type: '*/*' }));
+    echoApp.post('/echo', (req, res) => {
+      res.json({ received: req.body, contentType: req.get('content-type') || '' });
+    });
+    const echoServer = createServer(echoApp);
+    await new Promise<void>((resolve) => echoServer.listen(0, '127.0.0.1', resolve));
+    const echoPort = (echoServer.address() as any).port;
+    const echoUrl = `http://127.0.0.1:${echoPort}/echo`;
+
+    const form = `format=json&data=${encodeURIComponent(JSON.stringify({ shipments: [{ waybill: '1' }] }))}`;
+    const formRes = await httpJson<any>(echoUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form,
+      attempts: 1,
+    });
+    check('a string body reaches the server byte-for-byte', formRes.data?.received === form, String(formRes.data?.received).slice(0, 60));
+    check('...with no wrapping quotes', !String(formRes.data?.received).startsWith('"'));
+    check('...and keeps the form content type', /x-www-form-urlencoded/.test(formRes.data?.contentType || ''));
+    check('...so `format=json` survives the trip', String(formRes.data?.received).startsWith('format=json&data='));
+
+    // Objects must still be serialised as JSON — that is every other caller.
+    const jsonRes = await httpJson<any>(echoUrl, { method: 'POST', body: { a: 1 }, attempts: 1 });
+    check('an object body is still JSON-encoded', jsonRes.data?.received === '{"a":1}', String(jsonRes.data?.received));
+    check('...and still declares application/json', /application\/json/.test(jsonRes.data?.contentType || ''));
+
+    await new Promise<void>((resolve) => echoServer.close(() => resolve()));
+  }
 
   // ========================================
   await new Promise<void>((resolve) => webhookServer.close(() => resolve()));

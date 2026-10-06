@@ -12,6 +12,7 @@
     "seed": "tsx src/db/cli-seed.ts",
     "lint": "tsc --noEmit",
     "test": "tsx src/test/checkout.e2e.ts",
+    "test:delhivery": "tsx src/test/delhivery.e2e.ts",
     "test:inventory": "tsx src/test/inventory.e2e.ts",
     "test:cmsstate": "tsx src/test/cmsstate.e2e.ts",
     "test:migration013": "tsx src/test/migration013.e2e.ts",

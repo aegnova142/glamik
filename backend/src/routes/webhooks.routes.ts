@@ -282,7 +282,7 @@ async function resolveDelhiveryOrder(payload: DelhiveryScanPayload): Promise<Res
   const candidates: { orderId: string; via: string }[] = [];
 
   if (payload.waybill) {
-    // waybill first, then awb_code — a historical Shiprocket row only has the
+    // waybill first, then awb_code — a row written by the retired provider only has the
     // latter, and this route must not resurrect one by accident.
     const res = await pool.query(
       `SELECT order_id FROM shipments WHERE waybill = $1 OR (waybill IS NULL AND awb_code = $1) LIMIT 1`,
@@ -334,7 +334,7 @@ async function resolveDelhiveryOrder(payload: DelhiveryScanPayload): Promise<Res
  * this is ready to receive but has not been exercised by Delhivery yet. Until
  * they have, nothing arrives here in production.
  *
- * Deliberately a separate route from the Shiprocket one rather than a reused
+ * Deliberately its own route rather than a reused
  * path with a renamed secret: the two providers authenticate differently, send
  * different payloads, and are configured by different people. Sharing a URL
  * would mean one provider's retry storm rate-limiting the other.
@@ -520,15 +520,6 @@ export async function reconcileStuckWebhookEvents(): Promise<{ examined: number;
           continue;
         }
         await finishEvent(row.id, 'FAILED', 'Amount mismatch on replay');
-        continue;
-      }
-
-      if (row.source === 'shiprocket') {
-        // Shiprocket is no longer an active provider. Historical events stay in
-        // the ledger for audit, but there is nothing left to replay them
-        // through — and reviving a dead integration to re-apply a months-old
-        // scan would be worse than leaving it recorded and closed.
-        await finishEvent(row.id, 'IGNORED', 'Shiprocket integration retired; historical event left as-is');
         continue;
       }
 

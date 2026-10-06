@@ -3,16 +3,14 @@ import { OrderStatus, OrderTimelineEvent, OrderTracking } from '@glamirk/shared/
 // ==========================================
 // SHIPMENT TRACKING INTEGRATION LAYER
 //
-// Glamirk has no courier account wired up yet. Rather than inventing
-// plausible-looking scan events (which would be worse than useless — a
-// customer would act on them), this module reports the real internal order
-// status and says so explicitly via `source: 'internal'`.
+// A provider-neutral registry the tracking screen reads through. Delhivery
+// registers itself here at startup (registerDelhiveryTracking), and is the
+// only provider registered today.
 //
-// To connect a courier later, implement a CourierProvider and register it in
-// resolveProvider() below. Nothing else in the app needs to change: the
-// /account/orders/:id/track endpoint and the tracking UI already read
-// whatever this returns, including the courier fields, which stay null until
-// a provider fills them in.
+// With no provider registered — or with one registered but no scan yet for
+// this parcel — this reports the real internal order status and says so
+// explicitly via `source: 'internal'`. Inventing plausible-looking scan events
+// would be worse than useless: a customer would act on them.
 // ==========================================
 
 export interface CourierShipment {
@@ -36,19 +34,11 @@ export interface CourierProvider {
 /**
  * Registry for a real courier integration.
  *
- * Example of wiring one up:
- *
- *   const delhivery: CourierProvider = {
- *     name: 'Delhivery',
- *     async fetchShipment(awb) {
- *       const res = await fetch(`https://track.delhivery.com/api/v1/packages/json/?waybill=${awb}`, {
- *         headers: { Authorization: `Token ${process.env.DELHIVERY_API_TOKEN}` },
- *       });
- *       if (!res.ok) return null;
- *       return mapDelhiveryResponse(await res.json());
- *     },
- *   };
- *   providers.set('delhivery', delhivery);
+ * Delhivery wires itself in through registerDelhiveryTracking() in
+ * couriers/delhivery.service.ts, which is the worked example to follow: build a
+ * CourierProvider whose fetchShipment maps the carrier's response onto
+ * Glamirk's own status vocabulary, then register it under every key an order's
+ * courier_partner column might hold.
  */
 const providers = new Map<string, CourierProvider>();
 

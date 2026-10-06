@@ -712,8 +712,8 @@ router.post('/admin/orders/:id/shipment/create', requireAdmin, async (req: Authe
  * pressing one twice is a no-op, not a second van or a reissued label.
  *
  * Manifest and invoice are gone, not renamed. Delhivery has no endpoint for
- * either — they were Shiprocket concepts, and keeping buttons that could only
- * ever fail would be worse than not offering them.
+ * either — they belonged to the aggregator model this replaced, and keeping
+ * buttons that could only ever fail would be worse than not offering them.
  *
  * `pickup` ignores its orderId: Delhivery books collections per warehouse per
  * day, so one request covers every parcel waiting there. The signature keeps
@@ -780,7 +780,7 @@ router.get('/admin/orders/:id/shipment/track', requireAdmin, async (req: Authent
     [req.params.id]
   );
   // `waybill` is Delhivery's; `awb_code` still carries it too, and carries
-  // Shiprocket's on historical rows. Reading both keeps an old shipment
+  // the retired provider's on historical rows. Reading both keeps an old shipment
   // trackable through whichever provider is registered for its courier.
   const waybill = shipmentRes.rows[0]?.waybill || shipmentRes.rows[0]?.awb_code;
   if (!waybill) return res.status(404).json({ error: 'This order has no tracking number yet.' });

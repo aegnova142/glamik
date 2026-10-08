@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { CMSHomeBanner } from '@glamirk/shared/types';
 import { cloudinaryImageUrl, cloudinarySrcSet } from '@glamirk/shared/utils/cloudinaryImage';
@@ -33,6 +32,7 @@ export const HomeBannerCarousel: React.FC<HomeBannerCarouselProps> = ({ onNaviga
   // autoplay never reveals a blank frame) and everything already seen.
   const [seen, setSeen] = useState<Set<number>>(new Set([0]));
   const [paused, setPaused] = useState(false);
+  const [frameRatio, setFrameRatio] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState(0);
   const touch = useRef<{ x: number; y: number; horizontal: boolean | null } | null>(null);
   const suppressClick = useRef(false);
@@ -76,18 +76,19 @@ export const HomeBannerCarousel: React.FC<HomeBannerCarouselProps> = ({ onNaviga
     if (!isLoading) return null;
     return (
       <section aria-hidden="true" className="bg-[#FAF9F6]">
-        <div className="mx-auto max-w-[1440px] px-3 pt-3 sm:px-6 lg:px-10 lg:pt-5">
-          <div className="aspect-[4/5] w-full animate-pulse rounded-[20px] bg-[#FCE8ED]/60 md:aspect-[8/3]" />
-        </div>
+        <div className="aspect-[4/5] w-full animate-pulse bg-[#FCE8ED]/60 md:aspect-[8/3]" />
       </section>
     );
   }
 
   const go = (i: number) => setIndex(((i % count) + count) % count);
-  // Every slide shares one frame; if any lacks a mobile creative the mobile
-  // frame takes the desktop ratio so that slide is shown whole, not cropped.
+  // Every slide shares one frame, sized to the first slide's real creative
+  // (whichever <picture> source the breakpoint picked), so a banner made at
+  // the recommended size is shown whole. Until it loads, the recommended
+  // ratios hold the space; if any slide lacks a mobile creative the mobile
+  // fallback is the desktop ratio, so that slide is not cropped.
   const allHaveMobile = slides.every((s) => s.mobileImage);
-  const frameClass = allHaveMobile ? 'aspect-[4/5] md:aspect-[8/3]' : 'aspect-[8/3]';
+  const frameClass = frameRatio ? '' : allHaveMobile ? 'aspect-[4/5] md:aspect-[8/3]' : 'aspect-[8/3]';
 
   const onTouchStart = (e: React.TouchEvent) => {
     const t = e.touches[0];
@@ -153,6 +154,12 @@ export const HomeBannerCarousel: React.FC<HomeBannerCarouselProps> = ({ onNaviga
           fetchPriority={i === 0 ? 'high' : 'low'}
           decoding="async"
           onError={() => setBrokenIds((prev) => new Set(prev).add(banner.id))}
+          // Fires again when a resize swaps the desktop/mobile source.
+          // Clamped (9:16 … 4:1) so an odd upload can't make the banner taller than a phone screen.
+          onLoad={i === 0 ? (e) => {
+            const r = e.currentTarget.naturalWidth / e.currentTarget.naturalHeight;
+            setFrameRatio(r ? Math.min(Math.max(r, 9 / 16), 4) : null);
+          } : undefined}
           className="h-full w-full object-cover"
         />
       </picture>
@@ -186,9 +193,12 @@ export const HomeBannerCarousel: React.FC<HomeBannerCarouselProps> = ({ onNaviga
 
   return (
     <section aria-roledescription="carousel" aria-label="Featured promotions" className="bg-[#FAF9F6]">
-      <div className="mx-auto max-w-[1440px] px-3 pt-3 sm:px-6 lg:px-10 lg:pt-5">
+      {/* Full-bleed on purpose: unlike the rest of the homepage, this section
+          is not inside the max-width container — it spans the viewport. */}
+      <div>
         <div
-          className={`group relative w-full overflow-hidden rounded-[20px] bg-[#FCE8ED] shadow-[0_12px_32px_rgba(240,90,126,0.10)] ${frameClass}`}
+          className={`relative w-full overflow-hidden bg-[#FCE8ED] ${frameClass}`}
+          style={{ touchAction: 'pan-y', ...(frameRatio ? { aspectRatio: String(frameRatio) } : {}) }}
           onMouseEnter={() => setPaused(true)}
           onMouseLeave={() => setPaused(false)}
           onFocus={() => setPaused(true)}
@@ -196,7 +206,6 @@ export const HomeBannerCarousel: React.FC<HomeBannerCarouselProps> = ({ onNaviga
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
-          style={{ touchAction: 'pan-y' }}
         >
           <div
             className="flex h-full"
@@ -207,27 +216,6 @@ export const HomeBannerCarousel: React.FC<HomeBannerCarouselProps> = ({ onNaviga
           >
             {slides.map(renderSlide)}
           </div>
-
-          {count > 1 && (
-            <>
-              <button
-                type="button"
-                onClick={() => go(index - 1)}
-                aria-label="Previous promotional banner"
-                className="absolute left-4 top-1/2 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-[#121212] opacity-0 shadow-[0_4px_14px_rgba(11,11,11,0.15)] backdrop-blur transition-opacity hover:bg-white focus-visible:opacity-100 group-hover:opacity-100 md:flex cursor-pointer"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => go(index + 1)}
-                aria-label="Next promotional banner"
-                className="absolute right-4 top-1/2 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-[#121212] opacity-0 shadow-[0_4px_14px_rgba(11,11,11,0.15)] backdrop-blur transition-opacity hover:bg-white focus-visible:opacity-100 group-hover:opacity-100 md:flex cursor-pointer"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-            </>
-          )}
         </div>
 
         {count > 1 && (

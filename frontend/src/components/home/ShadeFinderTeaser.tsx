@@ -177,19 +177,13 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
           {/* RIGHT: before/after experience */}
           <div className="order-1 lg:order-2 min-w-0">
             <div className="relative mx-auto w-full max-w-md lg:max-w-[460px]">
-              {/* Decorative halo backdrop (soft florals + gold ring) */}
-              <div aria-hidden="true" className="pointer-events-none absolute -inset-6 sm:-inset-8">
-                <div className="absolute inset-0 rounded-[3rem] bg-gradient-to-br from-[#FBD2DF] via-[#F8C6D6]/50 to-transparent blur-2xl" />
-                <div className="absolute -top-4 right-0 w-40 h-40 rounded-full bg-[#F7A8C4]/40 blur-3xl" />
-                <div className="absolute bottom-2 -left-4 w-44 h-44 rounded-full bg-[#F3B9CB]/45 blur-3xl" />
-                <div className="absolute top-8 right-4 w-52 h-52 rounded-full border-[6px] border-[#E7C98B]/45" />
-                <div className="absolute -bottom-2 right-10 w-24 h-24 rounded-full bg-[#F18FB2]/30 blur-2xl" />
-              </div>
+              {/* One soft blush glow — the card, not the backdrop, carries the visual */}
+              <div aria-hidden="true" className="pointer-events-none absolute -inset-6 rounded-[3rem] bg-gradient-to-br from-[#FBD2DF]/70 via-[#FCE8ED]/40 to-transparent blur-2xl" />
 
-              {/* Card */}
+              {/* Card: the model and the before/after comparison are the whole visual */}
               <div
                 key={`${profile.id}-${lookTypeId}-media`}
-                className="sf-fade relative z-10 rounded-[1.75rem] overflow-hidden border-2 border-white shadow-[0_28px_60px_rgba(224,38,95,0.22)] aspect-[4/5] bg-[#FCE8ED]"
+                className="sf-fade relative z-10 rounded-[28px] overflow-hidden border border-white/80 ring-1 ring-[#F3D9E0] shadow-[0_24px_50px_rgba(26,16,18,0.14)] aspect-[4/5] bg-[#FAF6F1]"
               >
                 <BeforeAfterSlider
                   className="absolute inset-0"
@@ -200,22 +194,19 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
                   alt={r.visualTitle}
                 />
 
-                {/* "Your Shade Story" script + undertone dots */}
-                <div className="absolute top-14 left-4 z-20 flex flex-col items-start gap-3">
-                  <div className="pointer-events-none leading-tight drop-shadow-[0_1px_2px_rgba(0,0,0,0.15)]">
-                    <span className="block font-serif italic text-2xl sm:text-[1.6rem] text-[#E0265F]">Your</span>
-                    <span className="block font-serif italic text-2xl sm:text-[1.6rem] text-[#E0265F] -mt-1">Shade</span>
-                    <span className="flex items-center gap-1 font-serif italic text-2xl sm:text-[1.6rem] text-[#E0265F] -mt-1">
-                      Story <Heart className="w-4 h-4 fill-[#E0265F]" />
-                    </span>
+                {/* Bottom caption: translucent ivory, with the undertone palette as a compact selector */}
+                <div className="absolute inset-x-3 bottom-3 sm:inset-x-4 sm:bottom-4 z-20 flex items-center justify-between gap-3 rounded-2xl bg-[#FAF9F6]/90 backdrop-blur-md px-4 py-3 ring-1 ring-white/60 shadow-[0_8px_24px_rgba(26,16,18,0.10)]">
+                  <div className="min-w-0 pointer-events-none">
+                    <span className="block text-[9px] uppercase tracking-[0.22em] text-[#C9972B] font-bold">Match Simulation</span>
+                    <h4 className="font-serif text-[15px] sm:text-lg font-bold text-[#1A1012] leading-tight">{r.visualTitle}</h4>
                   </div>
-
                   {profiles.length > 1 && (
-                    <div className="flex flex-col gap-2.5" role="radiogroup" aria-label="Select your undertone">
+                    <div className="flex items-center shrink-0" role="radiogroup" aria-label="Select your undertone">
                       {profiles.map((p) => {
                         const isSel = profile.id === p.id;
                         const dot = (p.swatchHexes && p.swatchHexes[0]) || '#E0265F';
                         return (
+                          // 32px hit area around an 18px swatch: small to the eye, easy to tap.
                           <button
                             key={p.id}
                             role="radio"
@@ -223,26 +214,19 @@ export const ShadeFinderTeaser: React.FC<ShadeFinderTeaserProps> = ({ onOpenShad
                             aria-label={p.title}
                             title={p.title}
                             onClick={() => setUndertoneId(p.id)}
-                            className={`w-9 h-9 rounded-full transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
-                              isSel ? 'ring-2 ring-[#E0265F] ring-offset-2 ring-offset-white/80 scale-110 shadow-md' : 'ring-1 ring-white/80 hover:scale-105 shadow'
-                            }`}
-                            style={{ backgroundColor: dot }}
-                          />
+                            className="w-8 h-8 flex items-center justify-center rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E0265F]"
+                          >
+                            <span
+                              className={`block w-[18px] h-[18px] rounded-full transition-all ${
+                                isSel ? 'ring-2 ring-[#E0265F] ring-offset-2 ring-offset-[#FAF9F6]' : 'ring-1 ring-black/10 hover:scale-110'
+                              }`}
+                              style={{ backgroundColor: dot }}
+                            />
+                          </button>
                         );
                       })}
                     </div>
                   )}
-                </div>
-
-                {/* Bottom caption overlay */}
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 p-5 bg-gradient-to-t from-[#1A1012]/70 via-[#1A1012]/10 to-transparent flex items-end justify-between z-20">
-                  <div>
-                    <span className="block text-[10px] uppercase tracking-widest text-white/80 font-bold">Match Simulation</span>
-                    <h4 className="font-serif text-lg sm:text-xl font-bold text-white">{r.visualTitle}</h4>
-                  </div>
-                  <span className="pointer-events-auto inline-flex items-center gap-1 bg-white text-[#E0265F] text-[11px] font-bold px-3 py-1.5 rounded-full shadow-sm">
-                    <Sparkles className="w-3 h-3" /> Calibrated
-                  </span>
                 </div>
               </div>
             </div>

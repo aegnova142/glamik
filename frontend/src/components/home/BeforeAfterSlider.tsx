@@ -104,14 +104,14 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
         />
       )}
 
-      {/* Labels */}
+      {/* Labels — small frosted tags, kept to the top corners, clear of the face */}
       {showBefore && (
-        <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-[#5C4A4E]/85 text-white text-[11px] font-semibold tracking-wide backdrop-blur-sm pointer-events-none">
+        <span className="absolute top-4 left-4 px-2.5 py-1 rounded-full bg-[#FAF9F6]/80 backdrop-blur-md text-[#1A1012] text-[9px] font-bold uppercase tracking-[0.2em] ring-1 ring-white/60 pointer-events-none">
           {beforeLabel}
         </span>
       )}
       {showAfter && (
-        <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-[#E0265F] text-white text-[11px] font-semibold tracking-wide pointer-events-none">
+        <span className="absolute top-4 right-4 px-2.5 py-1 rounded-full bg-[#FAF9F6]/80 backdrop-blur-md text-[#E0265F] text-[9px] font-bold uppercase tracking-[0.2em] ring-1 ring-white/60 pointer-events-none">
           {afterLabel}
         </span>
       )}
@@ -119,7 +119,7 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
       {/* Divider + handle (only when both images exist to compare) */}
       {showBefore && showAfter && (
         <>
-          <div className="absolute top-0 bottom-0 w-0.5 bg-white/90 shadow-[0_0_8px_rgba(0,0,0,0.25)] pointer-events-none" style={{ left: `${pos}%`, transform: 'translateX(-50%)' }} />
+          <div className="absolute top-0 bottom-0 w-px bg-white/85 shadow-[0_0_6px_rgba(0,0,0,0.18)] pointer-events-none" style={{ left: `${pos}%`, transform: 'translateX(-50%)' }} />
           <button
             type="button"
             role="slider"
@@ -135,11 +135,14 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({
               if (e.key === 'ArrowLeft') setPos((p) => Math.max(0, p - 4));
               if (e.key === 'ArrowRight') setPos((p) => Math.min(100, p + 4));
             }}
-            className="absolute top-1/2 w-10 h-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_4px_14px_rgba(0,0,0,0.3)] flex items-center justify-center text-[#E0265F] cursor-ew-resize focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E0265F]"
+            className="absolute top-1/2 w-11 h-11 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center cursor-ew-resize focus:outline-none group"
             style={{ left: `${pos}%` }}
           >
-            <ChevronLeft className="w-3.5 h-3.5 -mr-0.5" />
-            <ChevronRight className="w-3.5 h-3.5 -ml-0.5" />
+            {/* 44px touch target around a 34px frosted handle */}
+            <span className="w-[34px] h-[34px] rounded-full bg-white/85 backdrop-blur-md ring-1 ring-white shadow-[0_4px_12px_rgba(26,16,18,0.18)] flex items-center justify-center text-[#1A1012] transition-transform group-hover:scale-105 group-focus-visible:ring-2 group-focus-visible:ring-[#E0265F]">
+              <ChevronLeft className="w-3 h-3 -mr-0.5" />
+              <ChevronRight className="w-3 h-3 -ml-0.5" />
+            </span>
           </button>
         </>
       )}

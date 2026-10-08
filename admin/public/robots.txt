@@ -1,0 +1,9 @@
+# The admin app. Nothing here should ever appear in a search result.
+#
+# index.html already carries <meta name="robots" content="noindex, nofollow">,
+# which is the directive that actually keeps a URL out of an index. This file
+# is the cheaper, earlier signal: a crawler reads it before requesting any
+# page, so well-behaved ones never fetch the bundle in the first place.
+
+User-agent: *
+Disallow: /

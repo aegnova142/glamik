@@ -1,0 +1,35 @@
+# Glamirk Beauty — storefront crawl rules.
+#
+# Before this file existed, /robots.txt fell through the SPA catch-all and
+# answered 200 with index.html. Crawlers parse that as a robots file, find no
+# directives in it, and carry on — so nothing was blocked, but nothing was
+# declared either, and there was no way to point anyone at the sitemap.
+
+User-agent: *
+
+# Per-customer and per-order views. Nothing here is a useful search result:
+# the page content depends on who is signed in, and the order paths carry an
+# order id in the URL itself.
+Disallow: /account
+Disallow: /cart
+Disallow: /checkout
+Disallow: /order-confirmation/
+Disallow: /order-tracking
+Disallow: /order-detail/
+Disallow: /wishlist
+Disallow: /my-glam
+
+# Not a page.
+Disallow: /404
+Disallow: /api/
+
+# The admin app answers on its own host (admin.glamirk.com, which serves its
+# own robots.txt disallowing everything). On this host /admin is only a
+# redirect kept for stale links.
+Disallow: /admin
+
+# Deliberately NOT disallowed: /assets/ and /favicon.ico. Googlebot-Image has
+# to reach the favicon for it to appear beside the search result, and blocking
+# the bundle stops Google rendering the page at all.
+
+Sitemap: https://glamirk.com/sitemap.xml

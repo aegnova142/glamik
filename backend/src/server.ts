@@ -10,6 +10,7 @@ import { createServer as createViteServer, type HmrOptions, type UserConfig } fr
 import apiRouter from './routes/admin.routes';
 import commerceRouter from './routes/customer.routes';
 import accountRouter, { processScheduledAccountDeletions } from './routes/account.routes';
+import sitemapRouter from './routes/sitemap.routes';
 import webhooksRouter, {
   reconcileStuckWebhookEvents,
   expirePendingPaymentOrders,
@@ -130,6 +131,12 @@ async function startServer() {
   app.use('/api', apiRouter);
   app.use('/api/customer', commerceRouter);
   app.use('/api/customer', accountRouter);
+
+  // /sitemap.xml is not under /api, so it has to be mounted above the static
+  // and SPA-fallback handlers at the bottom of this file — the catch-all there
+  // answers every unmatched path with index.html, which is what /robots.txt
+  // and /favicon.ico used to get.
+  app.use(sitemapRouter);
 
   // Accounts are closed after a grace window rather than the instant someone
   // taps "delete", so something has to sweep for ones whose window has

@@ -9,8 +9,21 @@
     <meta property="og:description" content="Discover a more personal way to experience luxury beauty." />
     <meta property="og:type" content="website" />
 
-    <!-- Favicon (browser tab icon) -->
-    <link rel="icon" type="image/png" href="https://res.cloudinary.com/emu1kahg/image/upload/v1787701385/glamirk-beauty/jkg7fjpftwfcqxr8fomj.svg" />
+    <!-- Favicon (browser tab icon)
+         Derived from the Media Library logo rather than a separately uploaded
+         icon, so there is one asset to keep current. Two things are load
+         bearing in the transformation:
+
+         f_png, not f_auto — f_auto hands a browser WebP, which would make the
+         type="image/png" below a lie. That mismatch is what the previous
+         favicon had, alongside a URL whose asset no longer existed at all.
+
+         c_fill,g_west, not c_fit — the logo is a 10109x2363 wordmark whose
+         text is white, so fitting it inside a square yields a 64x15 sliver
+         that is invisible against a light tab bar. Anchoring west crops to
+         the gold G monogram, which is square already and legible at 16px. -->
+    <link rel="icon" type="image/png" sizes="64x64" href="https://res.cloudinary.com/emu1kahg/image/upload/f_png,w_64,h_64,c_fill,g_west/v1791251533/glamirk-beauty/tzjergonpqht7mjik7hy.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="https://res.cloudinary.com/emu1kahg/image/upload/f_png,w_180,h_180,c_fill,g_west/v1791251533/glamirk-beauty/tzjergonpqht7mjik7hy.png" />
 
     <!-- Google Fonts Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />

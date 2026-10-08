@@ -130,8 +130,18 @@ export function resolveDelhiveryBaseUrl(raw: string | undefined | null): string 
 }
 
 export const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
-  isProduction: process.env.NODE_ENV === 'production',
+  // Getters, like everything else here. Captured at module load these could
+  // not be exercised from a test: the production branch of any rule that reads
+  // them was unreachable in the same process as the development branch, which
+  // is exactly why the "mock provider in production" hole went unnoticed —
+  // nothing could assert on it. Nothing changes in a real deployment, where
+  // NODE_ENV is fixed before the process starts.
+  get nodeEnv(): string {
+    return process.env.NODE_ENV || 'development';
+  },
+  get isProduction(): boolean {
+    return process.env.NODE_ENV === 'production';
+  },
   port: Number(process.env.PORT) || 3000,
 
   get databaseUrl(): string {

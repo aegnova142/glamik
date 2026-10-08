@@ -65,7 +65,14 @@ import {
 } from '../services/mailer';
 import { sendOrderStatusEmail } from '../services/email.service';
 import { resolveDelhiveryBaseUrl, DELHIVERY_DEFAULT_BASE_URL } from '../config/env';
-import { createShipmentForOrder, ensureWarehousePickup, commitOrderStock, applyShippingStatus } from '../services/fulfillment.service';
+import {
+  createShipmentForOrder,
+  ensureWarehousePickup,
+  ensureShipmentLabel,
+  commitOrderStock,
+  applyShippingStatus,
+  shipmentsEnabled,
+} from '../services/fulfillment.service';
 import { httpJson } from '../services/http.client';
 import { ensureProductInventory } from '../services/inventory.service';
 import webhooksRouter from '../routes/webhooks.routes';
@@ -1043,6 +1050,88 @@ async function run(): Promise<void> {
     check('...and still declares application/json', /application\/json/.test(jsonRes.data?.contentType || ''));
 
     await new Promise<void>((resolve) => echoServer.close(() => resolve()));
+  }
+
+  // ========================================
+  section('15. Production safety gate — the mock never books in production');
+  // ========================================
+  // The hole this closes: markOrderPaid booked through getShipmentProvider()
+  // with no check, and in production that returns the MOCK adapter whenever
+  // DELHIVERY_LIVE_MODE is off. A paid order got a MOCKWB waybill and a
+  // mock.delhivery.local tracking URL for a parcel nobody booked.
+  //
+  // NODE_ENV is flipped to 'production' here, which env.isProduction now reads
+  // through a getter — that is what makes this branch reachable at all.
+  {
+    await resetDatabase();
+    await seedOrder({ id: 'gate-1', orderNumber: 'GLM-GATE-1', paymentMethod: 'card', paymentStatus: 'PAID' });
+    await commitOrderStock('gate-1');
+
+    const savedNodeEnv = process.env.NODE_ENV;
+    const savedLive = process.env.DELHIVERY_LIVE_MODE;
+    process.env.NODE_ENV = 'production';
+    process.env.DELHIVERY_LIVE_MODE = 'false';
+
+    check('production + mock mode means shipping is NOT enabled', shipmentsEnabled() === false);
+
+    const shipBefore = mockDelhiveryProvider.shipmentCount();
+    const wbBefore = mockDelhiveryProvider.waybillsDrawn();
+
+    const blocked = await createShipmentForOrder('gate-1');
+    check('booking is refused', blocked.ok === false);
+    check('...and says shipping is not enabled', /not enabled/i.test(blocked.error || ''));
+    check('...and tells the operator which flag to set', /DELHIVERY_LIVE_MODE/.test(blocked.error || ''));
+
+    check('no waybill was drawn from the provider', mockDelhiveryProvider.waybillsDrawn() === wbBefore);
+    check('no parcel was created at the provider', mockDelhiveryProvider.shipmentCount() === shipBefore);
+
+    const rows = await pool.query(`SELECT COUNT(*)::int n FROM shipments WHERE order_id = 'gate-1'`);
+    check('NO shipments row was written at all', rows.rows[0].n === 0, String(rows.rows[0].n));
+
+    const ord = (await pool.query(`SELECT * FROM orders WHERE id = 'gate-1'`)).rows[0];
+    check('the order keeps NO tracking number', !ord.tracking_number, String(ord.tracking_number));
+    check('...no MOCKWB number leaked onto it', !/MOCKWB/.test(String(ord.tracking_number || '')));
+    check('...no mock tracking URL leaked onto it', !/mock\.delhivery\.local/.test(String(ord.courier_tracking_url || '')));
+    check('...and no courier was named', !ord.courier_partner, String(ord.courier_partner));
+
+    // The customer's order must survive untouched — payment stands, stock
+    // stays committed, nothing is cancelled.
+    check('the order is NOT cancelled', ord.status !== 'CANCELLED', ord.status);
+    check('payment is still PAID', ord.payment_status === 'PAID', ord.payment_status);
+    check('stock stays committed', ord.stock_committed === true);
+    check('stock was NOT released', ord.stock_restored === false);
+    check('shipping status stays NOT_SHIPPED — truthful', ord.shipping_status === 'NOT_SHIPPED', ord.shipping_status);
+
+    // The two admin actions that bypassed the route-level check entirely.
+    const pickup = await ensureWarehousePickup();
+    check('warehouse pickup is refused too', pickup.ok === false);
+    const puRows = await pool.query(`SELECT COUNT(*)::int n FROM shipment_pickup_requests`);
+    check('...and books no van', puRows.rows[0].n === 0, String(puRows.rows[0].n));
+    check('...calling the provider not at all', mockDelhiveryProvider.pickupCount() === 0, String(mockDelhiveryProvider.pickupCount()));
+
+    const label = await ensureShipmentLabel('gate-1');
+    check('label generation is refused too', label.ok === false);
+    check('...so no mock PDF link can be stored', !/mock\.delhivery\.local/.test(label.labelUrl || ''));
+
+    // --- the gate must not fire when shipping IS live ---------------------
+    process.env.DELHIVERY_LIVE_MODE = 'true';
+    process.env.DELHIVERY_TOKEN = 'fake-token-for-tests-only';
+    check('production + live mode means shipping IS enabled', shipmentsEnabled() === true);
+    process.env.DELHIVERY_LIVE_MODE = 'false';
+    delete process.env.DELHIVERY_TOKEN;
+
+    // --- and must not fire outside production -----------------------------
+    process.env.NODE_ENV = 'test';
+    check('outside production the mock is still allowed, so dev/tests are unaffected', shipmentsEnabled() === true);
+
+    const allowed = await createShipmentForOrder('gate-1');
+    check('the same order books fine once out of production', allowed.ok === true, allowed.error);
+    const after = (await pool.query(`SELECT * FROM orders WHERE id = 'gate-1'`)).rows[0];
+    check('...and only then gets a tracking number', !!after.tracking_number);
+
+    if (savedNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = savedNodeEnv;
+    if (savedLive === undefined) delete process.env.DELHIVERY_LIVE_MODE; else process.env.DELHIVERY_LIVE_MODE = savedLive;
+    check('NODE_ENV is restored for the rest of the suite', process.env.NODE_ENV === 'test');
   }
 
   // ========================================

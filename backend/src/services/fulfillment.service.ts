@@ -415,7 +415,46 @@ export async function recordRefund(input: { orderId: string; amount: number }): 
  * parcels, one orphaned waybill. The lock is what makes the sequence below
  * single-threaded for a given order; the indexes remain the backstop.
  */
+/**
+ * Refuses every courier call when this environment must not make one.
+ *
+ * `shipmentsEnabled()` has always known the answer; nothing enforced it on the
+ * path that matters. markOrderPaid booked through whatever
+ * getShipmentProvider() returned, and in production that is the MOCK adapter
+ * whenever DELHIVERY_LIVE_MODE is off. A paid order then got a `MOCKWB…`
+ * waybill and a `mock.delhivery.local` tracking URL written onto it — a
+ * tracking number the customer can click, that resolves to nothing, for a
+ * parcel nobody ever booked. The order looked shipped and never was.
+ *
+ * Enforced inside each service function rather than at the call sites, because
+ * the hole was never one call site: markOrderPaid alone is reached from the
+ * browser verify call, the Razorpay webhook and the reconciliation sweep, and
+ * the admin pickup/label actions bypassed the route-level check entirely.
+ * Guarding here means no present or future caller can route around it.
+ *
+ * Outside production the mock IS the point, so this is a no-op in development
+ * and in tests.
+ */
+function courierCallsBlocked(): string | null {
+  if (shipmentsEnabled()) return null;
+  return (
+    'Shipping is not enabled in this environment, so no courier call was made. ' +
+    'Set DELHIVERY_LIVE_MODE=true with credentials to book real shipments. ' +
+    'The order itself is unaffected and can be booked once shipping is live.'
+  );
+}
+
 export async function createShipmentForOrder(orderId: string): Promise<{ ok: boolean; error?: string }> {
+  const blocked = courierCallsBlocked();
+  if (blocked) {
+    // Deliberately writes nothing: no shipments row, no waybill, no tracking
+    // number. An order with no shipment is the truthful record of "not booked
+    // yet", and it is what the admin booking screen already looks for. A row
+    // naming the mock provider would be worse than none.
+    console.warn(`[fulfillment] shipment booking skipped for order ${orderId}: shipping is not enabled`);
+    return { ok: false, error: blocked };
+  }
+
   const run = await withOrderShipmentLock(orderId, () => bookShipmentForOrder(orderId));
   if (!run.acquired) {
     // Someone else is mid-flight on this exact order. Refusing is the safe
@@ -703,6 +742,13 @@ function pickupSlotForToday(): { date: string; time: string } {
  * than left OPEN, so the day stays retryable.
  */
 export async function ensureWarehousePickup(): Promise<{ ok: boolean; error?: string; skipped?: boolean }> {
+  // The admin "request pickup" action reaches this without passing through the
+  // route-level shipmentsEnabled() check, so in production with the mock
+  // selected it would write a shipment_pickup_requests row naming a provider
+  // that booked nothing.
+  const blocked = courierCallsBlocked();
+  if (blocked) return { ok: false, error: blocked };
+
   const provider = getShipmentProvider();
   const pickupLocation = env.delhivery.pickupLocation;
   if (!pickupLocation) {
@@ -767,6 +813,11 @@ export async function ensureWarehousePickup(): Promise<{ ok: boolean; error?: st
  * Idempotent by stored URL: once there is one, Delhivery is not asked again.
  */
 export async function ensureShipmentLabel(orderId: string): Promise<{ ok: boolean; error?: string; labelUrl?: string }> {
+  // Same bypass as the pickup action: unguarded, the mock answers and a
+  // `mock.delhivery.local` PDF link gets stored as the shipment's label_url.
+  const blocked = courierCallsBlocked();
+  if (blocked) return { ok: false, error: blocked };
+
   const shipment = await loadShipmentRow(orderId);
   if (!shipment) return { ok: false, error: 'This order has no shipment.' };
   if (shipment.label_url) return { ok: true, labelUrl: shipment.label_url };

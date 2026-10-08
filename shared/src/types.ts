@@ -1996,6 +1996,41 @@ export interface CMSPromoBannerConfig {
   intervalMs?: number;
 }
 
+/** Where a homepage banner goes when clicked. product/category resolve against
+ * the live catalogue at render time, so renaming a product never breaks it. */
+export type CMSHomeBannerTargetType = 'product' | 'category' | 'url' | 'none';
+
+/** One slide in the inline homepage banner carousel above the hero. Array
+ * order is display order (same convention as hero slides and popup banners). */
+export interface CMSHomeBanner {
+  id: string;
+  /** Admin-facing name, e.g. "Festive Glow Sale". Never shown to shoppers. */
+  name: string;
+  /** Wide creative for tablet and up. Required — a banner without it is never shown. */
+  desktopImage: string;
+  /** Tall creative for phones. Falls back to desktopImage when empty. */
+  mobileImage?: string;
+  altText?: string;
+  targetType: CMSHomeBannerTargetType;
+  /** Product id (targetType 'product') or category id (targetType 'category'). */
+  targetId?: string;
+  /** Internal path (/shop) or https URL (targetType 'url'). */
+  targetUrl?: string;
+  /** Default true. */
+  isActive?: boolean;
+  /** ISO timestamps; either may be omitted for an open-ended window. */
+  startDate?: string;
+  endDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CMSHomeBannerConfig {
+  banners: CMSHomeBanner[];
+  /** Auto-advance interval in ms. Default 5000. */
+  intervalMs?: number;
+}
+
 /** Homepage "The Glamirk Journal" section heading — the 3 preview articles
  * themselves are already CMS-managed via journalArticles. */
 export interface CMSJournalSectionCopy {
@@ -2167,6 +2202,9 @@ export interface CMSDatabaseSchema {
   looks: Look[];
   shadeJourney: CMSShadeJourney;
   promoBanners: CMSPromoBannerConfig;
+  /** Inline banner carousel above the homepage hero. Optional: documents
+   * written before it existed simply have no banners. */
+  homeBanners?: CMSHomeBannerConfig;
   shadeFinderTeaser: CMSShadeFinderTeaser;
   journalSectionCopy: CMSJournalSectionCopy;
   findMyShadeResultsCopy: CMSFindMyShadeResultsCopy;

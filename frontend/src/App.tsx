@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { AnnouncementBar } from './components/layout/AnnouncementBar';
 import { Navbar } from './components/layout/Navbar';
 import { Hero } from './components/home/Hero';
+import { HomeBannerCarousel } from './components/home/HomeBannerCarousel';
 import { BrandIntro } from './components/home/BrandIntro';
 import { BrandStatement } from './components/home/BrandStatement';
 import { AboutPage } from './components/content/AboutPage';
@@ -1046,6 +1047,15 @@ function AppContent() {
         {/* VIEW 1: HOMEPAGE */}
         {currentRoute.page === 'home' && (
           <div>
+            {/* Admin-managed promotional banner carousel, directly above the hero */}
+            <HomeBannerCarousel
+              onNavigate={(href) => {
+                const url = new URL(href, window.location.origin);
+                setCurrentRoute(pathToRoute(url.pathname, url.search));
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+
             {/* 1st: Home Hero Section */}
             <Hero
               onShopClick={() => navigateToShop()}

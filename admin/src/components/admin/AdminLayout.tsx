@@ -43,6 +43,7 @@ import { AdminNotifications } from './AdminNotifications';
 import { AdminCategories } from './AdminCategories';
 import { AdminOffers } from './AdminOffers';
 import { AdminPromoBanners } from './AdminPromoBanners';
+import { AdminHomeBanners } from './AdminHomeBanners';
 import { AdminNavigation } from './AdminNavigation';
 import { AdminFooter } from './AdminFooter';
 import { AdminBlog } from './AdminBlog';
@@ -73,6 +74,7 @@ type AdminTab =
   | 'categories'
   | 'tryOnModels'
   | 'offers'
+  | 'homeBanners'
   | 'promoBanners'
   | 'navigation'
   | 'footer'
@@ -104,6 +106,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
     {
       label: 'Homepage & Content',
       items: [
+        { id: 'homeBanners', label: 'Homepage Banner Carousel', icon: ImageIcon },
         { id: 'hero', label: 'Hero Section', icon: Sparkles },
         { id: 'about', label: 'About Page', icon: FileText },
         { id: 'benefits', label: 'Benefits & Optimization', icon: ShieldCheck },
@@ -348,6 +351,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
             {activeTab === 'categories' && <AdminCategories />}
             {activeTab === 'offers' && <AdminOffers />}
             {activeTab === 'promoBanners' && <AdminPromoBanners />}
+            {activeTab === 'homeBanners' && <AdminHomeBanners />}
             {activeTab === 'navigation' && <AdminNavigation />}
             {activeTab === 'footer' && <AdminFooter />}
             {activeTab === 'blog' && <AdminBlog />}

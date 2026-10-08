@@ -25,6 +25,7 @@ import {
   CMSShadeJourney,
   CMSBenefitsSection,
   CMSPromoBannerConfig,
+  CMSHomeBannerConfig,
   CMSShadeFinderTeaser,
   CMSJournalSectionCopy,
   CMSFindMyShadeResultsCopy,
@@ -57,6 +58,8 @@ export interface CMSContextType {
   looks: Look[];
   offers: CMSOffer[];
   promoBanners: CMSPromoBannerConfig | null;
+  /** Live banners only (filtered server-side). The admin loads the full set via fetchFullAdminState. */
+  homeBanners: CMSHomeBannerConfig | null;
   shadeFinderTeaser: CMSShadeFinderTeaser | null;
   personalizedBeauty: CMSPersonalizedBeauty | null;
   shopMegaMenu: CMSShopMegaMenu | null;
@@ -97,6 +100,8 @@ export interface CMSContextType {
   saveFooter: (footer: CMSFooterConfig) => Promise<boolean>;
   saveHeroContent: (hero: CMSHeroContent) => Promise<boolean>;
   savePromoBanners: (config: CMSPromoBannerConfig) => Promise<boolean>;
+  /** Resolves to null on success, or the server's error message. */
+  saveHomeBanners: (config: CMSHomeBannerConfig) => Promise<string | null>;
   saveShadeFinderTeaser: (teaser: CMSShadeFinderTeaser) => Promise<boolean>;
   savePersonalizedBeauty: (data: CMSPersonalizedBeauty) => Promise<boolean>;
   saveShopMegaMenu: (data: CMSShopMegaMenu) => Promise<boolean>;
@@ -210,6 +215,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [looks, setLooks] = useState<Look[]>(GLAMIRK_LOOKS);
   const [offers, setOffers] = useState<CMSOffer[]>([]);
   const [promoBanners, setPromoBanners] = useState<CMSPromoBannerConfig | null>(null);
+  const [homeBanners, setHomeBanners] = useState<CMSHomeBannerConfig | null>(null);
   const [shadeFinderTeaser, setShadeFinderTeaser] = useState<CMSShadeFinderTeaser | null>(null);
   const [personalizedBeauty, setPersonalizedBeauty] = useState<CMSPersonalizedBeauty | null>(null);
   const [shopMegaMenu, setShopMegaMenu] = useState<CMSShopMegaMenu | null>(null);
@@ -273,6 +279,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (res.data.looks) setLooks(res.data.looks);
         if (res.data.offers) setOffers(res.data.offers);
         if (res.data.promoBanners) setPromoBanners(res.data.promoBanners);
+        if (res.data.homeBanners) setHomeBanners(res.data.homeBanners);
         if (res.data.shadeFinderTeaser) setShadeFinderTeaser(res.data.shadeFinderTeaser);
         if (res.data.personalizedBeauty) setPersonalizedBeauty(res.data.personalizedBeauty);
         if (res.data.shopMegaMenu) setShopMegaMenu(res.data.shopMegaMenu);
@@ -521,6 +528,15 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return true;
     }
     return false;
+  };
+
+  const saveHomeBanners = async (config: CMSHomeBannerConfig): Promise<string | null> => {
+    const res = await apiFetch('/api/admin/home-banners', { method: 'PUT', body: JSON.stringify(config) });
+    if (res.status < 400) {
+      await loadPublicContent();
+      return null;
+    }
+    return res.error || 'Could not save banners';
   };
 
   const saveShadeFinderTeaser = async (teaser: CMSShadeFinderTeaser): Promise<boolean> => {
@@ -834,6 +850,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     looks,
     offers,
     promoBanners,
+    homeBanners,
     shadeFinderTeaser,
     personalizedBeauty,
     shopMegaMenu,
@@ -868,6 +885,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     saveFooter,
     saveHeroContent,
     savePromoBanners,
+    saveHomeBanners,
     saveShadeFinderTeaser,
     savePersonalizedBeauty,
     saveShopMegaMenu,

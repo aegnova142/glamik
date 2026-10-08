@@ -62,6 +62,7 @@ import {
   UploadedAsset,
 } from '../services/media.service';
 import { findBrokenShadeImageUrls } from '@glamirk/shared/utils/shadeMatch';
+import { isHomeBannerLive, validateHomeBannerConfig } from '@glamirk/shared/utils/homeBanners';
 import { env } from '../config/env';
 import { requireAdmin, AuthenticatedRequest } from '../middleware/requireAdmin';
 import {
@@ -271,6 +272,13 @@ router.get('/cms/content', async (req: Request, res: Response) => {
     shadeJourney: db.shadeJourney,
     benefitsSection: db.benefitsSection,
     promoBanners: db.promoBanners || { enabled: false, banners: [], intervalMs: 4000 },
+    // Only live banners leave the server: inactive, unscheduled and
+    // image-less ones are admin business. Shoppers pick up schedule changes
+    // on the storefront's 30s content refresh.
+    homeBanners: {
+      intervalMs: db.homeBanners?.intervalMs,
+      banners: (db.homeBanners?.banners || []).filter((b) => isHomeBannerLive(b)),
+    },
     shadeFinderTeaser: db.shadeFinderTeaser,
     // [Glamik CMS] 2026-10-03 — expose Personalized Beauty + Shop mega-menu to
     // the storefront (active-only, sorted) alongside the existing sections.
@@ -1608,6 +1616,38 @@ router.put('/admin/promo-banners', requireAdmin, async (req: AuthenticatedReques
   broadcastEvent('CMS_UPDATE', 'promoBanners', db.promoBanners);
 
   res.json(db.promoBanners);
+});
+
+// --- Homepage Banner Carousel (inline, above the hero) ---
+router.put('/admin/home-banners', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const errors = validateHomeBannerConfig(req.body);
+  if (errors.length) {
+    return res.status(400).json({ error: `Banners were not saved. ${errors.join(' · ')}`, details: errors });
+  }
+
+  const db = await loadDatabase();
+  const previous = new Map((db.homeBanners?.banners || []).map((b) => [b.id, b]));
+  const now = new Date().toISOString();
+  // Timestamps are server-owned: createdAt survives edits, updatedAt moves
+  // only when something about the banner actually changed.
+  db.homeBanners = {
+    intervalMs: req.body.intervalMs,
+    banners: (req.body.banners as NonNullable<typeof db.homeBanners>['banners']).map((b) => {
+      const prev = previous.get(b.id);
+      const { createdAt: _c, updatedAt: _u, ...content } = b;
+      const { createdAt: _pc, updatedAt: _pu, ...prevContent } = prev || {};
+      const unchanged = prev && JSON.stringify(prevContent) === JSON.stringify(content);
+      return { ...content, createdAt: prev?.createdAt || now, updatedAt: unchanged ? prev.updatedAt : now };
+    }),
+  };
+
+  // Replaced/removed banner images are left alone — see the "Rollback &
+  // Cleanup Timing" policy at the top of this file.
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_HOME_BANNERS', 'HOME_BANNERS', 'home-banners-main', 'Homepage Banner Carousel Updated');
+  broadcastEvent('CMS_UPDATE', 'homeBanners', db.homeBanners);
+
+  res.json(db.homeBanners);
 });
 
 // --- Homepage Shade Intelligence Teaser ---

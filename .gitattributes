@@ -1,0 +1,5 @@
+# Server configuration is checked out on Windows but deployed to Linux. With
+# core.autocrlf=true (the default on the Windows dev machine) git would hand
+# these files back with CRLF line endings, and they get copied to the VPS
+# verbatim. Pin them to LF so what lands in /etc/nginx is what was reviewed.
+deploy/** text eol=lf

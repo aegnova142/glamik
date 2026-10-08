@@ -9,19 +9,20 @@ import { DeliveryCheck } from './DeliveryCheck';
 import { WatchTheGlamModal } from '../social/WatchTheGlamModal';
 import { Product, Shade, CartItem } from '@glamirk/shared/types';
 import { GLAMIRK_JOURNAL_ARTICLES_EXTENDED, GLAMIRK_BEAUTY_GUIDES } from '@glamirk/shared/data/editorial';
-import { resolveVariantGallery, variantGalleryResetKey, getCurrentPrice, getCurrentCompareAtPrice, getDefaultShade, getActiveSizeOptions } from '@glamirk/shared/utils/productVariant';
+import {
+  resolveVariantGallery,
+  variantGalleryResetKey,
+  getCurrentPrice,
+  getCurrentCompareAtPrice,
+  getCurrentStock,
+  getCurrentSku,
+  getCurrentDiscountPercent,
+  getDefaultShade,
+  getActiveSizeOptions,
+  resolveSizeSelection,
+} from '@glamirk/shared/utils/productVariant';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
-
-/** The size to preselect for a given shade: that shade's own first size
- * option if it has any (a shade with exactly one size just uses it
- * silently), else the product-level default for shade-less products. */
-function defaultSizeFor(product: Product, shade: Shade | undefined): string | undefined {
-  const options = getActiveSizeOptions(product, shade);
-  if (options.length > 0) return options[0].label;
-  if (shade) return undefined;
-  return product.selectedSize || (product.sizes ? product.sizes[0] : undefined);
-}
 import {
   Heart,
   ShoppingBag,
@@ -72,16 +73,25 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
 }) => {
   const [selectedShade, setSelectedShade] = useState<Shade | undefined>(getDefaultShade(product));
   const [selectedSize, setSelectedSize] = useState<string | undefined>(() =>
-    defaultSizeFor(product, getDefaultShade(product))
+    resolveSizeSelection(product, getDefaultShade(product), undefined)
   );
   const [quantity, setQuantity] = useState(1);
 
   // A shade can carry its own size list (one shade only in 50g, another in
   // 30g and 50g) — switching shades must re-derive which size is selected
   // rather than carrying over a label that may not exist for the new shade.
+  // resolveSizeSelection keeps the customer's current choice when the new
+  // shade also offers it, so switching between two 50g shades does not drop
+  // them back to 30g, and replaces it when it does not.
+  //
+  // Everything else on the page — gallery, price, compare-at, discount, sizes,
+  // stock, SKU and the Add to Bag button — is DERIVED from these two pieces of
+  // state on each render rather than stored alongside them. That is what makes
+  // the switch atomic: there is no second copy that can still be showing the
+  // previous shade's price.
   const handleSelectShade = (shade: Shade) => {
     setSelectedShade(shade);
-    setSelectedSize(defaultSizeFor(product, shade));
+    setSelectedSize((prev) => resolveSizeSelection(product, shade, prev));
   };
   const [isWatchVideoOpen, setIsWatchVideoOpen] = useState(false);
 
@@ -97,7 +107,7 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
   useEffect(() => {
     const defaultShade = getDefaultShade(product);
     setSelectedShade(defaultShade);
-    setSelectedSize(defaultSizeFor(product, defaultShade));
+    setSelectedSize(resolveSizeSelection(product, defaultShade, undefined));
     setQuantity(1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [product]);
@@ -109,6 +119,15 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
   const isWishlisted = wishlist.includes(product.id);
   const currentPrice = getCurrentPrice(product, selectedShade, selectedSize);
   const currentCompareAtPrice = getCurrentCompareAtPrice(product, selectedShade, selectedSize);
+  // Derived from the two prices, never stored — see getDiscountPercent. Null
+  // whenever there is no honest saving to claim, including a compare-at that
+  // has been set below the selling price.
+  const currentDiscount = getCurrentDiscountPercent(product, selectedShade, selectedSize);
+  const currentStock = getCurrentStock(product, selectedShade, selectedSize);
+  const currentSku = getCurrentSku(product, selectedShade, selectedSize);
+  // What the server will decide at /cart/items, decided here first so the
+  // button says so instead of the customer finding out after clicking.
+  const canAddToBag = product.inStock !== false && currentStock > 0;
   const galleryImages = resolveVariantGallery(product, selectedShade);
   const galleryResetKey = variantGalleryResetKey(product, selectedShade);
   const activeSizeOptions = getActiveSizeOptions(product, selectedShade);
@@ -242,6 +261,11 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                   {product.currency}{currentCompareAtPrice}
                 </span>
               )}
+              {currentDiscount !== null && (
+                <span className="text-[11px] px-2 py-0.5 bg-[#FCE8ED] text-[#F05A7E] border border-[#E8D5A8] font-bold rounded-full">
+                  {currentDiscount}% OFF
+                </span>
+              )}
               <span className="text-[11px] text-[#6B6B6B] ml-auto">
                 Inclusive of all taxes
               </span>
@@ -250,8 +274,10 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
             {/* Shade Selector for Lipsticks & Sindoor */}
             {product.shades && selectedShade && (
               <ShadeSelector
+                product={product}
                 shades={product.shades}
                 selectedShade={selectedShade}
+                selectedStock={currentStock}
                 onSelectShade={handleSelectShade}
                 onOpenShadeFinder={onOpenShadeFinder}
               />
@@ -267,28 +293,43 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                   Select Format / Size:
                 </label>
                 <div className="grid grid-cols-2 gap-3">
-                  {activeSizeOptions.map((opt) => (
-                    <button
-                      key={opt.id}
-                      onClick={() => setSelectedSize(opt.label)}
-                      className={`p-3.5 text-left rounded-2xl border transition-all cursor-pointer ${
-                        selectedSize === opt.label
-                          ? 'border-[#F05A7E] bg-[#FCE8ED] ring-2 ring-[#F05A7E]/30 shadow-xs'
-                          : 'border-[#E8D5A8] bg-white text-[#6B6B6B] hover:border-[#F05A7E]'
-                      }`}
-                    >
-                      <span className="text-xs font-bold text-[#121212] block">{opt.label}</span>
-                      <span className="text-[11px] text-[#F05A7E] font-semibold block mt-0.5">
-                        {product.currency}{opt.price}
-                      </span>
-                    </button>
-                  ))}
+                  {activeSizeOptions.map((opt) => {
+                    // Each size carries its own stock, so one can be sold out
+                    // while its sibling is on the shelf.
+                    const sizeStock = getCurrentStock(product, selectedShade, opt.label);
+                    const soldOut = sizeStock <= 0;
+                    return (
+                      <button
+                        key={opt.id}
+                        onClick={() => setSelectedSize(opt.label)}
+                        className={`p-3.5 text-left rounded-2xl border transition-all cursor-pointer ${
+                          selectedSize === opt.label
+                            ? 'border-[#F05A7E] bg-[#FCE8ED] ring-2 ring-[#F05A7E]/30 shadow-xs'
+                            : 'border-[#E8D5A8] bg-white text-[#6B6B6B] hover:border-[#F05A7E]'
+                        } ${soldOut ? 'opacity-50' : ''}`}
+                      >
+                        <span className="text-xs font-bold text-[#121212] block">{opt.label}</span>
+                        <span className="text-[11px] text-[#F05A7E] font-semibold block mt-0.5">
+                          {product.currency}{opt.price}
+                          {soldOut && <span className="text-[#6B6B6B] font-normal"> · Sold out</span>}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
             {activeSizeOptions.length === 1 && (
               <p className="text-[11px] text-[#6B6B6B] pt-1">
                 Size: <span className="font-bold text-[#121212]">{activeSizeOptions[0].label}</span>
+              </p>
+            )}
+
+            {/* The code that identifies exactly this shade/size, resolved
+                through the same chain as the price. */}
+            {currentSku && (
+              <p className="text-[11px] text-[#6B6B6B]">
+                SKU: <span className="font-mono text-[#121212]">{currentSku}</span>
               </p>
             )}
 
@@ -323,10 +364,15 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                 <button
                   id="pdp-add-to-bag-btn"
                   onClick={() => onAddToBag(product, selectedShade, selectedSize, quantity)}
-                  className="flex-1 py-3.5 px-6 bg-[#F05A7E] hover:bg-[#F05A7E] text-white text-[12px] font-bold tracking-wider uppercase rounded-full transition-all flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(240, 90, 126,0.25)] hover:scale-102 active:scale-95 cursor-pointer"
+                  disabled={!canAddToBag}
+                  className={`flex-1 py-3.5 px-6 text-white text-[12px] font-bold tracking-wider uppercase rounded-full transition-all flex items-center justify-center gap-2 ${
+                    canAddToBag
+                      ? 'bg-[#F05A7E] hover:bg-[#F05A7E] shadow-[0_4px_14px_rgba(240, 90, 126,0.25)] hover:scale-102 active:scale-95 cursor-pointer'
+                      : 'bg-[#6B6B6B] cursor-not-allowed'
+                  }`}
                 >
                   <ShoppingBag className="w-4 h-4 text-white" />
-                  <span>ADD TO BAG • ₹{currentPrice * quantity}</span>
+                  <span>{canAddToBag ? `ADD TO BAG • ₹${currentPrice * quantity}` : 'OUT OF STOCK'}</span>
                 </button>
               </div>
 
@@ -334,7 +380,12 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => onBuyNow(product, selectedShade, selectedSize)}
-                  className="py-3 px-4 bg-white text-[#121212] border border-[#E8D5A8] hover:border-[#F05A7E] hover:bg-[#FCE8ED] text-[11px] font-bold tracking-wider uppercase rounded-full transition-all flex items-center justify-center cursor-pointer"
+                  disabled={!canAddToBag}
+                  className={`py-3 px-4 bg-white text-[#121212] border border-[#E8D5A8] text-[11px] font-bold tracking-wider uppercase rounded-full transition-all flex items-center justify-center ${
+                    canAddToBag
+                      ? 'hover:border-[#F05A7E] hover:bg-[#FCE8ED] cursor-pointer'
+                      : 'opacity-50 cursor-not-allowed'
+                  }`}
                 >
                   BUY NOW
                 </button>
@@ -611,10 +662,15 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
 
         <button
           onClick={() => onAddToBag(product, selectedShade, selectedSize, quantity)}
-          className="py-2.5 px-5 bg-[#F05A7E] hover:bg-[#F05A7E] text-white text-xs font-bold tracking-wider uppercase rounded-full flex items-center gap-1.5 shadow-[0_4px_12px_rgba(240, 90, 126,0.25)] flex-shrink-0 cursor-pointer active:scale-95 transition-all"
+          disabled={!canAddToBag}
+          className={`py-2.5 px-5 text-white text-xs font-bold tracking-wider uppercase rounded-full flex items-center gap-1.5 flex-shrink-0 transition-all ${
+            canAddToBag
+              ? 'bg-[#F05A7E] hover:bg-[#F05A7E] shadow-[0_4px_12px_rgba(240, 90, 126,0.25)] cursor-pointer active:scale-95'
+              : 'bg-[#6B6B6B] cursor-not-allowed'
+          }`}
         >
           <ShoppingBag className="w-3.5 h-3.5 text-white" />
-          <span>ADD TO BAG</span>
+          <span>{canAddToBag ? 'ADD TO BAG' : 'OUT OF STOCK'}</span>
         </button>
       </div>
     </div>

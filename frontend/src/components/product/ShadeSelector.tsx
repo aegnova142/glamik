@@ -1,29 +1,37 @@
 import React from 'react';
-import { Shade } from '@glamirk/shared/types';
+import { Product, Shade } from '@glamirk/shared/types';
+import { selectableShades, getVariantStock, stockStatus } from '@glamirk/shared/utils/productVariant';
 import { Sparkles } from 'lucide-react';
 
 interface ShadeSelectorProps {
+  product: Product;
   shades: Shade[];
   selectedShade: Shade;
+  /**
+   * Stock for what is actually selected — resolved by the caller through the
+   * size → shade → product chain. A shade that sells in 30g and 50g has no
+   * single stock number of its own, so reading `selectedShade.stock` here
+   * would announce the wrong figure (or none) the moment sizes exist.
+   */
+  selectedStock: number;
   onSelectShade: (shade: Shade) => void;
   onOpenShadeFinder: () => void;
 }
 
 export const ShadeSelector: React.FC<ShadeSelectorProps> = ({
+  product,
   shades,
   selectedShade,
+  selectedStock,
   onSelectShade,
   onOpenShadeFinder,
 }) => {
-  // Hide shades the admin has paused — unless that would hide every shade
-  // (e.g. legacy data with no isActive field set), in which case show them
-  // all rather than leave the selector empty.
-  const visibleShades = shades.some((s) => s.isActive !== false)
-    ? shades.filter((s) => s.isActive !== false)
-    : shades;
-  const selectedStock = selectedShade.stock;
-  const isLowStock = typeof selectedStock === 'number' && selectedStock > 0 && selectedStock <= 5;
-  const isOutOfStock = typeof selectedStock === 'number' && selectedStock <= 0;
+  // Which shades a customer may pick — including the "every shade is paused"
+  // fallback — is decided by the shared helper rather than re-derived here,
+  // because the cart endpoint admits exactly this set. A swatch on this row is
+  // always one the server will accept.
+  const visibleShades = selectableShades({ ...product, shades });
+  const status = stockStatus(selectedStock);
 
   return (
     <div className="space-y-3.5 py-4 border-t border-b border-[#E8D5A8]">
@@ -56,6 +64,10 @@ export const ShadeSelector: React.FC<ShadeSelectorProps> = ({
       <div className="flex items-center gap-3 flex-wrap pt-1">
         {visibleShades.map((shade) => {
           const isSelected = selectedShade.id === shade.id;
+          // A sold-out shade stays selectable — the customer can still look at
+          // it, read its description and see its photographs — but says so,
+          // rather than letting them find out at the Add to Bag button.
+          const soldOut = getVariantStock(product, shade) <= 0 && (shade.sizes || []).length === 0;
           return (
             <button
               key={shade.id}
@@ -64,11 +76,17 @@ export const ShadeSelector: React.FC<ShadeSelectorProps> = ({
                 isSelected
                   ? 'border-[#F05A7E] scale-115 ring-2 ring-[#F05A7E] ring-offset-2 shadow-md'
                   : 'border-[#0B0B0B]/15 hover:scale-105 opacity-85 hover:opacity-100'
-              }`}
+              } ${soldOut ? 'opacity-40' : ''}`}
               style={{ backgroundColor: shade.hex }}
-              title={`${shade.name} (${shade.undertone} undertone)`}
-              aria-label={`Select shade ${shade.name}`}
-            />
+              title={`${shade.name} (${shade.undertone} undertone)${soldOut ? ' — out of stock' : ''}`}
+              aria-label={`Select shade ${shade.name}${soldOut ? ', out of stock' : ''}`}
+            >
+              {soldOut && (
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="w-full h-px bg-[#121212]/70 rotate-45" />
+                </span>
+              )}
+            </button>
           );
         })}
       </div>
@@ -78,12 +96,11 @@ export const ShadeSelector: React.FC<ShadeSelectorProps> = ({
         {selectedShade.description}
       </p>
 
-      {(isLowStock || isOutOfStock) && (
-        <p className={`text-[11px] font-bold ${isOutOfStock ? 'text-[#F05A7E]' : 'text-[#C9972B]'}`}>
-          {isOutOfStock ? 'Out of stock' : `Only ${selectedStock} left`}
+      {status !== 'in-stock' && (
+        <p className={`text-[11px] font-bold ${status === 'out-of-stock' ? 'text-[#F05A7E]' : 'text-[#C9972B]'}`}>
+          {status === 'out-of-stock' ? 'Out of stock' : `Only ${selectedStock} left`}
         </p>
       )}
     </div>
   );
 };
-

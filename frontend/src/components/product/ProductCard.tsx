@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Heart, Sparkles, ShoppingBag, Star, Check, ShieldCheck } from 'lucide-react';
 import { Product, Shade, CartItem } from '@glamirk/shared/types';
 import { ProductImage } from './ProductImage';
-import { isProductSellable } from '@glamirk/shared/utils/productVariant';
+import { isProductSellable, LOW_STOCK_THRESHOLD } from '@glamirk/shared/utils/productVariant';
 
 interface ProductCardProps {
   product: Product;
@@ -26,7 +26,6 @@ interface ProductCardProps {
   onBuyNow: (product: Product, shade?: Shade, size?: string) => void;
 }
 
-const LOW_STOCK_THRESHOLD = 5;
 
 // Rating display is on hold for a future release — hidden rather than
 // deleted so it's a one-line flip to bring back. Matching flag in

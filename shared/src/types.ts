@@ -53,6 +53,11 @@ export interface SizeOption {
   compareAtPrice?: number;
   stock?: number;
   isActive?: boolean;
+  /** Per-size stock-keeping unit (e.g. GLM-WB-30 vs GLM-WB-50). Optional and
+   * additive: a size saved before this field existed simply has none, and the
+   * shade's own `sku` continues to identify it. Unique per product across
+   * every shade and size — see validateProductVariants. */
+  sku?: string;
 }
 
 export type ProductCategory = 'Makeup' | 'Skin' | 'Nails' | 'Discover';

@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
-import { Product, Shade, VariantImage, SizeOption, ProductAttribute, UsageStep } from '@glamirk/shared/types';
+import { Product, ProductAttribute, UsageStep } from '@glamirk/shared/types';
 import {
   Package,
   Plus,
@@ -19,24 +19,22 @@ import {
   ArrowLeft,
   Tag,
   Sparkles,
-  Star,
   Upload,
   GripVertical,
   X,
   ImageOff,
-  RefreshCw,
-  Link,
 } from 'lucide-react';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { PRODUCT_TAXONOMY } from '@glamirk/shared/data/taxonomy';
 import { apiFetch } from '@glamirk/shared/utils/cmsClient';
 import { InventoryPanel, ReadOnlyStockField } from './InventoryPanel';
+import { ShadeEditor } from './ShadeEditor';
+import { validateProductVariants } from '@glamirk/shared/utils/productValidation';
 import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 type ProductImageSlot = 'primary' | 'secondary' | 'detail' | 'texture' | 'lifestyle' | 'swatch';
 
-const newVariantImageId = () => 'vimg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
 
 export const AdminProducts: React.FC = () => {
   const { products, categories, saveProduct, deleteProduct, duplicateProduct } = useCMS();
@@ -68,14 +66,7 @@ export const AdminProducts: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [uploadingSlot, setUploadingSlot] = useState<ProductImageSlot | null>(null);
-  const [uploadingShadeIndex, setUploadingShadeIndex] = useState<number | null>(null);
-  const [dragImage, setDragImage] = useState<{ shadeIdx: number; imgIdx: number } | null>(null);
-  const [brokenVariantImageIds, setBrokenVariantImageIds] = useState<Set<string>>(new Set());
   const [brokenSlotKeys, setBrokenSlotKeys] = useState<Set<ProductImageSlot>>(new Set());
-  const [variantImageUrlDraft, setVariantImageUrlDraft] = useState<Record<number, string>>({});
-  const [replacingVariantImageId, setReplacingVariantImageId] = useState<string | null>(null);
-  const [editingUrlImageId, setEditingUrlImageId] = useState<string | null>(null);
-  const [editingUrlDraft, setEditingUrlDraft] = useState('');
   const [uploadingStepId, setUploadingStepId] = useState<string | null>(null);
 
   const { upload, error: uploadError } = useFileUpload({
@@ -258,36 +249,12 @@ export const AdminProducts: React.FC = () => {
 
   const validateProduct = (product: Product): string | null => {
     if (!product.name.trim()) return 'Product Name is required before saving.';
-    if (!(product.shades || []).every((s) => s.name.trim())) {
-      return 'Every variant needs a name before saving.';
-    }
-    const skus = (product.shades || []).map((s) => s.sku?.trim()).filter((sku): sku is string => !!sku);
-    if (new Set(skus).size !== skus.length) {
-      return 'Two variants on this product share the same SKU. SKUs must be unique per product.';
-    }
-    for (const s of product.shades || []) {
-      if (s.price !== undefined && (isNaN(s.price) || s.price < 0)) {
-        return `${s.name || 'A variant'} has an invalid price.`;
-      }
-      if (s.stock !== undefined && (isNaN(s.stock) || s.stock < 0)) {
-        return `${s.name || 'A variant'} has an invalid stock quantity.`;
-      }
-      if (s.sizes && s.sizes.length > 0) {
-        const labels = s.sizes.map((sz) => sz.label.trim());
-        for (const sz of s.sizes) {
-          if (!sz.label.trim()) return `A size on variant "${s.name}" needs a label.`;
-          if (isNaN(sz.price) || sz.price < 0) return `Size "${sz.label}" on variant "${s.name}" has an invalid price.`;
-          if (sz.stock !== undefined && (isNaN(sz.stock) || sz.stock < 0)) return `Size "${sz.label}" on variant "${s.name}" has an invalid stock quantity.`;
-        }
-        if (new Set(labels).size !== labels.length) return `Variant "${s.name}" has duplicate size labels.`;
-      }
-    }
-    if (product.sizePricing) {
-      for (const [label, entry] of Object.entries(product.sizePricing)) {
-        if (isNaN(entry.price) || entry.price < 0) return `Size "${label}" has an invalid price.`;
-        if (entry.stock !== undefined && (isNaN(entry.stock) || entry.stock < 0)) return `Size "${label}" has an invalid stock quantity.`;
-      }
-    }
+    // Shades, sizes, SKUs, colours, compare-at prices and variant image URLs
+    // are checked by the same rulebook the server validates against, so the
+    // admin sees the exact message the save would have been rejected with —
+    // and the two can never drift into disagreeing about what is saveable.
+    const variantError = validateProductVariants(product);
+    if (variantError) return variantError;
     if ((product.benefits || []).some((b) => !b.trim())) {
       return 'Remove empty benefit entries before saving (or fill them in).';
     }
@@ -314,223 +281,20 @@ export const AdminProducts: React.FC = () => {
     }
     setSaveError(null);
     setIsSaving(true);
-    const ok = await saveProduct(editingProduct);
+    const serverError = await saveProduct(editingProduct);
     setIsSaving(false);
-    if (ok) {
+    if (!serverError) {
       setSaveSuccess(true);
       setTimeout(() => {
         setSaveSuccess(false);
         setEditingProduct(null);
       }, 800);
     } else {
-      setSaveError('Save failed. Please try again.');
+      // The server's own message, not a generic one: it names the shade or
+      // size at fault, which is the difference between a fixable error and a
+      // hunt through a product with twelve variants.
+      setSaveError(serverError);
     }
-  };
-
-  const handleAddShade = () => {
-    if (!editingProduct) return;
-    const newShade: Shade = {
-      id: 'shade-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
-      name: 'New Shade',
-      hex: '#F05A7E',
-      undertone: 'Warm',
-      description: 'Calibrated luxury pigment.',
-      isActive: true,
-      images: [],
-    };
-    setEditingProduct({
-      ...editingProduct,
-      shades: [...(editingProduct.shades || []), newShade],
-    });
-  };
-
-  const handleUpdateShade = (index: number, key: keyof Shade, val: any) => {
-    if (!editingProduct || !editingProduct.shades) return;
-    const updated = [...editingProduct.shades];
-    updated[index] = { ...updated[index], [key]: val };
-    setEditingProduct({ ...editingProduct, shades: updated });
-  };
-
-  const handleDeleteShade = (index: number) => {
-    if (!editingProduct || !editingProduct.shades) return;
-    const updated = editingProduct.shades.filter((_, i) => i !== index);
-    setEditingProduct({ ...editingProduct, shades: updated });
-  };
-
-  const updateShadeSizes = (shadeIndex: number, updater: (sizes: SizeOption[]) => SizeOption[]) => {
-    setEditingProduct((prev) => {
-      if (!prev || !prev.shades) return prev;
-      const shades = [...prev.shades];
-      const shade = shades[shadeIndex];
-      shades[shadeIndex] = { ...shade, sizes: updater(shade.sizes || []) };
-      return { ...prev, shades };
-    });
-  };
-
-  const handleAddShadeSize = (shadeIndex: number) => {
-    if (!editingProduct) return;
-    const shade = editingProduct.shades?.[shadeIndex];
-    if (!shade) return;
-    const existingLabels = (shade.sizes || []).map((s) => s.label);
-    let label = 'New Size';
-    let n = 2;
-    while (existingLabels.includes(label)) label = `New Size ${n++}`;
-    const newSize: SizeOption = {
-      id: 'size-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
-      label,
-      price: shade.price ?? editingProduct.price,
-    };
-    updateShadeSizes(shadeIndex, (sizes) => [...sizes, newSize]);
-  };
-
-  const handleRenameShadeSize = (shadeIndex: number, sizeId: string, newLabel: string) => {
-    if (!newLabel.trim()) return;
-    updateShadeSizes(shadeIndex, (sizes) => sizes.map((s) => (s.id === sizeId ? { ...s, label: newLabel.trim() } : s)));
-  };
-
-  const handleUpdateShadeSizeField = (
-    shadeIndex: number,
-    sizeId: string,
-    key: 'price' | 'compareAtPrice' | 'stock',
-    val: number | undefined
-  ) => {
-    updateShadeSizes(shadeIndex, (sizes) => sizes.map((s) => (s.id === sizeId ? { ...s, [key]: val } : s)));
-  };
-
-  const handleDeleteShadeSize = (shadeIndex: number, sizeId: string) => {
-    updateShadeSizes(shadeIndex, (sizes) => sizes.filter((s) => s.id !== sizeId));
-  };
-
-  const handleAddVariantImages = async (shadeIndex: number, files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    setUploadingShadeIndex(shadeIndex);
-    const uploaded: VariantImage[] = [];
-    for (const file of Array.from(files)) {
-      const mediaItem = await upload(file);
-      if (mediaItem) {
-        uploaded.push({
-          id: newVariantImageId(),
-          url: mediaItem.url,
-          publicId: mediaItem.publicId,
-          alt: '',
-          sortOrder: 0,
-          isPrimary: false,
-        });
-      }
-    }
-    setUploadingShadeIndex(null);
-    if (uploaded.length === 0) return;
-    setEditingProduct((prev) => {
-      if (!prev || !prev.shades) return prev;
-      const shades = [...prev.shades];
-      const shade = shades[shadeIndex];
-      const merged = [...(shade.images || []), ...uploaded].map((img, i) => ({ ...img, sortOrder: i }));
-      if (!merged.some((img) => img.isPrimary)) merged[0].isPrimary = true;
-      shades[shadeIndex] = { ...shade, images: merged };
-      return { ...prev, shades };
-    });
-  };
-
-  const handleAddVariantImageUrl = (shadeIndex: number, url: string) => {
-    const trimmed = url.trim();
-    if (!trimmed) return;
-    setEditingProduct((prev) => {
-      if (!prev || !prev.shades) return prev;
-      const shades = [...prev.shades];
-      const shade = shades[shadeIndex];
-      const newImage: VariantImage = {
-        id: newVariantImageId(),
-        url: trimmed,
-        publicId: '',
-        alt: '',
-        sortOrder: 0,
-        isPrimary: false,
-      };
-      const merged = [...(shade.images || []), newImage].map((img, i) => ({ ...img, sortOrder: i }));
-      if (!merged.some((img) => img.isPrimary)) merged[0].isPrimary = true;
-      shades[shadeIndex] = { ...shade, images: merged };
-      return { ...prev, shades };
-    });
-    setVariantImageUrlDraft((prev) => ({ ...prev, [shadeIndex]: '' }));
-  };
-
-  const handleReplaceVariantImage = async (shadeIndex: number, imageId: string, file: File | undefined) => {
-    if (!file) return;
-    setReplacingVariantImageId(imageId);
-    const mediaItem = await upload(file);
-    setReplacingVariantImageId(null);
-    if (!mediaItem) return;
-    setBrokenVariantImageIds((prev) => {
-      if (!prev.has(imageId)) return prev;
-      const next = new Set(prev);
-      next.delete(imageId);
-      return next;
-    });
-    setEditingProduct((prev) => {
-      if (!prev || !prev.shades) return prev;
-      const shades = [...prev.shades];
-      const shade = shades[shadeIndex];
-      shades[shadeIndex] = {
-        ...shade,
-        images: (shade.images || []).map((img) =>
-          img.id === imageId ? { ...img, url: mediaItem.url, publicId: mediaItem.publicId } : img
-        ),
-      };
-      return { ...prev, shades };
-    });
-  };
-
-  const handleUpdateVariantImageUrl = (shadeIndex: number, imageId: string, url: string) => {
-    const trimmed = url.trim();
-    if (!trimmed) return;
-    setBrokenVariantImageIds((prev) => {
-      if (!prev.has(imageId)) return prev;
-      const next = new Set(prev);
-      next.delete(imageId);
-      return next;
-    });
-    setEditingProduct((prev) => {
-      if (!prev || !prev.shades) return prev;
-      const shades = [...prev.shades];
-      const shade = shades[shadeIndex];
-      shades[shadeIndex] = {
-        ...shade,
-        images: (shade.images || []).map((img) =>
-          img.id === imageId ? { ...img, url: trimmed, publicId: '' } : img
-        ),
-      };
-      return { ...prev, shades };
-    });
-    setEditingUrlImageId(null);
-    setEditingUrlDraft('');
-  };
-
-  const handleDeleteVariantImage = (shadeIndex: number, imageId: string) => {
-    setEditingProduct((prev) => {
-      if (!prev || !prev.shades) return prev;
-      const shades = [...prev.shades];
-      const shade = shades[shadeIndex];
-      const wasPrimary = shade.images?.find((img) => img.id === imageId)?.isPrimary;
-      const remaining = (shade.images || [])
-        .filter((img) => img.id !== imageId)
-        .map((img, i) => ({ ...img, sortOrder: i }));
-      if (wasPrimary && remaining.length > 0) remaining[0].isPrimary = true;
-      shades[shadeIndex] = { ...shade, images: remaining };
-      return { ...prev, shades };
-    });
-  };
-
-  const handleSetPrimaryVariantImage = (shadeIndex: number, imageId: string) => {
-    setEditingProduct((prev) => {
-      if (!prev || !prev.shades) return prev;
-      const shades = [...prev.shades];
-      const shade = shades[shadeIndex];
-      shades[shadeIndex] = {
-        ...shade,
-        images: (shade.images || []).map((img) => ({ ...img, isPrimary: img.id === imageId })),
-      };
-      return { ...prev, shades };
-    });
   };
 
   const handleAddSize = () => {
@@ -584,24 +348,6 @@ export const AdminProducts: React.FC = () => {
       sizePricing,
       selectedSize: editingProduct.selectedSize === label ? sizes[0] : editingProduct.selectedSize,
     });
-  };
-
-  const handleVariantImageDrop = (shadeIndex: number, targetIdx: number) => {
-    if (!dragImage || dragImage.shadeIdx !== shadeIndex || dragImage.imgIdx === targetIdx) {
-      setDragImage(null);
-      return;
-    }
-    setEditingProduct((prev) => {
-      if (!prev || !prev.shades) return prev;
-      const shades = [...prev.shades];
-      const shade = shades[shadeIndex];
-      const images = [...(shade.images || [])];
-      const [moved] = images.splice(dragImage.imgIdx, 1);
-      images.splice(targetIdx, 0, moved);
-      shades[shadeIndex] = { ...shade, images: images.map((img, i) => ({ ...img, sortOrder: i })) };
-      return { ...prev, shades };
-    });
-    setDragImage(null);
   };
 
   // If editing a product
@@ -925,461 +671,15 @@ export const AdminProducts: React.FC = () => {
               </div>
             </div>
 
-            {/* Shades Builder */}
-            <div className="p-6 rounded-xl bg-[#171717] border border-[#E8D5A8]/30 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-serif text-base text-[#FAF9F6]">
-                  Shade Swatches ({editingProduct.shades?.length || 0})
-                </h3>
-                <button
-                  type="button"
-                  onClick={handleAddShade}
-                  className="flex items-center gap-1 text-xs text-[#C9972B] hover:text-[#E3B84B] font-semibold cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Shade</span>
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                {editingProduct.shades?.map((shade, idx) => {
-                  const shadeImages = [...(shade.images || [])].sort((a, b) => a.sortOrder - b.sortOrder);
-                  const duplicateSku =
-                    !!shade.sku?.trim() &&
-                    (editingProduct.shades || []).filter((s, i) => i !== idx && s.sku?.trim() === shade.sku?.trim()).length > 0;
-                  return (
-                    <div key={shade.id || idx} className="p-4 rounded-lg bg-[#0B0B0B] border border-[#E8D5A8]/20 space-y-3 text-xs">
-                      {/* Identity row */}
-                      <div className="flex flex-wrap items-center gap-3">
-                        <input
-                          type="color"
-                          value={/^#([0-9a-fA-F]{6})$/.test(shade.hex) ? shade.hex : '#F05A7E'}
-                          onChange={(e) => handleUpdateShade(idx, 'hex', e.target.value)}
-                          title="Pick a color"
-                          className="w-8 h-8 rounded border border-[#E8D5A8]/30 cursor-pointer bg-transparent shrink-0"
-                        />
-                        <input
-                          type="text"
-                          value={shade.hex}
-                          placeholder="#RRGGBB"
-                          maxLength={7}
-                          onChange={(e) => {
-                            const v = '#' + e.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 6);
-                            handleUpdateShade(idx, 'hex', v);
-                          }}
-                          title="Type an exact hex code, e.g. #FCE8ED"
-                          className="px-2 py-1 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6] w-20 font-mono uppercase"
-                        />
-                        <input
-                          type="text"
-                          value={shade.name}
-                          placeholder="Variant / Shade Name"
-                          onChange={(e) => handleUpdateShade(idx, 'name', e.target.value)}
-                          className="flex-1 min-w-[140px] px-2 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6] font-semibold"
-                        />
-                        <select
-                          value={shade.undertone}
-                          onChange={(e) => handleUpdateShade(idx, 'undertone', e.target.value)}
-                          className="px-2 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
-                        >
-                          <option value="Warm">Warm</option>
-                          <option value="Cool">Cool</option>
-                          <option value="Neutral">Neutral</option>
-                          <option value="Olive">Olive</option>
-                          <option value="Universal">Universal</option>
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateShade(idx, 'isActive', shade.isActive === false)}
-                          className={`px-2.5 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider cursor-pointer ${
-                            shade.isActive === false
-                              ? 'bg-[#F05A7E]/20 text-[#F05A7E] border border-[#F05A7E]/30'
-                              : 'bg-[#C9972B]/10 text-[#E3B84B] border border-[#C9972B]/40'
-                          }`}
-                          title="Toggle whether shoppers can select this variant"
-                        >
-                          {shade.isActive === false ? 'Paused' : 'Active'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteShade(idx)}
-                          className="p-1.5 text-[#F05A7E] hover:bg-[#F05A7E]/20 rounded cursor-pointer ml-auto"
-                          title="Delete variant"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      {/* Pricing / inventory row */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                        <div>
-                          <label className="block text-[10px] font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">SKU</label>
-                          <input
-                            type="text"
-                            value={shade.sku || ''}
-                            placeholder="Optional"
-                            onChange={(e) => handleUpdateShade(idx, 'sku', e.target.value)}
-                            className={`w-full px-2 py-1.5 bg-[#171717] border rounded text-xs text-[#FAF9F6] ${duplicateSku ? 'border-[#F05A7E]' : 'border-[#E8D5A8]/30'}`}
-                          />
-                          {duplicateSku && <p className="text-[9.5px] text-[#F05A7E] mt-0.5">Duplicate SKU</p>}
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                            Price (₹) <span className="normal-case text-[#6B6B6B]">override</span>
-                          </label>
-                          <input
-                            type="number"
-                            value={shade.price ?? ''}
-                            placeholder={String(editingProduct.price)}
-                            onChange={(e) => handleUpdateShade(idx, 'price', e.target.value === '' ? undefined : parseFloat(e.target.value))}
-                            className="w-full px-2 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                            Compare-At (₹)
-                          </label>
-                          <input
-                            type="number"
-                            value={shade.compareAtPrice ?? ''}
-                            placeholder="Optional"
-                            onChange={(e) => handleUpdateShade(idx, 'compareAtPrice', e.target.value === '' ? undefined : parseFloat(e.target.value))}
-                            className="w-full px-2 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                            Stock <span className="normal-case text-[#6B6B6B]">override</span>
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            value={shade.stock ?? ''}
-                            placeholder={String(editingProduct.stock ?? 0)}
-                            onChange={(e) => handleUpdateShade(idx, 'stock', e.target.value === '' ? undefined : Math.max(0, parseInt(e.target.value, 10) || 0))}
-                            disabled={sqlInventoryMode}
-                            title={sqlInventoryMode ? 'SQL inventory owns this number — adjust it in the Inventory panel' : undefined}
-                            className={`w-full px-2 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6] ${sqlInventoryMode ? 'cursor-not-allowed opacity-50' : ''}`}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Descriptions */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div>
-                          <label className="block text-[10px] font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Short Description</label>
-                          <input
-                            type="text"
-                            value={shade.shortDescription || ''}
-                            placeholder="e.g. Classic warm red"
-                            onChange={(e) => handleUpdateShade(idx, 'shortDescription', e.target.value)}
-                            className="w-full px-2 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Description</label>
-                          <input
-                            type="text"
-                            value={shade.description}
-                            placeholder="Shown on the product page under the swatches"
-                            onChange={(e) => handleUpdateShade(idx, 'description', e.target.value)}
-                            className="w-full px-2 py-1.5 bg-[#171717] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Per-shade sizes — leave empty if this shade sells at
-                          a single price; add entries if it comes in more
-                          than one size/weight (each shade can differ). */}
-                      <div className="pt-1 border-t border-[#E8D5A8]/10">
-                        <div className="flex items-center justify-between pt-2 mb-2">
-                          <span className="text-[10px] font-semibold text-[#E8D5A8] uppercase tracking-wider">
-                            Sizes for this shade ({(shade.sizes || []).length})
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleAddShadeSize(idx)}
-                            className="flex items-center gap-1 text-[10.5px] text-[#C9972B] hover:text-[#E3B84B] font-semibold cursor-pointer"
-                          >
-                            <Plus className="w-3 h-3" />
-                            <span>Add Size</span>
-                          </button>
-                        </div>
-                        {(shade.sizes || []).length === 0 ? (
-                          <p className="text-[10.5px] text-[#6B6B6B] italic">
-                            No sizes — this shade sells at the single price above. Add sizes only if this shade comes in multiple weights/formats.
-                          </p>
-                        ) : (
-                          <div className="space-y-2">
-                            {(shade.sizes || []).map((sizeOpt) => (
-                              <div key={sizeOpt.id} className="p-2.5 rounded-lg bg-[#171717] border border-[#E8D5A8]/20 grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
-                                <div className="col-span-2 sm:col-span-1">
-                                  <label className="block text-[9.5px] font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Label</label>
-                                  <input
-                                    type="text"
-                                    defaultValue={sizeOpt.label}
-                                    onBlur={(e) => handleRenameShadeSize(idx, sizeOpt.id, e.target.value.trim() || sizeOpt.label)}
-                                    placeholder="e.g. 50g"
-                                    className="w-full px-2 py-1.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6] font-semibold"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-[9.5px] font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Price (₹)</label>
-                                  <input
-                                    type="number"
-                                    value={sizeOpt.price ?? ''}
-                                    onChange={(e) => handleUpdateShadeSizeField(idx, sizeOpt.id, 'price', parseFloat(e.target.value) || 0)}
-                                    className="w-full px-2 py-1.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-[9.5px] font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Compare-At (₹)</label>
-                                  <input
-                                    type="number"
-                                    value={sizeOpt.compareAtPrice ?? ''}
-                                    placeholder="Optional"
-                                    onChange={(e) => handleUpdateShadeSizeField(idx, sizeOpt.id, 'compareAtPrice', e.target.value === '' ? undefined : parseFloat(e.target.value))}
-                                    className="w-full px-2 py-1.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-[9.5px] font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">Stock</label>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={sizeOpt.stock ?? ''}
-                                    placeholder="Optional"
-                                    onChange={(e) => handleUpdateShadeSizeField(idx, sizeOpt.id, 'stock', e.target.value === '' ? undefined : Math.max(0, parseInt(e.target.value, 10) || 0))}
-                                    className="w-full px-2 py-1.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-xs text-[#FAF9F6]"
-                            disabled={sqlInventoryMode}
-                            title={sqlInventoryMode ? 'SQL inventory owns this number — adjust it in the Inventory panel' : undefined}
-                          />
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteShadeSize(idx, sizeOpt.id)}
-                                  className="p-1.5 text-[#F05A7E] hover:bg-[#F05A7E]/20 rounded cursor-pointer justify-self-end"
-                                  title="Delete size"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Variant image gallery */}
-                      <div className="pt-1 border-t border-[#E8D5A8]/10">
-                        <div className="flex items-center justify-between pt-2 mb-2 gap-2 flex-wrap">
-                          <span className="text-[10px] font-semibold text-[#E8D5A8] uppercase tracking-wider">
-                            Variant Images ({shadeImages.length})
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="text"
-                              value={variantImageUrlDraft[idx] || ''}
-                              onChange={(e) =>
-                                setVariantImageUrlDraft((prev) => ({ ...prev, [idx]: e.target.value }))
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleAddVariantImageUrl(idx, variantImageUrlDraft[idx] || '');
-                                }
-                              }}
-                              placeholder="https://... image URL"
-                              className="w-40 px-2 py-1.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-[10.5px] text-[#FAF9F6]"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleAddVariantImageUrl(idx, variantImageUrlDraft[idx] || '')}
-                              disabled={!(variantImageUrlDraft[idx] || '').trim()}
-                              className="px-2.5 py-1.5 bg-[#171717] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-[10.5px] font-semibold text-[#FAF9F6] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                              Add URL
-                            </button>
-                            <label className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#171717] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-[10.5px] font-semibold text-[#FAF9F6] transition-colors cursor-pointer">
-                              <Upload className="w-3 h-3" />
-                              <span>{uploadingShadeIndex === idx ? 'Uploading...' : 'Upload Images'}</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                className="hidden"
-                                disabled={uploadingShadeIndex === idx}
-                                onChange={(e) => {
-                                  handleAddVariantImages(idx, e.target.files);
-                                  e.target.value = '';
-                                }}
-                              />
-                            </label>
-                          </div>
-                        </div>
-
-                        {shadeImages.length === 0 ? (
-                          <p className="text-[10.5px] text-[#6B6B6B] italic">
-                            No variant images yet — the storefront will fall back to this product's default images for this shade.
-                          </p>
-                        ) : (
-                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                            {shadeImages.map((img, imgIdx) => (
-                              <div
-                                key={img.id}
-                                draggable
-                                onDragStart={() => setDragImage({ shadeIdx: idx, imgIdx })}
-                                onDragOver={(e) => e.preventDefault()}
-                                onDrop={() => handleVariantImageDrop(idx, imgIdx)}
-                                className={`relative aspect-square rounded-lg overflow-hidden border bg-[#0B0B0B] flex items-center justify-center group cursor-grab active:cursor-grabbing ${
-                                  img.isPrimary ? 'border-[#C9972B] ring-1 ring-[#C9972B]' : 'border-[#E8D5A8]/20'
-                                }`}
-                                title="Drag to reorder"
-                              >
-                                {editingUrlImageId === img.id ? (
-                                  <div
-                                    className="absolute inset-0 z-20 flex flex-col items-stretch justify-center gap-1.5 bg-[#0B0B0B]/95 p-2"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <input
-                                      autoFocus
-                                      type="text"
-                                      value={editingUrlDraft}
-                                      onChange={(e) => setEditingUrlDraft(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          e.preventDefault();
-                                          handleUpdateVariantImageUrl(idx, img.id, editingUrlDraft);
-                                        } else if (e.key === 'Escape') {
-                                          setEditingUrlImageId(null);
-                                        }
-                                      }}
-                                      placeholder="https://... image URL"
-                                      className="w-full px-1.5 py-1 bg-[#171717] border border-[#E8D5A8]/30 rounded text-[9.5px] text-[#FAF9F6]"
-                                    />
-                                    <div className="flex items-center justify-center gap-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleUpdateVariantImageUrl(idx, img.id, editingUrlDraft)}
-                                        disabled={!editingUrlDraft.trim()}
-                                        className="p-1 bg-[#171717] hover:bg-[#C9972B] hover:text-[#0B0B0B] text-[#E8D5A8] rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                                        title="Save URL"
-                                      >
-                                        <Check className="w-3 h-3" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditingUrlImageId(null)}
-                                        className="p-1 bg-[#171717] hover:bg-[#F05A7E] hover:text-white text-[#E8D5A8] rounded cursor-pointer"
-                                        title="Cancel"
-                                      >
-                                        <X className="w-3 h-3" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : replacingVariantImageId === img.id ? (
-                                  <div className="flex flex-col items-center gap-1 text-[#E8D5A8] px-1 text-center">
-                                    <RefreshCw className="w-4 h-4 animate-spin" />
-                                    <span className="text-[8.5px] leading-tight">Replacing...</span>
-                                  </div>
-                                ) : brokenVariantImageIds.has(img.id) ? (
-                                  <div
-                                    className="flex flex-col items-center gap-1 text-[#6B6B6B] px-1 text-center cursor-pointer"
-                                    onClick={() => {
-                                      setEditingUrlDraft(img.url);
-                                      setEditingUrlImageId(img.id);
-                                    }}
-                                  >
-                                    <ImageOff className="w-4 h-4" />
-                                    <span className="text-[8.5px] leading-tight">Failed to load — click to fix URL</span>
-                                  </div>
-                                ) : (
-                                  <img
-                                    src={cloudinaryImageUrl(img.url, 'thumb')}
-                                    alt={img.alt || shade.name}
-                                    className="w-full h-full object-contain cursor-pointer"
-                                    onClick={() => {
-                                      setEditingUrlDraft(img.url);
-                                      setEditingUrlImageId(img.id);
-                                    }}
-                                    onError={() =>
-                                      setBrokenVariantImageIds((prev) => new Set(prev).add(img.id))
-                                    }
-                                  />
-                                )}
-                                <div className="absolute top-1 left-1 p-0.5 bg-[#0B0B0B]/70 rounded text-[#E8D5A8]">
-                                  <GripVertical className="w-3 h-3" />
-                                </div>
-                                {img.isPrimary && (
-                                  <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-[#C9972B] text-[#0B0B0B] text-[8.5px] font-bold uppercase rounded">
-                                    Primary
-                                  </span>
-                                )}
-                                <div
-                                  className={`absolute top-1 right-1 flex items-center gap-1 transition-opacity ${
-                                    editingUrlImageId === img.id
-                                      ? 'hidden'
-                                      : brokenVariantImageIds.has(img.id)
-                                      ? 'opacity-100'
-                                      : 'opacity-0 group-hover:opacity-100'
-                                  }`}
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingUrlDraft(img.url);
-                                      setEditingUrlImageId(img.id);
-                                    }}
-                                    className="p-1 bg-[#0B0B0B]/80 hover:bg-[#C9972B] hover:text-[#0B0B0B] text-[#E8D5A8] rounded cursor-pointer"
-                                    title="Change image URL"
-                                  >
-                                    <Link className="w-3 h-3" />
-                                  </button>
-                                  <label
-                                    className="p-1 bg-[#0B0B0B]/80 hover:bg-[#C9972B] hover:text-[#0B0B0B] text-[#E8D5A8] rounded cursor-pointer"
-                                    title="Replace this image"
-                                  >
-                                    <RefreshCw className="w-3 h-3" />
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      className="hidden"
-                                      disabled={replacingVariantImageId === img.id}
-                                      onChange={(e) => {
-                                        handleReplaceVariantImage(idx, img.id, e.target.files?.[0]);
-                                        e.target.value = '';
-                                      }}
-                                    />
-                                  </label>
-                                  {!img.isPrimary && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSetPrimaryVariantImage(idx, img.id)}
-                                      className="p-1 bg-[#0B0B0B]/80 hover:bg-[#C9972B] hover:text-[#0B0B0B] text-[#E8D5A8] rounded cursor-pointer"
-                                      title="Set as primary image"
-                                    >
-                                      <Star className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteVariantImage(idx, img.id)}
-                                    className="p-1 bg-[#0B0B0B]/80 hover:bg-[#F05A7E] text-[#E8D5A8] hover:text-white rounded cursor-pointer"
-                                    title="Delete image"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                {uploadError && <p className="text-[11px] text-[#F05A7E]">{uploadError}</p>}
-              </div>
-            </div>
+            {/* Shades & Variants — each shade is a complete variant
+                (pricing, sizes, stock, SKUs, gallery). The editor owns no
+                data: it hands back the shade list and nothing persists
+                until this product is saved. */}
+            <ShadeEditor
+              product={editingProduct}
+              sqlInventoryMode={sqlInventoryMode}
+              onChange={(shades) => setEditingProduct({ ...editingProduct, shades })}
+            />
 
             {/* Sizes / Weight Options Builder */}
             <div className="p-6 rounded-xl bg-[#171717] border border-[#E8D5A8]/30 space-y-4">

@@ -21,6 +21,8 @@
     "test:mediaupload": "tsx src/test/mediaupload.e2e.ts",
     "test:mediauploadapi": "tsx src/test/mediauploadapi.e2e.ts",
     "test:shadematch": "tsx src/test/shadematch.e2e.ts",
+    "test:variants": "tsx src/test/variants.e2e.ts",
+    "test:variantflow": "tsx src/test/variantflow.e2e.ts",
     "test:homebanners": "tsx src/test/homebanners.e2e.ts",
     "inventory:verify": "tsx src/db/cli-inventory.ts verify",
     "inventory:health": "tsx src/db/cli-inventory.ts health",

@@ -89,7 +89,10 @@ export interface CMSContextType {
   fetchFullAdminState: () => Promise<any>;
   savePage: (page: Partial<CMSPage>) => Promise<boolean>;
   deletePage: (id: string) => Promise<boolean>;
-  saveProduct: (product: Partial<Product>) => Promise<boolean>;
+  /** Resolves to null on success, or the server's error message — the
+   * variant validator names the exact shade/size at fault, and that is
+   * worth showing the admin rather than collapsing to "save failed". */
+  saveProduct: (product: Partial<Product>) => Promise<string | null>;
   deleteProduct: (id: string) => Promise<boolean>;
   duplicateProduct: (id: string) => Promise<boolean>;
   saveCategory: (category: Partial<CMSCategory>) => Promise<boolean>;
@@ -425,15 +428,15 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
-  const saveProduct = async (product: Partial<Product>): Promise<boolean> => {
+  const saveProduct = async (product: Partial<Product>): Promise<string | null> => {
     const endpoint = product.id && products.some((p) => p.id === product.id) ? `/api/admin/products/${product.id}` : '/api/admin/products';
     const method = product.id && products.some((p) => p.id === product.id) ? 'PUT' : 'POST';
     const res = await apiFetch(endpoint, { method, body: JSON.stringify(product) });
     if (res.status < 400) {
       await loadPublicContent();
-      return true;
+      return null;
     }
-    return false;
+    return res.error || 'Save failed. Please try again.';
   };
 
   const deleteProduct = async (id: string): Promise<boolean> => {

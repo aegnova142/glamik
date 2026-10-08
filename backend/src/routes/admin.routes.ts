@@ -62,6 +62,7 @@ import {
   UploadedAsset,
 } from '../services/media.service';
 import { findBrokenShadeImageUrls } from '@glamirk/shared/utils/shadeMatch';
+import { validateProductVariants } from '@glamirk/shared/utils/productValidation';
 import { isHomeBannerLive, validateHomeBannerConfig } from '@glamirk/shared/utils/homeBanners';
 import { env } from '../config/env';
 import { requireAdmin, AuthenticatedRequest } from '../middleware/requireAdmin';
@@ -1077,47 +1078,12 @@ function validateProduct(product: Partial<Product>): string | null {
   if (product.stock !== undefined && (typeof product.stock !== 'number' || isNaN(product.stock) || product.stock < 0)) {
     return 'Product stock must be a non-negative number.';
   }
-  const shades = product.shades || [];
-  const skus: string[] = [];
-  for (const shade of shades) {
-    if (!shade.name || !shade.name.trim()) return 'Every variant needs a name.';
-    if (shade.price !== undefined && (typeof shade.price !== 'number' || isNaN(shade.price) || shade.price < 0)) {
-      return `Variant "${shade.name}" has an invalid price.`;
-    }
-    if (shade.stock !== undefined && (typeof shade.stock !== 'number' || isNaN(shade.stock) || shade.stock < 0)) {
-      return `Variant "${shade.name}" has an invalid stock quantity.`;
-    }
-    if (shade.sku && shade.sku.trim()) skus.push(shade.sku.trim());
-    if (shade.sizes && shade.sizes.length > 0) {
-      const sizeLabels: string[] = [];
-      for (const sz of shade.sizes) {
-        if (!sz.label || !sz.label.trim()) return `A size on variant "${shade.name}" needs a label.`;
-        if (typeof sz.price !== 'number' || isNaN(sz.price) || sz.price < 0) {
-          return `Size "${sz.label}" on variant "${shade.name}" has an invalid price.`;
-        }
-        if (sz.stock !== undefined && (typeof sz.stock !== 'number' || isNaN(sz.stock) || sz.stock < 0)) {
-          return `Size "${sz.label}" on variant "${shade.name}" has an invalid stock quantity.`;
-        }
-        sizeLabels.push(sz.label.trim());
-      }
-      if (new Set(sizeLabels).size !== sizeLabels.length) {
-        return `Variant "${shade.name}" has duplicate size labels.`;
-      }
-    }
-  }
-  if (new Set(skus).size !== skus.length) {
-    return 'Variant SKUs must be unique within a product.';
-  }
-  if (product.sizePricing) {
-    for (const [label, entry] of Object.entries(product.sizePricing)) {
-      if (typeof entry.price !== 'number' || isNaN(entry.price) || entry.price < 0) {
-        return `Size "${label}" has an invalid price.`;
-      }
-      if (entry.stock !== undefined && (typeof entry.stock !== 'number' || isNaN(entry.stock) || entry.stock < 0)) {
-        return `Size "${label}" has an invalid stock quantity.`;
-      }
-    }
-  }
+  // Shades, their sizes, SKUs, colours, compare-at prices and variant images
+  // are all checked by the rulebook the admin form validates against, so the
+  // two can never drift into disagreeing about what is saveable.
+  const variantError = validateProductVariants(product);
+  if (variantError) return variantError;
+
   if ((product.benefits || []).some((b) => !b || !b.trim())) {
     return 'Benefit text cannot be empty.';
   }
@@ -1240,6 +1206,123 @@ router.delete('/admin/products/:id', requireAdmin, async (req: AuthenticatedRequ
   broadcastEvent('CMS_UPDATE', 'products', { deletedId: prod.id });
 
   res.json({ success: true, id: req.params.id });
+});
+
+/**
+ * What is already pointing at each shade of this product.
+ *
+ * Read-only, and the admin's delete confirmation is built from it. A shade id
+ * is the variant identity on order lines, cart lines and inventory rows, and
+ * none of those are rewritten when the shade disappears from the product
+ * document: the order keeps its variant_id, and the shade it used to name is
+ * simply gone, so a six-month-old order silently loses the one detail that
+ * said WHICH lipstick was shipped.
+ *
+ * Deleting is therefore never blocked here — an admin clearing out a shade
+ * that never sold should not have to argue with the UI — but it is never
+ * silent either. The counts let the confirmation say what will be affected,
+ * and let it offer pausing instead, which keeps the shade resolvable for
+ * history while removing it from the storefront.
+ */
+router.get('/admin/products/:id/variant-usage', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const product = db.products.find((p) => p.id === req.params.id);
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found' });
+  }
+
+  const [orderRows, cartRows, inventoryRows, sizeOrderRows, sizeCartRows, sizeInventoryRows] = await Promise.all([
+    pool.query(
+      `SELECT oi.variant_id, COUNT(*)::int AS line_count, COUNT(DISTINCT oi.order_id)::int AS order_count
+         FROM order_items oi
+        WHERE oi.product_id = $1 AND oi.variant_id IS NOT NULL
+        GROUP BY oi.variant_id`,
+      [product.id]
+    ),
+    pool.query(
+      `SELECT variant_id, COUNT(*)::int AS line_count
+         FROM cart_items
+        WHERE product_id = $1 AND variant_id IS NOT NULL
+        GROUP BY variant_id`,
+      [product.id]
+    ),
+    // The inventory table may not exist on an installation that has not run
+    // migration 012 yet; an absent table means "no SQL inventory references",
+    // not a failed request.
+    pool
+      .query(
+        `SELECT variant_id, SUM(available_stock)::int AS available, SUM(reserved_stock)::int AS reserved, SUM(sold_stock)::int AS sold
+           FROM inventory
+          WHERE product_id = $1 AND variant_id IS NOT NULL
+          GROUP BY variant_id`,
+        [product.id]
+      )
+      .catch(() => ({ rows: [] as any[] })),
+    // The same three questions again, one level down: a size is deletable
+    // business data too, and `selected_size` is how an order line names which
+    // jar was shipped.
+    pool.query(
+      `SELECT oi.variant_id, oi.selected_size, COUNT(*)::int AS line_count, COUNT(DISTINCT oi.order_id)::int AS order_count
+         FROM order_items oi
+        WHERE oi.product_id = $1 AND oi.selected_size IS NOT NULL
+        GROUP BY oi.variant_id, oi.selected_size`,
+      [product.id]
+    ),
+    pool.query(
+      `SELECT variant_id, selected_size, COUNT(*)::int AS line_count
+         FROM cart_items
+        WHERE product_id = $1 AND selected_size IS NOT NULL
+        GROUP BY variant_id, selected_size`,
+      [product.id]
+    ),
+    pool
+      .query(
+        `SELECT variant_id, size_label, SUM(available_stock)::int AS available, SUM(reserved_stock)::int AS reserved, SUM(sold_stock)::int AS sold
+           FROM inventory
+          WHERE product_id = $1 AND size_label IS NOT NULL
+          GROUP BY variant_id, size_label`,
+        [product.id]
+      )
+      .catch(() => ({ rows: [] as any[] })),
+  ]);
+
+  const byVariant = (rows: any[], variantId: string) => rows.find((r) => r.variant_id === variantId);
+  const bySize = (rows: any[], variantId: string, label: string, column: string) =>
+    rows.find((r) => r.variant_id === variantId && r[column] === label);
+
+  res.json({
+    productId: product.id,
+    variants: (product.shades || []).map((shade) => {
+      const orders = byVariant(orderRows.rows, shade.id);
+      const carts = byVariant(cartRows.rows, shade.id);
+      const inv = byVariant(inventoryRows.rows, shade.id);
+      return {
+        variantId: shade.id,
+        name: shade.name,
+        orderCount: orders?.order_count ?? 0,
+        orderLineCount: orders?.line_count ?? 0,
+        cartLineCount: carts?.line_count ?? 0,
+        inventoryAvailable: inv?.available ?? 0,
+        inventoryReserved: inv?.reserved ?? 0,
+        inventorySold: inv?.sold ?? 0,
+        sizes: (shade.sizes || []).map((size) => {
+          const sizeOrders = bySize(sizeOrderRows.rows, shade.id, size.label, 'selected_size');
+          const sizeCarts = bySize(sizeCartRows.rows, shade.id, size.label, 'selected_size');
+          const sizeInv = bySize(sizeInventoryRows.rows, shade.id, size.label, 'size_label');
+          return {
+            sizeId: size.id,
+            label: size.label,
+            orderCount: sizeOrders?.order_count ?? 0,
+            orderLineCount: sizeOrders?.line_count ?? 0,
+            cartLineCount: sizeCarts?.line_count ?? 0,
+            inventoryAvailable: sizeInv?.available ?? 0,
+            inventoryReserved: sizeInv?.reserved ?? 0,
+            inventorySold: sizeInv?.sold ?? 0,
+          };
+        }),
+      };
+    }),
+  });
 });
 
 // --- Categories Management ---

@@ -9,12 +9,17 @@ import { rateLimit } from '../middleware/rateLimit';
 import { signCustomerToken, bumpTokenVersion } from '../auth/tokens';
 import { createSession, deleteSession, deleteAllSessions } from '../auth/sessions';
 import { clientIp } from '../utils/request';
-// Sellability is resolved by the shared helpers so the storefront, the admin
-// and this server all answer "can this be bought" identically. (The
-// price/stock resolvers further down this file are local duplicates that
-// predate the shared module; they are left alone here rather than
-// refactored as part of an inventory fix.)
-import { hasSellableStock, isProductSellable } from '@glamirk/shared/utils/productVariant';
+// Sellability, price and stock are all resolved by the shared helpers so the
+// storefront, the admin and this server answer "what does this cost, how many
+// are there, can it be bought" identically.
+import {
+  hasSellableStock,
+  isProductSellable,
+  isShadeSelectable,
+  getActiveSizeOptions,
+  getCurrentPrice as resolveCurrentPrice,
+  getCurrentStock as resolveCurrentStock,
+} from '@glamirk/shared/utils/productVariant';
 import {
   normalizePhone,
   maskPhone,
@@ -894,40 +899,13 @@ function requiresVariant(product: Product): boolean {
   return !!product.shades && product.shades.length > 0;
 }
 
-// A variant's own price/stock override the product-level value when set —
-// old products/variants without either field keep behaving exactly as before.
-function getVariantPrice(product: Product, shade: Shade | undefined): number {
-  return shade?.price ?? product.price;
-}
-
-function getVariantStock(product: Product, shade: Shade | undefined): number {
-  return shade?.stock ?? product.stock;
-}
-
-// A shade can carry its own size list (one shade only in 50g, another in
-// 30g and 50g); a shade-less product can carry its own product-level sizes
-// (the cleanser jars). Whichever applies to the current selection is the
-// "active" size list — mirrors src/utils/productVariant.ts on the frontend.
-interface SizeOptionLike { label: string; price: number; compareAtPrice?: number; stock?: number }
-
-function getActiveSizeOptions(product: Product, shade: Shade | undefined): SizeOptionLike[] {
-  if (shade) return shade.sizes || [];
-  if (product.sizes && product.sizes.length > 0) {
-    return product.sizes.map((label) => ({
-      label,
-      price: product.sizePricing?.[label]?.price ?? product.price,
-      compareAtPrice: product.sizePricing?.[label]?.compareAtPrice,
-      stock: product.sizePricing?.[label]?.stock,
-    }));
-  }
-  return [];
-}
-
-function findSizeOption(product: Product, shade: Shade | undefined, size: string | null): SizeOptionLike | undefined {
-  if (!size) return undefined;
-  return getActiveSizeOptions(product, shade).find((o) => o.label === size);
-}
-
+// Price and stock resolution is NOT re-implemented here. The size → shade →
+// product fallback chain used to exist twice, once in the shared module the
+// storefront and admin read from and once as a local copy in this file, and
+// two copies of a pricing rule is one rule away from a checkout that charges
+// something the product page never showed. These wrappers exist only to adapt
+// the types at the boundary: a SQL column reads back as null, the shared
+// signatures take undefined.
 function requiresSize(product: Product, shade: Shade | undefined): boolean {
   return getActiveSizeOptions(product, shade).length > 0;
 }
@@ -939,15 +917,11 @@ function isValidSize(product: Product, shade: Shade | undefined, size: string | 
 }
 
 function getCurrentPrice(product: Product, shade: Shade | undefined, size: string | null): number {
-  const option = findSizeOption(product, shade, size);
-  if (option) return option.price;
-  return getVariantPrice(product, shade);
+  return resolveCurrentPrice(product, shade, size ?? undefined);
 }
 
 function getCurrentStock(product: Product, shade: Shade | undefined, size: string | null): number {
-  const option = findSizeOption(product, shade, size);
-  if (option) return option.stock ?? getVariantStock(product, shade);
-  return getVariantStock(product, shade);
+  return resolveCurrentStock(product, shade, size ?? undefined);
 }
 
 // ==========================================
@@ -996,8 +970,12 @@ function mapCartRow(row: any, db: Awaited<ReturnType<typeof loadDatabase>>): Ser
   const product = findProduct(db.products, row.product_id);
   const shade = product ? findShade(product, row.variant_id) : undefined;
   // Sellability is a question about the units a customer can actually pick,
-  // not about the product-level pool.
-  const unavailable = !product || !isProductSellable(product);
+  // not about the product-level pool. A line whose shade has since been paused
+  // is in the same position as one whose product went out of stock: still in
+  // the bag, no longer buyable, and shown as such rather than silently priced
+  // into the subtotal.
+  const shadePaused = !!product && !!shade && !isShadeSelectable(product, shade.id);
+  const unavailable = !product || !isProductSellable(product) || shadePaused;
   const unitPrice = product ? getCurrentPrice(product, shade, row.selected_size) : 0;
   return {
     id: row.id,
@@ -1060,6 +1038,15 @@ router.post('/cart/items', requireCustomer, async (req: AuthenticatedCustomerReq
   const selectedShade = normalizedVariantId ? findShade(product, normalizedVariantId) : undefined;
   if (normalizedVariantId && !selectedShade) {
     return res.status(400).json({ error: 'Selected shade is not available for this product.' });
+  }
+  // A paused shade is not on the storefront and its stock is not counted as
+  // sellable, so it must not be addable either — otherwise a stale tab or a
+  // replayed request could buy a variant the admin has taken down. The rule
+  // is the shared one the swatch row renders from, including its fallback for
+  // a product with every shade paused, so a swatch that IS shown is always
+  // addable.
+  if (selectedShade && !isShadeSelectable(product, selectedShade.id)) {
+    return res.status(400).json({ error: `${selectedShade.name} is no longer available for ${product.name}.` });
   }
 
   const normalizedSize: string | null = size || null;
@@ -1520,6 +1507,12 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
           return { error: `${product?.name || 'An item'} in your bag is no longer available.`, status: 409 };
         }
         const shade = findShade(product, row.variant_id);
+        if (shade && !isShadeSelectable(product, shade.id)) {
+          return {
+            error: `${shade.name} (${product.name}) is no longer available. Please remove it from your bag to continue.`,
+            status: 409,
+          };
+        }
         // Reads from SQL inventory when it is authoritative, otherwise from
         // the JSONB document — same check either way, so the flag cannot make
         // checkout validate against one system while deducting from another.
@@ -2183,6 +2176,12 @@ router.post('/orders/:id/reorder', requireCustomer, async (req: AuthenticatedCus
     const shade = item.variant_id ? findShade(product, item.variant_id) : undefined;
     if (item.variant_id && !shade) {
       unavailable.push({ productName: name, reason: 'that shade is no longer sold' });
+      continue;
+    }
+    // Same for a shade that still exists but has been paused — reported as
+    // unavailable rather than quietly re-added and then refused at checkout.
+    if (shade && !isShadeSelectable(product, shade.id)) {
+      unavailable.push({ productName: name, reason: `${shade.name} is no longer sold` });
       continue;
     }
 

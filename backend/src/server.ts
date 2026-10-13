@@ -24,6 +24,10 @@ import {
   sqlInventoryEnabled,
   monitorInventoryConsistency,
 } from './services/inventory.service';
+import { processPendingNotifications } from './services/notificationEngine.service';
+// Side-effect import: installs the channel adapters and their retry block
+// probes. Without it the worker below would find no sender for any channel.
+import './services/notificationChannels.service';
 
 // Express 4 does not forward a rejected promise from an async route handler
 // to error middleware — left unhandled, Node's default since v15 is to kill
@@ -182,6 +186,30 @@ async function startServer() {
         .catch((err) => console.error('Reservation expiry sweep failed:', err));
     }
   }, 5 * 60 * 1000).unref?.();
+
+  // Notification outbox worker.
+  //
+  // enqueueNotification() only records that something happened; this is what
+  // actually delivers it. Without this loop the outbox fills and nothing ever
+  // leaves — an order would be placed, the event written, and the store never
+  // told.
+  //
+  // Every 60 seconds, bounded to 50 deliveries per pass. Faster than the
+  // reconciliation sweep because a customer waiting on a shipping email
+  // notices a five-minute delay, and the work is cheap: the due query is
+  // index-backed and usually returns nothing. The backoff schedule
+  // (~1m, 4m, 9m, 16m) is tuned for roughly this cadence — a slower loop
+  // would stretch every retry window with it.
+  //
+  // A claim-before-send conditional UPDATE inside the processor makes an
+  // overlapping pass harmless, so a slow provider cannot cause a double send.
+  setInterval(() => {
+    processPendingNotifications(50)
+      .then(({ sent, failed }) => {
+        if (sent > 0 || failed > 0) console.log(`[notifications] ${sent} sent, ${failed} failed`);
+      })
+      .catch((err) => console.error('Notification delivery sweep failed:', err));
+  }, 60 * 1000).unref?.();
 
   // Continuous inventory consistency monitoring.
   //

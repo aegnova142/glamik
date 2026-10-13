@@ -17,7 +17,7 @@ import {
   formatDateTime,
   formatMoney,
 } from '../AccountUI';
-import { buildProgressStages, canCancel, canReturn, orderStatusTone } from './orderStatus';
+import { buildProgressStages, canCancel, canReturn, orderStatusTone, ORDER_STATUS_LABEL } from './orderStatus';
 import { getPaymentMethodLabel, getPaymentStatusLabel } from '@glamirk/shared/utils/paymentDisplay';
 import { CancelOrderModal, ReturnRequestModal } from './OrderActionModals';
 
@@ -93,7 +93,7 @@ export const OrderDetailSection: React.FC<OrderDetailSectionProps> = ({
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="font-serif text-lg text-[#121212]">#{order.orderNumber}</span>
-              <StatusBadge status={order.status} tone={orderStatusTone(order.status)} />
+              <StatusBadge status={ORDER_STATUS_LABEL[order.status] || order.status} tone={orderStatusTone(order.status)} />
             </div>
             <p className="text-[11.5px] text-[#6B6B6B] mt-1">Placed {formatDateTime(order.createdAt)}</p>
           </div>

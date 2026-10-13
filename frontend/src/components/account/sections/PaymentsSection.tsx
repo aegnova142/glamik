@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { CreditCard, Receipt, RotateCcw, Wallet } from 'lucide-react';
-import { PaymentRecord, RefundRecord, ReturnStatus, RETURN_STATUSES } from '@glamirk/shared/types';
+import { PaymentRecord, PaymentStatus, RefundRecord, ReturnStatus, RETURN_STATUSES } from '@glamirk/shared/types';
 import { getPaymentMethodLabel, getPaymentStatusLabel } from '@glamirk/shared/utils/paymentDisplay';
 import { useAccount } from '../../../context/AccountContext';
 import { ProductImage } from '../../product/ProductImage';
@@ -31,6 +31,17 @@ type PaymentsTab = 'payments' | 'refunds';
 /** A refund's progress through the return pipeline, as a 0-1 fraction. Drawn
  * from RETURN_STATUSES so the bar can never disagree with the statuses the
  * server actually sets. */
+/**
+ * Badge colour for a payment status. Lives here rather than in shared/ because
+ * it maps onto this design system's four tones, which nothing else uses.
+ */
+function paymentTone(status: PaymentStatus): 'neutral' | 'positive' | 'negative' | 'progress' {
+  if (status === 'PAID') return 'positive';
+  if (status === 'FAILED' || status === 'CANCELLED' || status === 'EXPIRED') return 'negative';
+  if (status === 'REFUNDED' || status === 'PARTIALLY_REFUNDED') return 'progress';
+  return 'neutral';
+}
+
 function refundProgress(status: ReturnStatus): number {
   const index = RETURN_STATUSES.indexOf(status);
   if (index < 0) return 0;
@@ -174,10 +185,11 @@ export const PaymentsSection: React.FC<PaymentsSectionProps> = ({ onOpenOrder, o
                   </div>
                   <div className="text-right shrink-0 space-y-1.5">
                     <span className="font-serif text-lg text-[#121212] block">{formatMoney(p.amount)}</span>
-                    <StatusBadge
-                      status={getPaymentStatusLabel(p.status)}
-                      tone={p.status === 'PAID' ? 'positive' : 'neutral'}
-                    />
+                    {/* The server now sends the real payment status rather
+                        than collapsing everything non-PAID into COD_PENDING,
+                        so a decline can look like one instead of sharing a
+                        neutral badge with "Pay on Delivery". */}
+                    <StatusBadge status={getPaymentStatusLabel(p.status)} tone={paymentTone(p.status)} />
                   </div>
                 </div>
               </AccountCard>

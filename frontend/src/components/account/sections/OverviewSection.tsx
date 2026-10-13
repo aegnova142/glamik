@@ -26,7 +26,7 @@ import {
 import { AccountSection, Order } from '@glamirk/shared/types';
 import { useAccount } from '../../../context/AccountContext';
 import { AccountCard, AccountError, AccountSectionHeader, formatDate, formatMoney, StatusBadge } from '../AccountUI';
-import { orderStatusTone } from './orderStatus';
+import { orderStatusTone, ORDER_STATUS_LABEL } from './orderStatus';
 import { ProductImage } from '../../product/ProductImage';
 
 interface OverviewSectionProps {
@@ -192,7 +192,7 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <span className="font-serif text-sm text-[#121212]">#{order.orderNumber}</span>
-                      <StatusBadge status={order.status} tone={orderStatusTone(order.status)} />
+                      <StatusBadge status={ORDER_STATUS_LABEL[order.status] || order.status} tone={orderStatusTone(order.status)} />
                     </div>
                     <p className="text-[11.5px] text-[#6B6B6B] mt-1 truncate">
                       {order.items[0]?.productName}

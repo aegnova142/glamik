@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, ShoppingBag, Plus, Minus, Trash2, ArrowRight, Sparkles, ShieldCheck } from 'lucide-react';
 import { CartItem } from '@glamirk/shared/types';
-import { getCurrentPrice } from '@glamirk/shared/utils/productVariant';
+import { getCurrentPrice, resolveVariantThumbnail } from '@glamirk/shared/utils/productVariant';
 import { ProductImage } from '../product/ProductImage';
 
 interface CartDrawerProps {
@@ -144,7 +144,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     {/* Item Thumbnail */}
                     <div className="w-20 h-24 bg-white rounded-xl overflow-hidden flex-shrink-0 border border-[#E8D5A8]">
                       <ProductImage preset="thumb"
-                        src={item.product.images.primary}
+                        src={resolveVariantThumbnail(item.product, item.selectedShade)}
                         alt={item.product.name}
                         className="w-full h-full object-cover"
                       />

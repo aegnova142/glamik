@@ -23,13 +23,10 @@ import {
   restockOrderItems,
 } from '../services/orders.service';
 import { mapReviewRow } from '../services/reviews.service';
-import {
-  notifyOrderStatusChange,
-  notifyReturnStatusChange,
-  notifyAdminOrderDelivered,
-  mapNotificationRow,
-} from '../services/notifications.service';
-import { sendOrderStatusEmail } from '../services/email.service';
+// mapNotificationRow stays: the admin notification LIST endpoints read rows
+// the engine writes, and the mapper is shared by both notification tables.
+import { mapNotificationRow } from '../services/notifications.service';
+import { notifyOrderStatus, notifyAdminDelivered, notifyReturnStatus } from '../services/orderNotifications.service';
 import { grantOrderPoints } from '../services/rewards.service';
 import {
   createShipmentForOrder,
@@ -38,11 +35,26 @@ import {
   ensureShipmentLabel,
   recordTrackingEvents,
   refundOrderPayment,
+  listOrderRefunds,
+  reconcileRefund,
+  listUnresolvedRefunds,
   restoreOrderStock,
   applyShippingStatus,
   shipmentsEnabled,
 } from '../services/fulfillment.service';
 import { getShipmentProvider } from '../services/couriers/delhivery.service';
+import {
+  listNotificationDeliveries,
+  getNotificationDelivery,
+  retryNotification,
+  processPendingNotifications,
+  DELIVERY_STATUSES,
+  NOTIFICATION_CHANNELS,
+  MAX_ATTEMPTS,
+} from '../services/notificationEngine.service';
+// Imported for its side effect: registering the channel adapters and their
+// retry block probes, so the admin panel can report why a channel is stuck.
+import '../services/notificationChannels.service';
 import {
   getProductInventory,
   getInventoryTransactions,
@@ -596,21 +608,15 @@ router.put('/admin/orders/:id/status', requireAdmin, async (req: AuthenticatedRe
   // concurrently instead of serializing behind an SMTP round-trip.
   await Promise.all([
     insertOrderStatusHistory(row.id, status, note),
-    notifyOrderStatusChange(row.user_id, row.id, row.order_number, status),
-    sendOrderStatusEmail({
-      toEmail: row.customer_email,
-      customerName: row.customer_name,
-      orderId: row.id,
-      orderNumber: row.order_number,
-      status,
-      total: Number(row.total),
-    }),
+    // `row` is the pre-UPDATE snapshot, so the new status is passed
+    // explicitly rather than read back off it.
+    notifyOrderStatus(row, status),
     // Glam Rewards points are credited on delivery, not on placement, so they
     // can't be farmed by placing and cancelling orders. The ledger's unique
     // (user, type, reference) constraint makes this safe to re-run.
     ...(status === 'DELIVERED'
       ? [
-          notifyAdminOrderDelivered(row.id, row.order_number),
+          notifyAdminDelivered(row),
           grantOrderPoints(row.user_id, row.id, row.order_number, Number(row.total)),
         ]
       : []),
@@ -759,51 +765,159 @@ router.post('/admin/orders/:id/shipment/cancel', requireAdmin, async (req: Authe
   res.json({ order: await buildOrderFromRow(updated.rows[0], db) });
 });
 
-/** Pulls the latest courier scan on demand, rather than waiting for a webhook. */
-router.get('/admin/orders/:id/shipment/track', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+/**
+ * Resolves the waybill for an order, or the HTTP answer for why there isn't one.
+ * Shared by the read-only GET and the reconciling POST so the two can never
+ * disagree about which parcel they are talking about.
+ */
+interface TrackableShipment {
+  ok: boolean;
+  waybill?: string;
+  shipmentRowId?: string;
+  providerOrderId?: string;
+  /** HTTP status + message to return when ok is false. */
+  status?: number;
+  error?: string;
+}
+
+// Open result shape rather than a discriminated union on `ok` — this project
+// compiles without `strict`, where narrowing on a literal-boolean discriminant
+// is unreliable. Same reasoning as GatewayResult in payment.service.ts.
+async function loadTrackableShipment(orderId: string): Promise<TrackableShipment> {
   const shipmentRes = await pool.query(
     'SELECT id, awb_code, waybill, provider_order_id FROM shipments WHERE order_id = $1',
-    [req.params.id]
+    [orderId]
   );
   // `waybill` is Delhivery's; `awb_code` still carries it too, and carries
   // the retired provider's on historical rows. Reading both keeps an old shipment
   // trackable through whichever provider is registered for its courier.
   const waybill = shipmentRes.rows[0]?.waybill || shipmentRes.rows[0]?.awb_code;
-  if (!waybill) return res.status(404).json({ error: 'This order has no tracking number yet.' });
+  if (!waybill) return { ok: false, status: 404, error: 'This order has no tracking number yet.' };
+  return {
+    ok: true,
+    waybill,
+    shipmentRowId: shipmentRes.rows[0].id,
+    providerOrderId: shipmentRes.rows[0]?.provider_order_id || undefined,
+  };
+}
+
+/**
+ * Reads the courier's current view of a parcel. STRICTLY READ-ONLY.
+ *
+ * This used to reconcile as a side effect — one GET could write seven tables,
+ * email the customer, grant loyalty points and flip a COD order to PAID. A GET
+ * is assumed safe by everything that touches it: browser prefetch, link
+ * preview, a proxy retrying a timeout, a crawler with an admin session. Any of
+ * those could collect cash on paper that nobody collected in person.
+ *
+ * Reconciliation now lives behind POST on the same path, where it is a
+ * deliberate act with an audit trail. Nothing here writes, and nothing here
+ * notifies.
+ */
+router.get('/admin/orders/:id/shipment/track', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const shipment = await loadTrackableShipment(req.params.id);
+  if (!shipment.ok) return res.status(shipment.status!).json({ error: shipment.error });
 
   const provider = getShipmentProvider();
-  const tracking = await provider.track(waybill, shipmentRes.rows[0]?.provider_order_id || undefined);
+  const tracking = await provider.track(shipment.waybill!, shipment.providerOrderId);
+  if (!tracking.ok || !tracking.value) {
+    return res.status(502).json({ error: tracking.error || 'Could not reach the courier.' });
+  }
+
+  res.json({
+    awb: shipment.waybill,
+    waybill: shipment.waybill,
+    providerStatus: tracking.value.providerStatus,
+    status: tracking.value.status,
+    events: tracking.value.events,
+    courierName: tracking.value.courierName,
+    // Says plainly that nothing was written, so a caller comparing this against
+    // the stored order does not mistake a stale record for a failed sync.
+    applied: false,
+  });
+});
+
+/**
+ * Reconciles an order against the courier's current view — the deliberate
+ * counterpart to the GET above.
+ *
+ * This is the "a webhook went missing" button. It is the same work the Delhivery
+ * Scan Push performs, so it reuses the same two functions and inherits their
+ * idempotency: scans dedupe on `dedupe_key`, and applyShippingStatus refuses to
+ * drag a terminal order backwards. Pressing it twice changes nothing the second
+ * time.
+ *
+ * Unlike the old GET, it records an audit entry — a state change made by a
+ * person should be attributable to that person.
+ *
+ * Note on COD: applyShippingStatus marks a delivered COD order PAID. That rule
+ * is unchanged here deliberately. It is reachable from exactly two places now —
+ * the signature-verified courier webhook, and this authenticated, audited
+ * admin action — rather than from any stray GET. Whether "delivered implies
+ * cash collected" is sound at all is a separate business question: the courier
+ * sends no collection field (TrackingScan carries date/activity/location only),
+ * so there is currently nothing better to key it on.
+ */
+router.post('/admin/orders/:id/shipment/track', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const orderRes = await pool.query('SELECT id, order_number FROM orders WHERE id = $1', [req.params.id]);
+  const order = orderRes.rows[0];
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+  const shipment = await loadTrackableShipment(order.id);
+  if (!shipment.ok) return res.status(shipment.status!).json({ error: shipment.error });
+
+  const provider = getShipmentProvider();
+  const tracking = await provider.track(shipment.waybill!, shipment.providerOrderId);
   if (!tracking.ok || !tracking.value) {
     return res.status(502).json({ error: tracking.error || 'Could not reach the courier.' });
   }
 
   // Polled scans go through the same idempotent writer as webhook scans and
-  // under the same dedupe key, so pressing "track" on a parcel whose webhooks
-  // already arrived adds nothing rather than duplicating its whole history.
-  await recordTrackingEvents({
-    orderId: req.params.id,
-    shipmentRowId: shipmentRes.rows[0].id,
-    awb: waybill,
+  // under the same dedupe key, so syncing a parcel whose webhooks already
+  // arrived adds nothing rather than duplicating its whole history.
+  const newScans = await recordTrackingEvents({
+    orderId: order.id,
+    shipmentRowId: shipment.shipmentRowId,
+    awb: shipment.waybill,
     scans: tracking.value.scans || [],
     source: 'tracking_api',
     providerStatus: tracking.value.providerStatus,
     mappedStatus: tracking.value.status,
   });
 
-  // A manual check also reconciles, so pressing "track" fixes an order whose
-  // webhook was missed. An unrecognised provider status maps to null, and that
-  // must not move the order — it is recorded above and nothing more.
+  // An unrecognised provider status maps to null, and that must not move the
+  // order — it is recorded above and nothing more.
+  let changed = false;
   if (tracking.value.status) {
-    await applyShippingStatus({
-      orderId: req.params.id,
+    changed = await applyShippingStatus({
+      orderId: order.id,
       status: tracking.value.status,
-      awbCode: waybill,
+      awbCode: shipment.waybill,
       courierName: tracking.value.courierName,
       deliveredAt: tracking.value.deliveredAt,
     });
   }
 
-  res.json({ awb: waybill, waybill, providerStatus: tracking.value.providerStatus, status: tracking.value.status, events: tracking.value.events, courierName: tracking.value.courierName });
+  await logAudit(
+    req,
+    'SYNC_TRACKING',
+    'ORDER',
+    order.id,
+    order.order_number,
+    `courier sync: ${tracking.value.providerStatus || 'unknown'}${changed ? ' (order status changed)' : ''}, ${newScans} new scan(s)`
+  );
+
+  res.json({
+    awb: shipment.waybill,
+    waybill: shipment.waybill,
+    providerStatus: tracking.value.providerStatus,
+    status: tracking.value.status,
+    events: tracking.value.events,
+    courierName: tracking.value.courierName,
+    applied: true,
+    newScans,
+    orderStatusChanged: changed,
+  });
 });
 
 // --- Refunds ---
@@ -828,22 +942,171 @@ router.post('/admin/orders/:id/refund', requireAdmin, async (req: AuthenticatedR
   const requested = Number(amount) > 0 ? Number(amount) : refundable;
   if (requested <= 0) return res.status(400).json({ error: 'There is nothing left to refund on this order.' });
 
-  const result = await refundOrderPayment(row.id, requested, String(reason || 'Refunded by store'));
+  const result = await refundOrderPayment(row.id, requested, String(reason || 'Refunded by store'), {
+    // Lets a retried HTTP request map onto the original refund instead of
+    // issuing a second one. Optional — the per-order lock already stops
+    // concurrent duplicates; this covers a sequential retry after a lost
+    // response.
+    idempotencyKey: typeof req.body?.idempotencyKey === 'string' ? req.body.idempotencyKey : undefined,
+    createdBy: req.user?.id || 'admin',
+  });
+
+  // 409, not 400: another refund for this order is mid-flight, so the right
+  // answer is "wait and look again", not "your request was malformed". A
+  // client that retries a 400 could end up double-refunding; a 409 says don't.
+  if (result.busy) return res.status(409).json({ error: result.error || 'A refund for this order is already in progress.' });
   if (!result.ok) return res.status(400).json({ error: result.error || 'Refund failed.' });
 
-  await logAudit(req, 'REFUND_ORDER', 'ORDER', row.id, row.order_number, `₹${Math.min(requested, refundable)}`);
+  // A replay is not a new business event, so it is not audited again.
+  if (!result.replayed) {
+    await logAudit(
+      req,
+      'REFUND_ORDER',
+      'ORDER',
+      row.id,
+      row.order_number,
+      `₹${result.amount ?? Math.min(requested, refundable)}${result.providerRefundId ? ` (${result.providerRefundId})` : ''}`
+    );
+  }
 
   const db = await loadDatabase();
   const updated = await pool.query('SELECT * FROM orders WHERE id = $1', [row.id]);
   res.json({ order: await buildOrderFromRow(updated.rows[0], db) });
 });
 
+/**
+ * Resolves a refund whose outcome is unknown, by asking the provider.
+ *
+ * Deliberately NOT a retry button. A refund that timed out may already have
+ * been accepted, so re-sending it could pay the customer twice. This asks
+ * Razorpay what it actually holds and records that — which either confirms the
+ * refund, leaves it settling, or establishes that it never landed and is safe
+ * to attempt again.
+ */
+router.post('/admin/refunds/:refundId/reconcile', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const result = await reconcileRefund(req.params.refundId);
+  if (!result.ok) return res.status(502).json({ error: result.error || 'Could not reconcile this refund.' });
+
+  if (result.changed) {
+    await logAudit(req, 'RECONCILE_REFUND', 'REFUND', req.params.refundId, req.params.refundId, `-> ${result.status}`);
+  }
+  res.json({ status: result.status, changed: result.changed });
+});
+
+/** Refunds awaiting settlement or with an unknown outcome. */
+router.get('/admin/refunds/unresolved', requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+  res.json({ refunds: await listUnresolvedRefunds() });
+});
+
+// ==========================================
+// NOTIFICATION DELIVERIES
+//
+// The outbox, made visible. Until this existed, a notification that failed
+// left a console line on a server nobody reads, so "the customer says they
+// never got the shipping email" had no answer. These two routes are the whole
+// surface: look, and ask the worker to try again. There is deliberately no
+// route that marks a delivery SENT — only a provider accepting the message
+// may do that, and an admin overriding it would turn the one honest record of
+// what actually reached a customer into a wish.
+// ==========================================
+
+/** Paginated outbox view: PENDING and FAILED side by side, plus SENT/SKIPPED. */
+router.get('/admin/notifications/deliveries', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const statusParam = String(req.query.status || 'ALL');
+  const channelParam = String(req.query.channel || 'ALL');
+
+  // Reject unknown filter values rather than letting them match nothing — an
+  // empty table because of a typo looks identical to an empty table because
+  // nothing failed, and the difference matters here.
+  if (statusParam !== 'ALL' && !DELIVERY_STATUSES.includes(statusParam as any)) {
+    return res.status(400).json({ error: `Unknown status filter '${statusParam}'.` });
+  }
+  if (channelParam !== 'ALL' && !NOTIFICATION_CHANNELS.includes(channelParam as any)) {
+    return res.status(400).json({ error: `Unknown channel filter '${channelParam}'.` });
+  }
+
+  const result = await listNotificationDeliveries({
+    status: statusParam as any,
+    channel: channelParam as any,
+    search: String(req.query.search || '').slice(0, 100),
+    page: parseInt(String(req.query.page || '1'), 10) || 1,
+    pageSize: parseInt(String(req.query.pageSize || '20'), 10) || 20,
+  });
+
+  res.json({ ...result, maxAttempts: MAX_ATTEMPTS });
+});
+
+/**
+ * Re-queues one terminal delivery. Queues only — the outcome arrives when the
+ * worker runs, and the row reports it then.
+ */
+router.post(
+  '/admin/notifications/deliveries/:id/retry',
+  requireAdmin,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const result = await retryNotification(req.params.id, req.user?.email || null);
+
+    if (!result.ok) {
+      // A configuration block is the operator's to fix, not a server fault;
+      // 409 so the UI can show the reason without styling it as an error.
+      const status = result.blocked ? 409 : result.error?.startsWith('No notification') ? 404 : 409;
+      return res.status(status).json({ error: result.error, blocked: !!result.blocked, status: result.status });
+    }
+
+    await logAudit(
+      req,
+      'RETRY_NOTIFICATION',
+      'NOTIFICATION',
+      req.params.id,
+      req.params.id,
+      'delivery re-queued for another attempt'
+    );
+
+    // Attempt it immediately so the admin sees a real outcome rather than
+    // waiting on the sweep. Failures here are already recorded on the row.
+    try {
+      await processPendingNotifications(5);
+    } catch (err) {
+      console.error('[admin] immediate notification pass failed:', err);
+    }
+
+    const row = await getNotificationDelivery(req.params.id);
+    res.json({ ok: true, delivery: row, status: row?.status || 'PENDING' });
+  }
+);
+
 /** Full payment history for one order, for support to answer "was I charged?" */
 router.get('/admin/orders/:id/payments', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
-  const result = await pool.query('SELECT * FROM payments WHERE order_id = $1 ORDER BY created_at DESC', [
-    req.params.id,
+  const [result, refunds, orderRes] = await Promise.all([
+    pool.query('SELECT * FROM payments WHERE order_id = $1 ORDER BY created_at DESC', [req.params.id]),
+    // Per-refund history (migration 017). Previously the panel could only show
+    // a running total, so "we refunded ₹500" had no when, why, who, or
+    // matching Razorpay reference.
+    listOrderRefunds(req.params.id),
+    pool.query('SELECT payment_method, amount_paid, amount_refunded FROM orders WHERE id = $1', [req.params.id]),
   ]);
+
+  const order = orderRes.rows[0];
+  const paid = Number(order?.amount_paid) || 0;
+  const refunded = Number(order?.amount_refunded) || 0;
+  // Computed server-side so the button and the service agree on what is
+  // refundable. The UI must never derive this itself — refundOrderPayment
+  // re-checks it under the lock anyway, and two formulas would eventually
+  // disagree.
+  const refundable = Math.max(0, paid - refunded);
+
   res.json({
+    refunds,
+    refundSummary: {
+      amountPaid: paid,
+      amountRefunded: refunded,
+      refundable,
+      // A refund button must be hidden, not merely disabled-on-click, when the
+      // action can never succeed. These are the same two refusals
+      // refundOrderPayment enforces.
+      isCod: order?.payment_method === 'cod',
+      canRefund: order?.payment_method !== 'cod' && refundable > 0,
+    },
     payments: result.rows.map((row) => ({
       id: row.id,
       orderId: row.order_id,
@@ -990,7 +1253,12 @@ router.put('/admin/returns/:id/status', requireAdmin, async (req: AuthenticatedR
     [req.params.id]
   );
   const updatedRow = updated.rows[0];
-  await notifyReturnStatusChange(updatedRow.customer_id, updatedRow.order_id, updatedRow.order_number, status);
+  await notifyReturnStatus({
+    returnId: updatedRow.id,
+    orderId: updatedRow.order_id,
+    userId: updatedRow.customer_id,
+    status,
+  });
   res.json({ return: mapReturnRequestRow(updatedRow) });
 });
 

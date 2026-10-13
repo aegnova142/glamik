@@ -4,10 +4,11 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { Package, Truck, RotateCcw, FileDown, Headphones, Star, XCircle, Eye, RefreshCw } from 'lucide-react';
+import { Package, Truck, RotateCcw, FileDown, Headphones, Star, XCircle, Eye, RefreshCw, CreditCard } from 'lucide-react';
 import { Order, OrderItem, Product, ReviewMedia, Shade } from '@glamirk/shared/types';
 import { useAccount } from '../../../context/AccountContext';
 import { useCommerce } from '../../../context/CommerceContext';
+import { openRazorpayCheckout } from '../../../utils/razorpayCheckout';
 import {
   AccountButton,
   AccountEmpty,
@@ -17,7 +18,7 @@ import {
   formatDate,
   formatMoney,
 } from '../AccountUI';
-import { ORDER_FILTERS, OrderFilterId, canCancel, canReturn, canReview, matchesOrderFilter, orderStatusTone } from './orderStatus';
+import { ORDER_FILTERS, OrderFilterId, canCancel, canReturn, canReview, matchesOrderFilter, orderStatusTone, ORDER_STATUS_LABEL } from './orderStatus';
 import { getPaymentMethodLabel, getPaymentStatusLabel } from '@glamirk/shared/utils/paymentDisplay';
 import { CancelOrderModal, ReturnRequestModal, WriteReviewModal } from './OrderActionModals';
 import { ProductImage } from '../../product/ProductImage';
@@ -58,7 +59,48 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
   showToast,
 }) => {
   const { openInvoice } = useAccount();
-  const { reorder } = useCommerce();
+  const { reorder, retryPayment, verifyPayment } = useCommerce();
+
+  // Retry payment. Opens the SAME Razorpay sheet checkout uses — the opener
+  // lives in utils/razorpayCheckout so there is one implementation, not two
+  // that drift.
+  const [retryingOrderId, setRetryingOrderId] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  const handleRetryPayment = async (order: Order) => {
+    setRetryingOrderId(order.id);
+    setRetryError(null);
+
+    const reopened = await retryPayment(order.id);
+    if (!reopened.success || !reopened.payment) {
+      // Shown verbatim: the server's refusals are specific and actionable
+      // ("the items are no longer held for you"), and flattening them into a
+      // generic failure would hide why.
+      setRetryError(reopened.error || 'We could not reopen this payment.');
+      setRetryingOrderId(null);
+      return;
+    }
+
+    const outcome = await openRazorpayCheckout<Order>({
+      handoff: reopened.payment,
+      description: `Order ${order.orderNumber}`,
+      onVerify: (response) =>
+        verifyPayment({
+          orderId: order.id,
+          razorpayOrderId: response.razorpay_order_id,
+          razorpayPaymentId: response.razorpay_payment_id,
+          razorpaySignature: response.razorpay_signature,
+        }),
+      // Deliberately no onDismiss release. At checkout, dismissing abandons a
+      // brand-new order. Here the order already exists and the customer may
+      // just be deferring — releasing their reservation on a closed sheet
+      // would take the items away mid-decision. The 30-minute expiry sweep
+      // still reclaims it if they never come back.
+    });
+
+    if (!outcome.success) setRetryError(outcome.error || 'Your payment was not completed.');
+    setRetryingOrderId(null);
+  };
   const [filter, setFilter] = useState<OrderFilterId>('ALL');
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
   const [returnTarget, setReturnTarget] = useState<Order | null>(null);
@@ -182,11 +224,17 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <span className="font-serif text-base text-[#121212]">#{order.orderNumber}</span>
-                    <StatusBadge status={order.status} tone={orderStatusTone(order.status)} />
+                    <StatusBadge status={ORDER_STATUS_LABEL[order.status] || order.status} tone={orderStatusTone(order.status)} />
                   </div>
                   <p className="text-[11.5px] text-[#6B6B6B] mt-1">
                     Placed {formatDate(order.createdAt)} · {getPaymentMethodLabel(order.payment.method)} ·{' '}
                     {getPaymentStatusLabel(order.payment.status)}
+                    {/* amountRefunded has always been sent and never shown.
+                        A cancelled-and-refunded prepaid order creates no
+                        return_request, so it was invisible everywhere. */}
+                    {order.amountRefunded > 0 && (
+                      <span className="text-[#2E7D32]"> · {formatMoney(order.amountRefunded)} refunded</span>
+                    )}
                   </p>
                 </div>
                 <span className="font-serif text-base text-[#121212] shrink-0">{formatMoney(order.total)}</span>
@@ -263,6 +311,20 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                     Return / Replace
                   </AccountButton>
                 )}
+                {/* A customer whose payment failed previously had only one
+                    action here: Cancel. The server decides eligibility — it
+                    refuses a paid order, a COD order, or one whose stock
+                    reservation has already been released. */}
+                {order.status === 'PENDING_PAYMENT' && order.payment.status !== 'PAID' && (
+                  <AccountButton
+                    variant="primary"
+                    disabled={retryingOrderId === order.id}
+                    onClick={() => handleRetryPayment(order)}
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    {retryingOrderId === order.id ? 'Opening…' : 'Complete Payment'}
+                  </AccountButton>
+                )}
                 {canCancel(order) && (
                   <AccountButton variant="danger" onClick={() => setCancelTarget(order)}>
                     <XCircle className="w-3.5 h-3.5" />
@@ -270,7 +332,10 @@ export const OrdersSection: React.FC<OrdersSectionProps> = ({
                   </AccountButton>
                 )}
               </div>
-            </article>
+            {retryError && retryingOrderId === null && (
+                  <p className="mt-2 text-[11.5px] text-[#C0392B]">{retryError}</p>
+                )}
+              </article>
           ))}
         </div>
       )}

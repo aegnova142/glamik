@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, Rea
 import { customerApiFetch, getCustomerToken } from '@glamirk/shared/utils/cmsClient';
 import { CartItem, Product, Shade, ServerCartItem, Order, Address, Review, ReviewMedia, ReturnRequest, Coupon, PaymentMethodType, AppNotification } from '@glamirk/shared/types';
 import { useCustomerAuth } from './CustomerAuthContext';
+import type { GatewayHandoff } from '../utils/razorpayCheckout';
 import { getSocket } from '@glamirk/shared/utils/socket';
 import { getCurrentPrice } from '@glamirk/shared/utils/productVariant';
 
@@ -82,6 +83,8 @@ interface CommerceContextType {
   savedItems: CartItem[];
   wishlist: string[];
   notifications: AppNotification[];
+  /** Bumped when a realtime notification implies an order changed. */
+  ordersStale: number;
   unreadNotificationCount: number;
   markNotificationRead: (id: string) => Promise<void>;
   markAllNotificationsRead: () => Promise<void>;
@@ -103,6 +106,8 @@ interface CommerceContextType {
     razorpayPaymentId: string;
     razorpaySignature: string;
   }) => Promise<VerifyPaymentResult>;
+  /** Re-opens payment on an unpaid order. Returns a fresh gateway handoff. */
+  retryPayment: (orderId: string) => Promise<{ success: boolean; payment?: GatewayHandoff; error?: string }>;
   cancelPayment: (orderId: string) => Promise<void>;
   cancelOrder: (orderId: string, reason?: string) => Promise<CancelOrderResult>;
   submitReview: (
@@ -176,6 +181,9 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [savedServerItems, setSavedServerItems] = useState<ServerCartItem[]>([]);
   const [wishlist, setWishlist] = useState<string[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  /** Bumped whenever a realtime notification implies an order changed.
+   * Consumers re-fetch on change; the number itself carries no meaning. */
+  const [ordersStale, setOrdersStale] = useState(0);
   const [isCommerceLoading, setIsCommerceLoading] = useState(false);
 
   // Guest (logged-out) cart — lives entirely in localStorage until the visitor signs in.
@@ -271,6 +279,14 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (event?.type === 'NEW_NOTIFICATION' && event.data?.userId === customerUser.id) {
         const incoming = event.data.notification as AppNotification;
         setNotifications((prev) => (prev.some((n) => n.id === incoming.id) ? prev : [incoming, ...prev]));
+        // The bell used to light up while My Orders kept showing the old
+        // status: the order list is fetched once at login and nothing ever
+        // invalidated it. Any notification carrying an orderId means that
+        // order moved, so bump a counter the order owner can watch.
+        // A counter rather than a callback — the orders live in App state,
+        // and passing a setter down into this provider would couple the two
+        // in the wrong direction.
+        if (incoming.orderId) setOrdersStale((n) => n + 1);
       }
     };
     socket.on('event', handleEvent);
@@ -519,6 +535,24 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
     };
   };
 
+  /**
+   * Re-opens payment on an order the customer never completed.
+   *
+   * The server mints a FRESH gateway order and a new ledger row — it cannot
+   * ask Razorpay whether the old handle is still payable, so it does not try.
+   * Stock is not re-reserved; the server refuses the retry outright if the
+   * original reservation has already been released.
+   */
+  const retryPayment = async (
+    orderId: string
+  ): Promise<{ success: boolean; payment?: GatewayHandoff; error?: string }> => {
+    const res = await customerApiFetch<{ payment: GatewayHandoff }>(`/api/customer/payments/${orderId}/retry`, {
+      method: 'POST',
+    });
+    if (res.data?.payment) return { success: true, payment: res.data.payment };
+    return { success: false, error: res.error || 'We could not reopen this payment. Please try again.' };
+  };
+
   /** Best-effort: tells the server the customer closed the payment window. */
   const cancelPayment = async (orderId: string): Promise<void> => {
     await customerApiFetch(`/api/customer/payments/${orderId}/cancel`, { method: 'POST' }).catch(() => undefined);
@@ -601,6 +635,7 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
     savedItems: savedServerItems.map(mapServerItem),
     wishlist,
     notifications,
+    ordersStale,
     unreadNotificationCount: notifications.filter((n) => !n.isRead).length,
     markNotificationRead,
     markAllNotificationsRead,
@@ -617,6 +652,7 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
     refreshCommerce,
     checkout,
     verifyPayment,
+    retryPayment,
     cancelPayment,
     cancelOrder,
     submitReview,

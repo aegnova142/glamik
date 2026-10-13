@@ -25,6 +25,7 @@ import {
   Truck,
   Camera,
   Bell,
+  MailWarning,
 } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminHero } from './AdminHero';
@@ -40,6 +41,7 @@ import { AdminProducts } from './AdminProducts';
 import { AdminOrders } from './AdminOrders';
 import { AdminNotificationBell } from './AdminNotificationBell';
 import { AdminNotifications } from './AdminNotifications';
+import { AdminNotificationDeliveries } from './AdminNotificationDeliveries';
 import { AdminCategories } from './AdminCategories';
 import { AdminOffers } from './AdminOffers';
 import { AdminPromoBanners } from './AdminPromoBanners';
@@ -60,6 +62,7 @@ interface AdminLayoutProps {
 type AdminTab =
   | 'dashboard'
   | 'notifications'
+  | 'deliveryFailures'
   | 'hero'
   | 'about'
   | 'benefits'
@@ -97,6 +100,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
       items: [
         { id: 'dashboard', label: 'Overview Dashboard', icon: LayoutDashboard },
         { id: 'notifications', label: 'Store Notifications', icon: Bell },
+        { id: 'deliveryFailures', label: 'Delivery Failures', icon: MailWarning },
       ],
     },
     {
@@ -333,6 +337,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#0B0B0B]">
           <div className="max-w-6xl mx-auto">
             {activeTab === 'dashboard' && <AdminDashboard onNavigateTab={(t) => setActiveTab(t as AdminTab)} />}
+            {activeTab === 'deliveryFailures' && <AdminNotificationDeliveries />}
+
             {activeTab === 'notifications' && (
               <AdminNotifications onNavigateTab={(t) => setActiveTab(t as AdminTab)} />
             )}

@@ -319,7 +319,9 @@ export const ShopPage: React.FC<ShopPageProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* Mobile filter trigger — supplements the sticky bottom bar for quick access from the top */}
+            {/* Mobile filter trigger. Was a supplement to the sticky bottom
+                bar; now that the bar is gone it is the only filter entry
+                point below lg. */}
             <button
               onClick={() => setIsMobileFilterOpen(true)}
               className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8D5A8] bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[#121212] lg:hidden"
@@ -331,6 +333,20 @@ export const ShopPage: React.FC<ShopPageProps> = ({
                   {activeChips.length}
                 </span>
               )}
+            </button>
+
+            {/* Sort, below sm only. The removed bottom bar held the one and
+                only trigger for the mobile sort sheet, and SortSelector
+                beside it starts at sm — so without this, sorting became
+                unreachable on a phone. The sheet itself is untouched; this
+                just opens it from the toolbar instead. */}
+            <button
+              onClick={() => setIsMobileSortOpen(true)}
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#E8D5A8] bg-white px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[#121212] sm:hidden"
+              aria-label="Sort products"
+            >
+              <ArrowUpDown className="h-3.5 w-3.5 text-[#C9972B]" />
+              <span>Sort</span>
             </button>
 
             {/* Grid / List view toggle */}
@@ -396,7 +412,11 @@ export const ShopPage: React.FC<ShopPageProps> = ({
             products={allProducts}
           />
 
-          <div className="w-full flex-1 pb-36 md:pb-24 lg:pb-0">
+          {/* Clearance for the app's MobileBottomNav (h-16, md:hidden) and
+              nothing else. It used to be pb-36/md:pb-24 because the sticky
+              filter bar sat on top of that nav; with the bar gone those extra
+              ~80px were dead space under the last row of products. */}
+          <div className="w-full flex-1 pb-20 md:pb-0">
             <ProductGrid
               products={sortedProducts}
               wishlist={wishlist}
@@ -420,31 +440,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({
         onSelectProduct={onSelectProduct}
       />
 
-      {/* Mobile Sticky Bottom Bar — Filter + Sort, always reachable while browsing.
-          Sits above the app's own MobileBottomNav (h-16, "md:hidden") below the
-          md breakpoint so the two don't stack on top of each other; from md up
-          to lg that nav hides itself, so this bar can sit flush at the bottom. */}
-      <div className="fixed inset-x-0 bottom-16 z-40 grid grid-cols-2 gap-2 border-t border-[#E8D5A8] bg-white p-3 shadow-[0_-4px_16px_rgba(11,11,11,0.06)] md:bottom-0 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] lg:hidden">
-        <button
-          onClick={() => setIsMobileFilterOpen(true)}
-          className="flex cursor-pointer items-center justify-center gap-2 rounded-full bg-[#0B0B0B] py-2.5 text-xs font-semibold uppercase tracking-wider text-white"
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          <span>Filter</span>
-          {activeChips.length > 0 && (
-            <span className="rounded-full bg-[#F05A7E] px-1.5 py-0.5 text-[9.5px] font-bold">{activeChips.length}</span>
-          )}
-        </button>
-        <button
-          onClick={() => setIsMobileSortOpen(true)}
-          className="flex cursor-pointer items-center justify-center gap-2 rounded-full border border-[#E8D5A8] bg-white py-2.5 text-xs font-semibold uppercase tracking-wider text-[#121212]"
-        >
-          <ArrowUpDown className="h-3.5 w-3.5 text-[#C9972B]" />
-          <span>Sort</span>
-        </button>
-      </div>
-
-      {/* Mobile Sort Sheet */}
+      {/* Mobile Sort Sheet — opened from the toolbar Sort button above. */}
       <AnimatePresence>
         {isMobileSortOpen && (
           <>

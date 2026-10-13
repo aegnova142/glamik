@@ -316,7 +316,7 @@ function AppContent() {
       if (returnsRes.data) setReturnRequests(returnsRes.data.returns || []);
       setIsOrdersLoading(false);
     })();
-  }, [isCustomerLoggedIn]);
+  }, [isCustomerLoggedIn, commerce.ordersStale]);
 
   // Phase 3 Stored Beauty Profile State
   const [beautyProfile, setBeautyProfile] = useState<BeautyProfile | null>(() => {

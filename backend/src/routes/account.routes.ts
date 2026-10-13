@@ -32,6 +32,7 @@ import {
   OrderStatus,
   PaymentMethodType,
   PaymentRecord,
+  PaymentStatus,
   PaymentsSummary,
   Product,
   RefundRecord,
@@ -1241,8 +1242,17 @@ router.get('/account/payments', requireCustomer, async (req: AuthenticatedCustom
 
   const [ordersRes, refundsRes] = await Promise.all([
     pool.query(
-      `SELECT id, order_number, created_at, total, payment_method, payment_status, payment_details, status
-       FROM orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`,
+      // amount_refunded so the COD total can net off money already returned.
+      // The payments ledger's updated_at is the only genuinely persisted
+      // "when was this paid" timestamp we hold — payment_details.paidAt is
+      // never written by anything, so reading it always yielded undefined.
+      `SELECT o.id, o.order_number, o.created_at, o.total, o.amount_refunded,
+              o.payment_method, o.payment_status, o.payment_details, o.status,
+              p.updated_at AS paid_at
+       FROM orders o
+       LEFT JOIN payments p ON p.order_id = o.id AND p.status = 'PAID'
+       WHERE o.user_id = $1
+       ORDER BY o.created_at DESC LIMIT 100`,
       [userId]
     ),
     // The refund amount is the actual line total from the original order, not
@@ -1272,9 +1282,16 @@ router.get('/account/payments', requireCustomer, async (req: AuthenticatedCustom
       placedAt: new Date(row.created_at).toISOString(),
       amount: Number(row.total) || 0,
       method,
-      status: row.payment_status === 'PAID' ? 'PAID' : 'COD_PENDING',
+      // The real status, not a two-way collapse. This used to be
+      // `payment_status === 'PAID' ? 'PAID' : 'COD_PENDING'`, which reported a
+      // FAILED, CANCELLED, EXPIRED, REFUNDED, PARTIALLY_REFUNDED or merely
+      // PENDING payment to the customer as "Pay on Delivery" — telling someone
+      // whose card was declined that they owe the courier cash.
+      status: (row.payment_status || 'COD_PENDING') as PaymentStatus,
       instrumentLabel: instrumentLabel(method, details),
-      paidAt: details.paidAt ? new Date(details.paidAt).toISOString() : undefined,
+      // Only from the ledger, where it is actually persisted. Omitted rather
+      // than invented for COD, which has no gateway payment row.
+      paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : undefined,
       orderStatus: row.status as OrderStatus,
     };
   });
@@ -1297,9 +1314,33 @@ router.get('/account/payments', requireCustomer, async (req: AuthenticatedCustom
   // instead of being folded into a total that would overstate what the
   // customer has spent.
   const totalPaid = payments.filter((p) => p.status === 'PAID').reduce((sum, p) => sum + p.amount, 0);
+
+  // "Due on Delivery" means exactly that: a Cash-on-Delivery order the courier
+  // has not yet collected for. Three conditions, each doing real work:
+  //
+  //   method === 'cod'          an online order is never cash owed to a courier,
+  //                             whatever state its payment is in.
+  //   status === 'COD_PENDING'  explicit, not "anything that isn't PAID". The
+  //                             old test was the latter, so while a prepaid
+  //                             order sat in PENDING_PAYMENT — and permanently
+  //                             for a REFUNDED order still in a non-terminal
+  //                             order status — its total was billed to the
+  //                             customer as cash due.
+  //   order not CANCELLED/DELIVERED   unchanged: nothing is owed on an order
+  //                             that is dead, or already collected on.
+  //
+  // Refunds are netted off rather than ignored: money already returned is not
+  // still owed. Clamped at zero so an over-refund cannot produce a negative.
+  const refundedByOrder = new Map(ordersRes.rows.map((r) => [r.id, Number(r.amount_refunded) || 0]));
   const pendingCod = payments
-    .filter((p) => p.status === 'COD_PENDING' && p.orderStatus !== 'CANCELLED' && p.orderStatus !== 'DELIVERED')
-    .reduce((sum, p) => sum + p.amount, 0);
+    .filter(
+      (p) =>
+        p.method === 'cod' &&
+        p.status === 'COD_PENDING' &&
+        p.orderStatus !== 'CANCELLED' &&
+        p.orderStatus !== 'DELIVERED'
+    )
+    .reduce((sum, p) => sum + Math.max(0, p.amount - (refundedByOrder.get(p.orderId) || 0)), 0);
   const totalRefunded = refunds.filter((r) => r.status === 'REFUNDED').reduce((sum, r) => sum + r.amount, 0);
 
   const summary: PaymentsSummary = { payments, refunds, totalPaid, totalRefunded, pendingCod };

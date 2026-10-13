@@ -17,6 +17,10 @@ import {
 
 export const ORDER_FILTERS = [
   { id: 'ALL', label: 'All' },
+  // An unpaid online order was reachable only under "All" — the PROCESSING
+  // case below deliberately excludes PENDING_PAYMENT, so an order waiting on
+  // a payment had no tab of its own and looked lost.
+  { id: 'PENDING_PAYMENT', label: 'Awaiting Payment' },
   { id: 'PROCESSING', label: 'Processing' },
   { id: 'SHIPPED', label: 'Shipped' },
   { id: 'OUT_FOR_DELIVERY', label: 'Out for Delivery' },
@@ -32,6 +36,8 @@ export function matchesOrderFilter(order: Order, filter: OrderFilterId): boolean
   switch (filter) {
     case 'ALL':
       return true;
+    case 'PENDING_PAYMENT':
+      return order.status === 'PENDING_PAYMENT';
     case 'PROCESSING':
       // Covers both spellings of the pre-dispatch stages, so an order placed
       // before the lifecycle split still appears under the same tab.

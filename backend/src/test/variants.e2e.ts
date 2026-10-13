@@ -26,6 +26,7 @@ process.env.NODE_ENV = 'test';
 import {
   resolveVariantGallery,
   variantGalleryResetKey,
+  resolveVariantThumbnail,
   getVariantPrice,
   getVariantStock,
   getActiveSizeOptions,
@@ -373,6 +374,41 @@ section('IMAGES — a shade never shows another shade\'s gallery');
     'and is stable for the same shade',
     variantGalleryResetKey(product, heritage) === variantGalleryResetKey(product, heritage)
   );
+
+  // The one image that represents a chosen variant in the bag, the checkout
+  // summary and the order. Every one of those surfaces used to render
+  // product.images.primary, so a basket of three shades showed the same
+  // photograph three times.
+  check('shade A thumbnail is its own primary image', resolveVariantThumbnail(product, heritage).includes('heritage-primary'));
+  check('shade B thumbnail is a different image', resolveVariantThumbnail(product, ceremonial).includes('ceremonial'));
+  check(
+    'two shades never resolve to the same thumbnail',
+    resolveVariantThumbnail(product, heritage) !== resolveVariantThumbnail(product, ceremonial)
+  );
+  check(
+    'a shade with no images falls back to the product image',
+    resolveVariantThumbnail(product, rose).includes('product-primary')
+  );
+  check(
+    'the fallback is never another shade\'s photograph',
+    !resolveVariantThumbnail(product, rose).includes('heritage') &&
+      !resolveVariantThumbnail(product, rose).includes('ceremonial')
+  );
+  check('no shade selected falls back to the product image', resolveVariantThumbnail(product, undefined).includes('product-primary'));
+  check(
+    'an image row with no URL is skipped rather than returned empty',
+    resolveVariantThumbnail(blank, blank.shades![0]).includes('product-primary')
+  );
+  check(
+    'the thumbnail is exactly the gallery head — one rule, not two',
+    resolveVariantThumbnail(product, heritage) === resolveVariantGallery(product, heritage)[0].url
+  );
+  // A product with neither variant nor product images must yield '' rather
+  // than undefined: it goes straight into ProductImage's src, which renders a
+  // placeholder for an empty string but would warn on undefined.
+  const imageless = baseProduct({ images: {} as any, shades: [shade('y', 'Y')] });
+  check('a product with no images at all yields an empty string', resolveVariantThumbnail(imageless, imageless.shades![0]) === '');
+  check('and never undefined', typeof resolveVariantThumbnail(imageless, imageless.shades![0]) === 'string');
 }
 
 // ==========================================

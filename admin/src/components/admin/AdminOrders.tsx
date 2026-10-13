@@ -15,6 +15,10 @@ import {
   CANCELLABLE_ORDER_STATUSES,
   canonicalOrderStatus,
   RETURN_STATUSES,
+  PaymentRecordDetail,
+  RefundRecordDetail,
+  RefundSummary,
+  OrderTimelineEvent,
 } from '@glamirk/shared/types';
 import {
   Package,
@@ -57,6 +61,24 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+interface PaymentDetailResponse {
+  payments: PaymentRecordDetail[];
+  refunds: RefundRecordDetail[];
+  refundSummary: RefundSummary;
+}
+
+interface TrackingSyncResponse {
+  awb: string;
+  waybill: string;
+  providerStatus?: string | null;
+  status?: string | null;
+  events?: OrderTimelineEvent[];
+  courierName?: string;
+  applied: boolean;
+  newScans: number;
+  orderStatusChanged: boolean;
+}
+
 const PAGE_SIZE = 20;
 
 export const AdminOrders: React.FC = () => {
@@ -74,6 +96,23 @@ export const AdminOrders: React.FC = () => {
   const [statusNote, setStatusNote] = useState('');
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+
+  // Payments & refunds panel. Server state only — a refund is never drawn
+  // optimistically, because "refunded" has to mean the provider and the
+  // database both confirmed it.
+  const [paymentDetail, setPaymentDetail] = useState<PaymentDetailResponse | null>(null);
+  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundReason, setRefundReason] = useState('');
+  const [refundConfirm, setRefundConfirm] = useState(false);
+  const [isRefunding, setIsRefunding] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
+
+  // Courier sync. Deliberate POST only — the GET on the same path is
+  // read-only and never applies anything.
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<TrackingSyncResponse | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   // Returns state
   const [returns, setReturns] = useState<ReturnRequest[]>([]);
@@ -96,6 +135,84 @@ export const AdminOrders: React.FC = () => {
     fetchOrders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, statusFilter]);
+
+  const fetchPaymentDetail = async (orderId: string) => {
+    setIsLoadingPayments(true);
+    const res = await apiFetch<PaymentDetailResponse>(`/api/admin/orders/${orderId}/payments`);
+    if (res.data) setPaymentDetail(res.data);
+    setIsLoadingPayments(false);
+  };
+
+  // Loaded when an order is opened, and cleared when it closes so the next
+  // order never briefly shows the previous one's refunds.
+  useEffect(() => {
+    setPaymentDetail(null);
+    setRefundAmount('');
+    setRefundReason('');
+    setRefundConfirm(false);
+    setRefundError(null);
+    setSyncResult(null);
+    setSyncError(null);
+    if (selectedOrder) fetchPaymentDetail(selectedOrder.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOrder?.id]);
+
+  const handleRefund = async () => {
+    if (!selectedOrder || !paymentDetail) return;
+    setIsRefunding(true);
+    setRefundError(null);
+
+    // One key per confirmed attempt. If the response is lost and the admin
+    // clicks again, the server replays the original refund instead of issuing
+    // a second one.
+    const idempotencyKey = `admin-${selectedOrder.id}-${Date.now()}`;
+    const amount = Number(refundAmount) > 0 ? Number(refundAmount) : paymentDetail.refundSummary.refundable;
+
+    const res = await apiFetch<{ order: Order }>(`/api/admin/orders/${selectedOrder.id}/refund`, {
+      method: 'POST',
+      body: JSON.stringify({ amount, reason: refundReason || 'Refunded by store', idempotencyKey }),
+    });
+
+    if (res.error) {
+      setRefundError(res.error);
+    } else {
+      setRefundConfirm(false);
+      setRefundAmount('');
+      setRefundReason('');
+      if (res.data?.order) setSelectedOrder(res.data.order);
+      // Refetched rather than patched locally: the panel shows what the
+      // database holds, including the provider refund id we only learn here.
+      await fetchPaymentDetail(selectedOrder.id);
+      await fetchOrders();
+    }
+    setIsRefunding(false);
+  };
+
+  const handleSyncTracking = async () => {
+    if (!selectedOrder) return;
+    setIsSyncing(true);
+    setSyncError(null);
+    setSyncResult(null);
+
+    // POST, not GET. The GET on this path returns the same courier payload but
+    // writes nothing; reconciling is an explicit action with an audit entry.
+    const res = await apiFetch<TrackingSyncResponse>(`/api/admin/orders/${selectedOrder.id}/shipment/track`, {
+      method: 'POST',
+    });
+
+    if (res.error) {
+      // Shown verbatim: a 502 here means the courier was unreachable, and
+      // "could not reach the courier" is the honest thing to tell an operator
+      // rather than a generic failure.
+      setSyncError(res.error);
+    } else if (res.data) {
+      setSyncResult(res.data);
+      // The order may have moved, so refresh from the server rather than
+      // guessing locally what the sync did.
+      if (res.data.orderStatusChanged) await fetchOrders();
+    }
+    setIsSyncing(false);
+  };
 
   const fetchReturns = async () => {
     setIsLoadingReturns(true);
@@ -253,11 +370,292 @@ export const AdminOrders: React.FC = () => {
               <p className="text-[#6B6B6B] font-mono">{selectedOrder.deliveryAddress?.phone}</p>
             </div>
 
-            <div className="p-5 rounded-xl bg-[#171717] border border-[#E8D5A8]/20 space-y-1.5 text-xs">
-              <h3 className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] mb-1">Payment</h3>
-              <p className="text-[#FAF9F6] font-medium uppercase">{selectedOrder.payment.method}</p>
-              <p className="text-[#6B6B6B]">Status: {selectedOrder.payment.status}</p>
+            {/* Payments & Refunds.
+                Replaces a two-line static block that showed only
+                order.payment.method and .status. Everything here is server
+                state: the panel refetches after a refund rather than
+                optimistically drawing one, because "refunded" must mean the
+                provider and the database both said so. */}
+            <div className="p-5 rounded-xl bg-[#171717] border border-[#E8D5A8]/20 space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Payments & Refunds</h3>
+                <button
+                  onClick={() => fetchPaymentDetail(selectedOrder.id)}
+                  disabled={isLoadingPayments}
+                  className="text-[10px] text-[#6B6B6B] hover:text-[#C9972B] disabled:opacity-50 cursor-pointer flex items-center gap-1"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isLoadingPayments ? 'animate-spin' : ''}`} />
+                  <span>Refresh</span>
+                </button>
+              </div>
+
+              <div>
+                <p className="text-[#FAF9F6] font-medium uppercase">{selectedOrder.payment.method}</p>
+                <p className="text-[#6B6B6B]">Status: {selectedOrder.payment.status}</p>
+              </div>
+
+              {isLoadingPayments && !paymentDetail && <p className="text-[#6B6B6B]">Loading…</p>}
+
+              {paymentDetail && (
+                <>
+                  <div className="pt-2 border-t border-[#E8D5A8]/10 space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-[#6B6B6B]">Collected</span>
+                      <span className="text-[#FAF9F6]">₹{paymentDetail.refundSummary.amountPaid}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#6B6B6B]">Refunded</span>
+                      <span className="text-[#FAF9F6]">₹{paymentDetail.refundSummary.amountRefunded}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold">
+                      <span className="text-[#6B6B6B]">Refundable</span>
+                      <span className="text-[#C9972B]">₹{paymentDetail.refundSummary.refundable}</span>
+                    </div>
+                  </div>
+
+                  {/* Gateway attempts */}
+                  {paymentDetail.payments.length > 0 && (
+                    <div className="pt-2 border-t border-[#E8D5A8]/10 space-y-1.5">
+                      <p className="text-[10px] uppercase tracking-wider text-[#6B6B6B]">Gateway Attempts</p>
+                      {paymentDetail.payments.map((p) => (
+                        <div key={p.id} className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[#FAF9F6] font-mono text-[10.5px] truncate">
+                              {p.providerPaymentId || p.providerOrderId || p.id}
+                            </p>
+                            <p className="text-[#6B6B6B] text-[10px]">
+                              {p.method || '—'} · {formatDateTime(p.createdAt)}
+                            </p>
+                            {p.errorDescription && (
+                              <p className="text-[#F05A7E] text-[10px]">{p.errorDescription}</p>
+                            )}
+                          </div>
+                          <span className="text-[#FAF9F6] text-[10.5px] shrink-0">
+                            ₹{p.amount} · {p.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Refund history — persisted rows only */}
+                  <div className="pt-2 border-t border-[#E8D5A8]/10 space-y-1.5">
+                    <p className="text-[10px] uppercase tracking-wider text-[#6B6B6B]">Refund History</p>
+                    {paymentDetail.refunds.length === 0 ? (
+                      <p className="text-[#6B6B6B] text-[10.5px]">No refunds recorded.</p>
+                    ) : (
+                      paymentDetail.refunds.map((r) => (
+                        <div key={r.id} className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[#FAF9F6] text-[10.5px]">
+                              ₹{r.amount}
+                              <span
+                                className={
+                                  r.status === 'PROCESSED'
+                                    ? ' text-[#4ADE80]'
+                                    : r.status === 'FAILED'
+                                      ? ' text-[#F05A7E]'
+                                      : ' text-[#C9972B]'
+                                }
+                              >
+                                {' '}
+                                · {r.status}
+                              </span>
+                            </p>
+                            <p className="text-[#6B6B6B] text-[10px]">
+                              {formatDateTime(r.createdAt)}
+                              {r.createdBy ? ` · ${r.createdBy}` : ''}
+                            </p>
+                            {r.reason && <p className="text-[#6B6B6B] text-[10px] italic">{r.reason}</p>}
+                            {r.providerRefundId && (
+                              <p className="text-[#6B6B6B] text-[10px] font-mono">{r.providerRefundId}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Refund action. Hidden outright — not merely disabled —
+                      when it could never succeed, which is exactly the two
+                      refusals refundOrderPayment enforces. */}
+                  {paymentDetail.refundSummary.isCod ? (
+                    <p className="pt-2 border-t border-[#E8D5A8]/10 text-[10.5px] text-[#6B6B6B]">
+                      Cash on Delivery — there is no captured payment to reverse. Refund this outside the gateway.
+                    </p>
+                  ) : !paymentDetail.refundSummary.canRefund ? (
+                    <p className="pt-2 border-t border-[#E8D5A8]/10 text-[10.5px] text-[#6B6B6B]">
+                      Nothing left to refund on this order.
+                    </p>
+                  ) : (
+                    <div className="pt-2 border-t border-[#E8D5A8]/10 space-y-2">
+                      <p className="text-[10px] uppercase tracking-wider text-[#6B6B6B]">Issue Refund</p>
+                      <input
+                        type="number"
+                        min={1}
+                        max={paymentDetail.refundSummary.refundable}
+                        value={refundAmount}
+                        onChange={(e) => setRefundAmount(e.target.value)}
+                        placeholder={`Up to ₹${paymentDetail.refundSummary.refundable}`}
+                        className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                      />
+                      <input
+                        type="text"
+                        value={refundReason}
+                        onChange={(e) => setRefundReason(e.target.value)}
+                        placeholder="Reason (recorded against the refund)"
+                        className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
+                      />
+                      {refundError && (
+                        <div className="flex items-start gap-1.5 text-[#F05A7E] text-[11px]">
+                          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                          <span>{refundError}</span>
+                        </div>
+                      )}
+                      {refundConfirm ? (
+                        <div className="space-y-2">
+                          <p className="text-[10.5px] text-[#F05A7E]">
+                            Refund ₹{refundAmount || paymentDetail.refundSummary.refundable} to the customer? This
+                            moves real money and cannot be undone here.
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleRefund}
+                              disabled={isRefunding}
+                              className="flex-1 px-3 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wider bg-[#F05A7E] text-white hover:bg-[#D94A6C] disabled:opacity-50 cursor-pointer"
+                            >
+                              {isRefunding ? 'Refunding…' : 'Confirm Refund'}
+                            </button>
+                            <button
+                              onClick={() => setRefundConfirm(false)}
+                              disabled={isRefunding}
+                              className="px-3 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wider border border-[#E8D5A8]/30 text-[#6B6B6B] hover:text-[#FAF9F6] disabled:opacity-50 cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setRefundError(null);
+                            setRefundConfirm(true);
+                          }}
+                          className="w-full px-3 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wider bg-[#F05A7E]/10 text-[#F05A7E] border border-[#F05A7E]/30 hover:bg-[#F05A7E]/20 cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Issue Refund</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
+
+            {/* Shipment & courier tracking.
+                The sync button is a POST. GET on the same path is strictly
+                read-only — it used to reconcile as a side effect, so a browser
+                prefetch or a retried timeout could advance an order and mark a
+                COD order PAID. Reconciling is a deliberate act now, and an
+                audited one. */}
+            {selectedOrder.shipment || selectedOrder.trackingNumber ? (
+              <div className="p-5 rounded-xl bg-[#171717] border border-[#E8D5A8]/20 space-y-3 text-xs">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]">Shipment</h3>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-[#6B6B6B]">Courier</span>
+                    <span className="text-[#FAF9F6]">
+                      {selectedOrder.shipment?.courierName || selectedOrder.courierPartner || '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-[#6B6B6B]">AWB</span>
+                    <span className="text-[#FAF9F6] font-mono text-[10.5px] truncate">
+                      {selectedOrder.shipment?.awbCode || selectedOrder.trackingNumber || '—'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-[#6B6B6B]">Shipping status</span>
+                    <span className="text-[#FAF9F6]">{selectedOrder.shipment?.status || selectedOrder.shippingStatus || '—'}</span>
+                  </div>
+                  {selectedOrder.shipment?.isCod && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-[#6B6B6B]">COD</span>
+                      <span className="text-[#C9972B]">Collect on delivery</span>
+                    </div>
+                  )}
+                  {/* The courier's own failure, surfaced rather than swallowed —
+                      a booking that half-succeeded says so here. */}
+                  {selectedOrder.shipment?.lastError && (
+                    <p className="text-[#F05A7E] text-[10.5px] pt-1">{selectedOrder.shipment.lastError}</p>
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-[#E8D5A8]/10 space-y-2">
+                  <button
+                    onClick={handleSyncTracking}
+                    disabled={isSyncing}
+                    className="w-full px-3 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wider bg-[#C9972B] text-[#0B0B0B] hover:bg-[#E3B84B] disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                    <span>{isSyncing ? 'Syncing…' : 'Sync with courier'}</span>
+                  </button>
+                  <p className="text-[10px] text-[#6B6B6B]">
+                    Fetches the courier's latest scans and applies them to this order.
+                  </p>
+
+                  {syncError && (
+                    <div className="flex items-start gap-1.5 text-[#F05A7E] text-[11px]">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                      <span>{syncError}</span>
+                    </div>
+                  )}
+
+                  {/* Only ever what the courier actually returned. */}
+                  {syncResult && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex justify-between gap-2">
+                        <span className="text-[#6B6B6B]">Courier reports</span>
+                        <span className="text-[#FAF9F6]">{syncResult.providerStatus || 'no status'}</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-[#6B6B6B]">Mapped to</span>
+                        <span className="text-[#FAF9F6]">
+                          {/* null means the provider sent a pair this build does
+                              not recognise. Recorded, never guessed at. */}
+                          {syncResult.status || 'unrecognised — recorded only'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-[#6B6B6B]">New scans</span>
+                        <span className="text-[#FAF9F6]">{syncResult.newScans}</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-[#6B6B6B]">Order moved</span>
+                        <span className={syncResult.orderStatusChanged ? 'text-[#4ADE80]' : 'text-[#6B6B6B]'}>
+                          {syncResult.orderStatusChanged ? 'yes' : 'no change'}
+                        </span>
+                      </div>
+
+                      {syncResult.events && syncResult.events.length > 0 && (
+                        <div className="pt-1.5 space-y-1">
+                          <p className="text-[10px] uppercase tracking-wider text-[#6B6B6B]">Courier Scans</p>
+                          {syncResult.events.slice(0, 8).map((ev, idx) => (
+                            <div key={idx} className="text-[10.5px]">
+                              <span className="text-[#FAF9F6]">{ev.status}</span>
+                              {ev.note && <span className="text-[#6B6B6B]"> — {ev.note}</span>}
+                              <span className="text-[#6B6B6B]"> · {formatDateTime(ev.timestamp)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
 
             {/* Status Update */}
             <div className="p-5 rounded-xl bg-[#171717] border border-[#E8D5A8]/20 space-y-3">

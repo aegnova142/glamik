@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CartItem, Address, Order, Coupon, PaymentMethodType } from '@glamirk/shared/types';
-import { getCurrentPrice } from '@glamirk/shared/utils/productVariant';
+import { getCurrentPrice, resolveVariantThumbnail } from '@glamirk/shared/utils/productVariant';
+import { openRazorpayCheckout } from '../../utils/razorpayCheckout';
 import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE } from '@glamirk/shared/data/commerce';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
@@ -39,30 +40,6 @@ interface PaymentConfig {
   provider: string | null;
   keyId: string | null;
   isMock: boolean;
-}
-
-const RAZORPAY_SCRIPT_SRC = 'https://checkout.razorpay.com/v1/checkout.js';
-
-/** Loads Razorpay's checkout script once, on demand. Not bundled: it must be
- * served from Razorpay's own domain for PCI reasons, and loading it eagerly
- * would cost every visitor a third-party request they mostly never need. */
-function loadRazorpayScript(): Promise<boolean> {
-  if (typeof window === 'undefined') return Promise.resolve(false);
-  if ((window as any).Razorpay) return Promise.resolve(true);
-  return new Promise((resolve) => {
-    const existing = document.querySelector(`script[src="${RAZORPAY_SCRIPT_SRC}"]`);
-    if (existing) {
-      existing.addEventListener('load', () => resolve(true));
-      existing.addEventListener('error', () => resolve(false));
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = RAZORPAY_SCRIPT_SRC;
-    script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
 }
 
 /**
@@ -424,59 +401,25 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const runGatewayCheckout = async (
     pendingOrder: Order,
     handoff: NonNullable<CheckoutResult['payment']>
-  ): Promise<{ success: boolean; order?: Order; error?: string }> => {
-    const scriptReady = await loadRazorpayScript();
-    if (!scriptReady || !(window as any).Razorpay) {
-      return { success: false, error: 'We could not load the payment window. Please check your connection and try again.' };
-    }
-
-    return new Promise((resolve) => {
-      const razorpay = new (window as any).Razorpay({
-        key: handoff.keyId,
-        order_id: handoff.gatewayOrderId,
-        // Amount and currency are display-only here; the gateway enforces what
-        // the order was actually created for, so tampering with these in the
-        // browser changes nothing that matters.
-        amount: handoff.amountMinor,
-        currency: handoff.currency,
-        name: 'Glamirk Beauty',
-        description: `Order ${pendingOrder.orderNumber}`,
-        prefill: { name: customerName, email: customerEmail, contact: customerPhone },
-        theme: { color: '#C9972B' },
-        handler: async (response: any) => {
-          const verified = await onVerifyPayment({
-            orderId: pendingOrder.id,
-            razorpayOrderId: response.razorpay_order_id,
-            razorpayPaymentId: response.razorpay_payment_id,
-            razorpaySignature: response.razorpay_signature,
-          });
-          resolve(
-            verified.success
-              ? { success: true, order: verified.order }
-              : { success: false, error: verified.error }
-          );
-        },
-        modal: {
-          ondismiss: () => {
-            // Releases the stock reservation immediately rather than waiting
-            // for the server's expiry sweep. Advisory only — if the payment
-            // actually went through, the server refuses to cancel it.
-            void onCancelPayment(pendingOrder.id);
-            resolve({ success: false, error: 'Payment was cancelled. Your bag has been kept.' });
-          },
-        },
-      });
-
-      razorpay.on('payment.failed', (event: any) => {
-        resolve({
-          success: false,
-          error: event?.error?.description || 'Your payment was declined. Please try another method.',
-        });
-      });
-
-      razorpay.open();
+  ): Promise<{ success: boolean; order?: Order; error?: string }> =>
+    // Shared with the retry-payment flow in the orders list. One sheet, one
+    // handler, one dismiss rule — two copies would drift, and the copy that
+    // drifted would be the one confirming payments.
+    openRazorpayCheckout<Order>({
+      handoff,
+      description: `Order ${pendingOrder.orderNumber}`,
+      prefill: { name: customerName, email: customerEmail, contact: customerPhone },
+      onVerify: (response) =>
+        onVerifyPayment({
+          orderId: pendingOrder.id,
+          razorpayOrderId: response.razorpay_order_id,
+          razorpayPaymentId: response.razorpay_payment_id,
+          razorpaySignature: response.razorpay_signature,
+        }),
+      onDismiss: () => {
+        void onCancelPayment(pendingOrder.id);
+      },
     });
-  };
 
   return (
     <div className="bg-[#FAF9F6] min-h-screen">
@@ -1204,7 +1147,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                         <div key={i} className="p-3.5 flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3">
                             <ProductImage preset="thumb"
-                              src={item.product.images.primary}
+                              src={resolveVariantThumbnail(item.product, item.selectedShade)}
                               alt={item.product.name}
                               className="w-12 h-14 object-cover border border-[#E8D5A8]"
                             />
@@ -1295,7 +1238,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     <div key={index} className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2.5">
                         <ProductImage preset="thumb"
-                          src={item.product.images.primary}
+                          src={resolveVariantThumbnail(item.product, item.selectedShade)}
                           alt={item.product.name}
                           className="w-9 h-11 object-cover border border-[#E8D5A8]"
                         />

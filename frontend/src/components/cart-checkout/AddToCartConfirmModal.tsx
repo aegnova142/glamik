@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Check, ShoppingBag, X, Loader2 } from 'lucide-react';
 import { Product, Shade } from '@glamirk/shared/types';
-import { getCurrentPrice } from '@glamirk/shared/utils/productVariant';
+import { getCurrentPrice, resolveVariantThumbnail } from '@glamirk/shared/utils/productVariant';
 import { ProductImage } from '../product/ProductImage';
 
 interface AddToCartConfirmModalProps {
@@ -79,7 +79,7 @@ export const AddToCartConfirmModal: React.FC<AddToCartConfirmModalProps> = ({
 
             <div className="flex items-center gap-4">
               <ProductImage
-                src={product.images.primary}
+                src={resolveVariantThumbnail(product, shade)}
                 alt={product.name}
                 className="w-16 h-20 object-cover border border-[#E8D5A8] shrink-0"
               />

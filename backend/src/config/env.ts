@@ -85,6 +85,32 @@ export function resolveJwtSecret(configured: string | undefined, isProduction: b
   return value;
 }
 
+export type RazorpayKeyMode = 'live' | 'test' | 'unknown';
+
+/**
+ * Which Razorpay environment a key id belongs to.
+ *
+ * Razorpay serves Test and Live from the same host, and decides which one a
+ * request lands in from the key prefix alone. Nothing in this codebase picks
+ * between them: PAYMENTS_LIVE_MODE only chooses the real REST adapter over the
+ * in-process mock. So the prefix is the single thing that says whether real
+ * money can move, and until this existed the boot log could not tell an
+ * operator which of the two they had just started.
+ *
+ * An unrecognised prefix is 'unknown' rather than assumed harmless — same
+ * stance as classifyDatabaseTarget, which treats a target as production unless
+ * it is demonstrably safe. Being wrong in that direction costs a cautious log
+ * line; being wrong in the other costs real customer charges.
+ *
+ * Pure and exported so it can be tested without an environment.
+ */
+export function classifyRazorpayKey(keyId: string | null | undefined): RazorpayKeyMode {
+  const value = (keyId || '').trim();
+  if (value.startsWith('rzp_live_')) return 'live';
+  if (value.startsWith('rzp_test_')) return 'test';
+  return 'unknown';
+}
+
 export const DELHIVERY_DEFAULT_BASE_URL = 'https://track.delhivery.com';
 
 /**
@@ -423,7 +449,27 @@ export function warnOnWeakConfig(): void {
   // shipment appear" is answerable from the boot log rather than by reading
   // code.
   if (env.razorpay.enabled) {
-    console.warn('[config] Razorpay is in LIVE mode — real customer payments will be processed.');
+    // PAYMENTS_LIVE_MODE only means "use the real adapter". Whether those real
+    // calls reach Razorpay's sandbox or take real money is decided by the key
+    // prefix, so that is what this line reports — saying "LIVE mode" for both
+    // left an operator unable to tell a safe sandbox run from a chargeable one.
+    switch (classifyRazorpayKey(env.razorpay.keyId)) {
+      case 'live':
+        console.warn('[config] Razorpay is LIVE (rzp_live_ key) — real customer payments will be processed.');
+        break;
+      case 'test':
+        console.log(
+          '[config] Razorpay is in TEST mode (rzp_test_ key) — real calls to Razorpay, sandbox only, no real money. ' +
+            'Swap in an rzp_live_ key to take actual payments.'
+        );
+        break;
+      default:
+        console.warn(
+          '[config] Razorpay is enabled but RAZORPAY_KEY_ID has an unrecognised prefix ' +
+            '(expected rzp_test_ or rzp_live_) — assuming it CAN process real payments. ' +
+            'Verify the key before taking orders.'
+        );
+    }
   } else if (env.razorpay.liveMode && !env.razorpay.credentialsPresent) {
     console.warn(
       '[config] PAYMENTS_LIVE_MODE is true but RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET are missing — ' +

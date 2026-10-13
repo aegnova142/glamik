@@ -1,4 +1,4 @@
-import { pool, loadDatabase, saveDatabase, withStockLock, withOrderShipmentLock } from '../db/db';
+import { pool, loadDatabase, saveDatabase, withStockLock, withOrderShipmentLock, withOrderRefundLock } from '../db/db';
 import { env } from '../config/env';
 import {
   OrderStatus,
@@ -9,8 +9,13 @@ import {
   TERMINAL_ORDER_STATUSES,
 } from '@glamirk/shared/types';
 import { insertOrderStatusHistory, restockOrderItems } from './orders.service';
-import { notifyOrderStatusChange } from './notifications.service';
-import { sendOrderStatusEmail } from './email.service';
+import {
+  notifyOrderStatus,
+  notifyPaymentFailed,
+  notifyRefund,
+  notifyAdminPaid,
+  notifyAdminDelivered,
+} from './orderNotifications.service';
 import { grantOrderPoints } from './rewards.service';
 import {
   getShipmentProvider,
@@ -19,7 +24,7 @@ import {
   delhiveryScanKey,
 } from './couriers/delhivery.service';
 import { CreateShipmentInput, ShipmentPaymentMode, TrackingScan } from './couriers/shippingProvider';
-import { getPaymentGateway, toMinorUnits } from './payment.service';
+import { getPaymentGateway, toMinorUnits, fromMinorUnits } from './payment.service';
 import { hasSellableStock } from '@glamirk/shared/utils/productVariant';
 import {
   sqlInventoryEnabled,
@@ -258,23 +263,23 @@ export async function transitionOrderStatus(input: {
   try {
     await Promise.all([
       insertOrderStatusHistory(orderId, to, note),
-      ...(notify
-        ? [
-            notifyOrderStatusChange(row.user_id, orderId, row.order_number, to),
-            sendOrderStatusEmail({
-              toEmail: row.customer_email,
-              customerName: row.customer_name,
-              orderId,
-              orderNumber: row.order_number,
-              status: to,
-              total: Number(row.total),
-            }),
-          ]
-        : []),
+      // One outbox row instead of an in-app insert plus an SMTP round-trip.
+      // The row we already hold is passed through, so this costs no extra
+      // read on what is the hottest notification path in the system.
+      ...(notify ? [notifyOrderStatus(row, to)] : []),
       // Points are credited on delivery only, so they cannot be farmed by
       // placing and cancelling. The ledger's unique (user, type, reference)
       // constraint makes a repeat call harmless.
-      ...(to === 'DELIVERED' ? [grantOrderPoints(row.user_id, orderId, row.order_number, Number(row.total))] : []),
+      ...(to === 'DELIVERED'
+        ? [
+            grantOrderPoints(row.user_id, orderId, row.order_number, Number(row.total)),
+            // The store's delivery alert now rides the same transition as the
+            // customer's. It used to fire only from the admin status route,
+            // so a delivery recorded by a courier webhook — the normal case —
+            // never reached the notification bell at all.
+            notifyAdminDelivered(row),
+          ]
+        : []),
     ]);
   } catch (err) {
     console.error(`[fulfillment] side effects failed for order ${orderId} -> ${to}:`, err);
@@ -313,8 +318,12 @@ export async function markOrderPaid(input: {
 
   const row = claim.rows[0];
 
-  // Stock for an online order is committed here, not at order creation: an
-  // order that never gets paid must not hold inventory hostage.
+  // Normally a no-op: /checkout reserves stock at order creation for both
+  // payment methods, so stock_committed is already true and the claim inside
+  // commitOrderStock updates nothing. Kept as a backstop for any order that
+  // reached payment without a reservation (an admin-created order, a replay of
+  // a pre-reservation row), and safe to call either way — the
+  // `stock_committed = false` claim makes it idempotent.
   await commitOrderStock(input.orderId);
 
   // PENDING_PAYMENT is the only status a successful payment advances from.
@@ -327,6 +336,32 @@ export async function markOrderPaid(input: {
     note: 'Payment received',
   });
 
+  // Tell the store, exactly once.
+  //
+  // Three independent callers reach markOrderPaid for the same payment — the
+  // browser verify call, the Razorpay webhook, and the reconciliation sweep —
+  // and in the normal case at least two of them do. Gating on the conditional
+  // UPDATE above is what makes this exactly-once: whichever caller wins the
+  // claim is the only one that gets here, and the rest returned `changed:
+  // false` without reaching this line. No dedupe table, no event id, no
+  // window to tune.
+  //
+  // Placed after the claim commits, not before, so the store is never told
+  // about a payment that then failed to persist.
+  //
+  // Awaited rather than fired-and-forgotten, unlike the shipment below: this
+  // is a local INSERT plus a socket emit, so there is no slow third party to
+  // protect the response from, and swallowing a failure here would mean an
+  // order the store never hears about.
+  try {
+    await notifyAdminPaid(input.orderId);
+  } catch (err) {
+    // The payment is already committed and the customer has been charged — a
+    // notification failure must not unwind that. Logged loudly instead,
+    // because a silent miss here is exactly the gap this fixes.
+    console.error(`[fulfillment] admin paid-order notification failed for ${input.orderId}:`, err);
+  }
+
   // Fulfilment is attempted immediately but never blocks the response: a
   // courier outage must not turn a successful payment into a failed
   // checkout. The reconciliation sweep retries anything that did not stick.
@@ -337,8 +372,17 @@ export async function markOrderPaid(input: {
   return { changed: true };
 }
 
-/** Records a failed/cancelled/expired payment. Leaves stock alone — an online
- * order never committed any. */
+/**
+ * Records a failed/cancelled/expired payment and cancels the order.
+ *
+ * Deliberately does NOT release stock. An online order does hold a reservation
+ * taken at creation, but the release is the caller's to make: restoreOrderStock
+ * is guarded by `stock_restored` and must be paired with the specific failure
+ * being handled, not fired implicitly from here where a caller reconciling an
+ * already-restored order would have no way to opt out. Every caller that ends
+ * an order's life pairs the two — the payment.failed webhook, the verify
+ * route's decline branch, the customer cancel route and the expiry sweep.
+ */
 export async function markOrderPaymentFailed(input: {
   orderId: string;
   status: Extract<PaymentStatus, 'FAILED' | 'CANCELLED' | 'EXPIRED'>;
@@ -362,6 +406,25 @@ export async function markOrderPaymentFailed(input: {
     );
     await insertOrderStatusHistory(input.orderId, 'CANCELLED', input.reason || `Payment ${input.status.toLowerCase()}`);
   }
+
+  // Tell the customer their payment did not go through.
+  //
+  // This is the single choke point for all four failure paths — the declined
+  // verify call, the payment.failed webhook, the customer abandoning the
+  // gateway, and the expiry sweep — and the conditional UPDATE above is what
+  // makes it exactly once: a caller that did not win the claim returned false
+  // several lines ago.
+  //
+  // Before this, every one of those four was completely silent. A customer
+  // whose card was declined saw their order disappear with no explanation.
+  //
+  // Deliberately NOT paired with an ORDER_CANCELLED message, even though the
+  // order is cancelled just above: two messages for one event, one of which
+  // implies the customer cancelled something they did not, is worse than one
+  // accurate message. The PAYMENT_FAILED copy states that nothing was
+  // charged.
+  await notifyPaymentFailed(input.orderId, input.status, input.reason);
+
   return true;
 }
 
@@ -1032,54 +1095,568 @@ export async function cancelShipmentForOrder(orderId: string): Promise<boolean> 
  * (no instrument was ever charged), so it is settled by the store manually and
  * this returns early rather than pretending to issue one.
  */
+export interface RefundResult {
+  ok: boolean;
+  error?: string;
+  /** The refunds row, present whenever one was created or found. */
+  refundId?: string;
+  providerRefundId?: string;
+  amount?: number;
+  /** True when an idempotency key matched an earlier refund and no second
+   * gateway call was made. */
+  replayed?: boolean;
+  /** True when another refund for this order was already in flight. The caller
+   * should surface a conflict, not retry. */
+  busy?: boolean;
+  /** The gateway neither confirmed nor refused — a timeout or network failure.
+   * The money may have moved. Never retry on this; reconcile instead. */
+  ambiguous?: boolean;
+  /** The provider's own status, verbatim ('processed' | 'pending'). */
+  providerStatus?: string;
+}
+
 export async function refundOrderPayment(
   orderId: string,
   amount: number,
-  reason: string
-): Promise<{ ok: boolean; error?: string }> {
-  const orderRes = await pool.query('SELECT payment_method, amount_paid, amount_refunded FROM orders WHERE id = $1', [
-    orderId,
-  ]);
-  const order = orderRes.rows[0];
-  if (!order) return { ok: false, error: 'Order not found.' };
-  if (order.payment_method === 'cod') {
-    return { ok: false, error: 'Cash on Delivery orders are refunded manually — there is no payment to reverse.' };
+  reason: string,
+  options: {
+    idempotencyKey?: string;
+    createdBy?: string;
+    /** Test seam, mirroring the mock gateway's existing `notes.simulate`
+     * convention (see createOrder's 'create_failure'). Passed through to the
+     * provider in notes; the LIVE adapter sends it as an ordinary note and
+     * Razorpay ignores it, so this cannot alter real behaviour. */
+    providerSimulate?: string;
+  } = {}
+): Promise<RefundResult> {
+  // An idempotency key that already resolved is answered without taking the
+  // lock or calling the gateway at all — a retried HTTP request must not queue
+  // behind an unrelated in-flight refund just to be told "already done".
+  if (options.idempotencyKey) {
+    const prior = await findRefundByIdempotencyKey(orderId, options.idempotencyKey);
+    if (prior) return prior;
   }
 
-  const alreadyRefunded = Number(order.amount_refunded) || 0;
-  const paid = Number(order.amount_paid) || 0;
-  const refundable = Math.max(0, paid - alreadyRefunded);
-  if (refundable <= 0) return { ok: false, error: 'This order has already been fully refunded.' };
+  // Non-queueing, per order. A second concurrent caller is REFUSED rather than
+  // made to wait and then allowed to refund as well — see withOrderRefundLock.
+  const locked = await withOrderRefundLock(orderId, async (): Promise<RefundResult> => {
+    // Re-checked INSIDE the lock. This is the whole fix: the old code read
+    // these figures with nothing serialising it, so two callers could both see
+    // the full amount as refundable and both call Razorpay.
+    if (options.idempotencyKey) {
+      const prior = await findRefundByIdempotencyKey(orderId, options.idempotencyKey);
+      if (prior) return prior;
+    }
 
-  const amountToRefund = Math.min(amount, refundable);
+    const orderRes = await pool.query(
+      'SELECT payment_method, amount_paid, amount_refunded FROM orders WHERE id = $1',
+      [orderId]
+    );
+    const order = orderRes.rows[0];
+    if (!order) return { ok: false, error: 'Order not found.' };
+    if (order.payment_method === 'cod') {
+      return { ok: false, error: 'Cash on Delivery orders are refunded manually — there is no payment to reverse.' };
+    }
 
-  const paymentRes = await pool.query(
-    `SELECT id, provider_payment_id FROM payments
-     WHERE order_id = $1 AND status = 'PAID' AND provider_payment_id IS NOT NULL
-     ORDER BY created_at DESC LIMIT 1`,
-    [orderId]
-  );
-  const payment = paymentRes.rows[0];
-  if (!payment) return { ok: false, error: 'No captured payment found for this order.' };
+    // Refundable counts every refund that is not definitively FAILED — not
+    // just the confirmed ones in orders.amount_refunded.
+    //
+    // A provider-'pending' refund and an UNRESOLVED (timed-out) one have both
+    // potentially moved money, but neither is confirmed, so neither may touch
+    // amount_refunded. If the balance were computed from that column alone,
+    // those amounts would look refundable again and a second refund could be
+    // issued for money already on its way back.
+    const inFlightRes = await pool.query(
+      `SELECT COALESCE(SUM(amount_minor), 0) AS held
+       FROM refunds WHERE order_id = $1 AND status <> 'FAILED'`,
+      [orderId]
+    );
+    const heldMinor = Number(inFlightRes.rows[0]?.held) || 0;
+    const paid = Number(order.amount_paid) || 0;
+    const refundable = Math.max(0, paid - fromMinorUnits(heldMinor));
+    if (refundable <= 0) return { ok: false, error: 'This order has already been fully refunded.' };
 
-  const gateway = getPaymentGateway();
-  const refund = await gateway.refund({
-    paymentId: payment.provider_payment_id,
-    amountMinor: toMinorUnits(amountToRefund),
-    notes: { orderId, reason: reason.slice(0, 200) },
+    const amountToRefund = Math.min(amount, refundable);
+    if (!(amountToRefund > 0)) return { ok: false, error: 'Refund amount must be greater than zero.' };
+
+    const paymentRes = await pool.query(
+      `SELECT id, provider_payment_id FROM payments
+       WHERE order_id = $1 AND status = 'PAID' AND provider_payment_id IS NOT NULL
+       ORDER BY created_at DESC LIMIT 1`,
+      [orderId]
+    );
+    const payment = paymentRes.rows[0];
+    if (!payment) return { ok: false, error: 'No captured payment found for this order.' };
+
+    const gateway = getPaymentGateway();
+
+    // The durable claim, written BEFORE any money moves. A process that dies
+    // after this point leaves a PENDING row — a visible reconciliation task
+    // rather than a refund that happened with no local trace.
+    const refundRowId = 'rfnd-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    try {
+      await pool.query(
+        `INSERT INTO refunds (id, order_id, payment_id, provider, amount_minor, currency, status,
+                              reason, idempotency_key, created_by)
+         VALUES ($1, $2, $3, $4, $5, 'INR', 'PENDING', $6, $7, $8)`,
+        [
+          refundRowId,
+          orderId,
+          payment.id,
+          gateway.name,
+          toMinorUnits(amountToRefund),
+          reason ? String(reason).slice(0, 500) : null,
+          options.idempotencyKey || null,
+          options.createdBy || 'system',
+        ]
+      );
+    } catch (err: any) {
+      // 23505 on the idempotency index: a concurrent caller with the same key
+      // claimed it between our check and this insert. Hand back theirs.
+      if (err?.code === '23505' && options.idempotencyKey) {
+        const prior = await findRefundByIdempotencyKey(orderId, options.idempotencyKey);
+        if (prior) return prior;
+      }
+      throw err;
+    }
+
+    const refund = await gateway.refund({
+      paymentId: payment.provider_payment_id,
+      amountMinor: toMinorUnits(amountToRefund),
+      // refundRowId is the thread back to our row. If this call times out, the
+      // reconciliation below lists the provider's refunds and matches on it —
+      // without it an orphaned attempt is indistinguishable from an unrelated
+      // refund on the same payment.
+      notes: {
+        orderId,
+        refundRowId,
+        reason: String(reason || '').slice(0, 200),
+        ...(options.providerSimulate ? { simulate: options.providerSimulate } : {}),
+      },
+    });
+
+    if (!refund.ok || !refund.refund) {
+      // A refund failure is NOT one thing. `retryable` separates the two cases,
+      // and conflating them is how money gets sent twice:
+      //
+      //   definitive (4xx, "payment not captured")  -> the provider rejected
+      //     it. Nothing moved. FAILED, and the balance is freed again.
+      //
+      //   ambiguous (timeout, network, 5xx) -> the provider may well have
+      //     ACCEPTED it. Marking this FAILED would free the balance and invite
+      //     a retry that sends the money a second time. It stays UNRESOLVED,
+      //     keeps holding the balance, and is settled by reconcileRefund()
+      //     asking the provider what it actually has.
+      const ambiguous = refund.retryable === true;
+      await pool.query(
+        `UPDATE refunds SET status = $2, error_description = $3, updated_at = now() WHERE id = $1`,
+        [
+          refundRowId,
+          ambiguous ? 'UNRESOLVED' : 'FAILED',
+          (refund.error || 'The gateway did not confirm the refund.').slice(0, 1000),
+        ]
+      );
+      return {
+        ok: false,
+        ambiguous,
+        refundId: refundRowId,
+        error: ambiguous
+          ? 'The gateway did not respond in time. This refund may still have gone through — it will be reconciled before any retry.'
+          : refund.error || 'The gateway did not confirm the refund.',
+      };
+    }
+
+    // The provider's own verdict decides our status. Razorpay returns
+    // 'processed' for an instant refund and 'pending' for one that will settle
+    // over days; calling the latter complete would tell a customer their money
+    // had arrived when it has not.
+    const localStatus = mapProviderRefundStatus(refund.refund.status);
+    await pool.query(
+      `UPDATE refunds SET status = $5, provider_refund_id = $2, amount_minor = $3,
+              gateway_response = $4::jsonb, updated_at = now()
+       WHERE id = $1`,
+      [refundRowId, refund.refund.id, refund.refund.amountMinor, JSON.stringify(refund.refund), localStatus]
+    );
+
+    // Aggregates move ONLY on a confirmed refund. A pending one is already
+    // holding its share of the refundable balance via the in-flight sum above,
+    // so nothing can be double-refunded while it settles — but
+    // orders.amount_refunded must not claim money the customer has not had.
+    if (localStatus === 'PROCESSED') {
+      await pool.query(
+        `UPDATE payments SET refunded_minor = LEAST(amount_minor, refunded_minor + $2), updated_at = now()
+         WHERE id = $1`,
+        [payment.id, refund.refund.amountMinor]
+      );
+      await recordRefund({ orderId, amount: amountToRefund });
+    }
+
+    // Notified only now: the refund row is PROCESSED, the gateway has
+    // confirmed, and both aggregates are written. Nothing above this line
+    // tells anyone money moved, so a failed or still-PENDING refund stays
+    // silent — which is the honest answer, since it has not moved.
+    //
+    // Exactly-once falls out of the structure rather than needing a guard: a
+    // refund row is created once per refund (the per-order lock stops
+    // concurrent duplicates, the idempotency key stops sequential ones), and
+    // a replay returns from findRefundByIdempotencyKey long before reaching
+    // here.
+    try {
+      const after = await pool.query(
+        'SELECT user_id, order_number, amount_paid, amount_refunded FROM orders WHERE id = $1',
+        [orderId]
+      );
+      const o = after.rows[0];
+      // Announced only once the provider has confirmed. A pending refund is
+      // real but not yet money in the customer's account, and telling them it
+      // has arrived invites a support ticket we caused.
+      if (o && localStatus === 'PROCESSED') {
+        await notifyRefund({
+          orderIdOrRow: orderId,
+          // The refund row this call just created. Keying on it rather than
+          // on the order is what lets a second, genuinely different partial
+          // refund produce its own message.
+          refundRef: refundRowId,
+          amount: amountToRefund,
+          fullyRefunded: Number(o.amount_refunded) >= Number(o.amount_paid),
+        });
+      }
+    } catch (err) {
+      // The money has already gone back. A notification failure must not turn
+      // a successful refund into a reported failure — the customer would be
+      // refunded and told it did not work.
+      console.error(`[fulfillment] refund notification failed for ${orderId}:`, err);
+    }
+
+    return {
+      ok: true,
+      refundId: refundRowId,
+      providerRefundId: refund.refund.id,
+      providerStatus: refund.refund.status,
+      amount: amountToRefund,
+    };
   });
 
-  if (!refund.ok || !refund.refund) {
-    return { ok: false, error: refund.error || 'The gateway did not confirm the refund.' };
+  if (!locked.acquired) {
+    return { ok: false, busy: true, error: 'A refund for this order is already in progress. Please wait and refresh.' };
+  }
+  return locked.value!;
+}
+
+/**
+ * Razorpay's refund status → ours.
+ *
+ * 'processed' is money gone. 'pending' is accepted but still settling, which
+ * for some instruments takes days. Anything unrecognised is treated as pending
+ * rather than complete: under-claiming is recoverable, over-claiming tells a
+ * customer they have been paid when they have not.
+ */
+function mapProviderRefundStatus(providerStatus: string | undefined): 'PROCESSED' | 'PENDING' | 'FAILED' {
+  switch ((providerStatus || '').toLowerCase()) {
+    case 'processed':
+      return 'PROCESSED';
+    case 'failed':
+      return 'FAILED';
+    default:
+      return 'PENDING';
+  }
+}
+
+/** An already-resolved refund for this (order, key), replayed rather than reissued. */
+async function findRefundByIdempotencyKey(orderId: string, key: string): Promise<RefundResult | null> {
+  const res = await pool.query(
+    'SELECT id, provider_refund_id, amount_minor, status, error_description FROM refunds WHERE order_id = $1 AND idempotency_key = $2',
+    [orderId, key]
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  // A PENDING row means an earlier attempt claimed the key and never resolved.
+  // Reported as busy rather than replayed: we genuinely do not know yet whether
+  // that refund went through, and reissuing could double it.
+  if (row.status === 'PENDING') {
+    return { ok: false, busy: true, refundId: row.id, error: 'A refund for this request is still being processed.' };
+  }
+  return {
+    ok: row.status === 'PROCESSED',
+    error: row.status === 'PROCESSED' ? undefined : row.error_description || 'The earlier refund attempt failed.',
+    refundId: row.id,
+    providerRefundId: row.provider_refund_id || undefined,
+    amount: fromMinorUnits(Number(row.amount_minor)),
+    replayed: true,
+  };
+}
+
+/**
+ * Records a refund the PROVIDER told us about, exactly once.
+ *
+ * Razorpay sends refund.created and then refund.processed for the same refund,
+ * and it sends them for refunds we issued ourselves as well as ones raised in
+ * their dashboard. Before this, the webhook called recordRefund directly and
+ * unconditionally, so:
+ *
+ *   our ₹400 refund        -> amount_refunded = 400
+ *   refund.created  (same) -> amount_refunded = 800
+ *   refund.processed(same) -> amount_refunded = 900 (clamped at amount_paid)
+ *
+ * A ₹400 refund on a ₹900 order ended up reported as ₹900 refunded, and the
+ * customer was notified about it two or three times. The clamp hid it on full
+ * refunds, which is why it survived.
+ *
+ * The dedupe key is the provider's own refund id, enforced by the unique index
+ * from migration 017. A refund we issued already has its row, so the webhook
+ * conflicts and does nothing; a refund raised in Razorpay's dashboard is new,
+ * so it is recorded, applied and announced here.
+ *
+ * Returns whether this call was the one that applied it.
+ */
+export async function recordProviderRefund(input: {
+  orderId: string;
+  paymentRowId: string | null;
+  providerRefundId: string | null;
+  amountMinor: number;
+  provider?: string;
+}): Promise<{ applied: boolean }> {
+  // No provider id means we cannot tell one delivery from another, so there is
+  // no safe way to apply it. Recorded as ignored rather than risking a double
+  // credit — the reconciliation sweep and the admin panel both surface it.
+  if (!input.providerRefundId) {
+    console.warn(`[fulfillment] provider refund for ${input.orderId} carried no refund id; not applied`);
+    return { applied: false };
   }
 
-  await pool.query(
-    `UPDATE payments SET refunded_minor = LEAST(amount_minor, refunded_minor + $2), updated_at = now()
-     WHERE id = $1`,
-    [payment.id, refund.refund.amountMinor]
+  const rowId = 'rfnd-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const inserted = await pool.query(
+    `INSERT INTO refunds (id, order_id, payment_id, provider, provider_refund_id, amount_minor,
+                          currency, status, reason, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, 'INR', 'PROCESSED', 'Refund confirmed by provider', 'provider')
+     ON CONFLICT (provider_refund_id) WHERE provider_refund_id IS NOT NULL DO NOTHING
+     RETURNING id`,
+    [
+      rowId,
+      input.orderId,
+      input.paymentRowId,
+      input.provider || 'razorpay',
+      input.providerRefundId,
+      input.amountMinor,
+    ]
   );
-  await recordRefund({ orderId, amount: amountToRefund });
-  return { ok: true };
+
+  // Already known — either we issued it, or an earlier delivery of this same
+  // event landed. Either way the money has been accounted for once already.
+  if (inserted.rows.length === 0) return { applied: false };
+
+  if (input.paymentRowId) {
+    await pool.query(
+      `UPDATE payments SET refunded_minor = LEAST(amount_minor, refunded_minor + $2), updated_at = now()
+       WHERE id = $1`,
+      [input.paymentRowId, input.amountMinor]
+    );
+  }
+  const amount = fromMinorUnits(input.amountMinor);
+  await recordRefund({ orderId: input.orderId, amount });
+
+  try {
+    const after = await pool.query(
+      'SELECT user_id, order_number, amount_paid, amount_refunded FROM orders WHERE id = $1',
+      [input.orderId]
+    );
+    const o = after.rows[0];
+    if (o) {
+      await notifyRefund({
+        orderIdOrRow: input.orderId,
+        // The provider's own refund id. A redelivered webhook carries the
+        // same one, so the replay collapses onto the original event even
+        // though the INSERT above already refused it.
+        refundRef: input.providerRefundId,
+        amount,
+        fullyRefunded: Number(o.amount_refunded) >= Number(o.amount_paid),
+      });
+    }
+  } catch (err) {
+    console.error(`[fulfillment] provider refund notification failed for ${input.orderId}:`, err);
+  }
+
+  return { applied: true };
+}
+
+/**
+ * Settles a refund whose outcome we do not know.
+ *
+ * Reached by an UNRESOLVED row (the request timed out) or a PENDING one (the
+ * provider accepted it but had not settled). Both are cases where retrying
+ * would be the wrong move: the money may already be on its way, and a second
+ * refund is not recoverable by an apology.
+ *
+ * So instead of retrying, this ASKS. It lists the provider's refunds against
+ * the payment and matches on `notes.refundRowId`, which refundOrderPayment
+ * attaches at request time. Three outcomes:
+ *
+ *   found + processed -> the refund did happen. Record it, move the
+ *                        aggregates, notify. The timeout was only a lost
+ *                        response.
+ *   found + pending   -> accepted, still settling. Stays PENDING and keeps
+ *                        holding the balance. Nothing to do yet.
+ *   not found         -> the provider has no such refund, so the request
+ *                        never landed. NOW it is safe to mark FAILED and free
+ *                        the balance for a fresh attempt.
+ *
+ * Idempotent: a second call on an already-PROCESSED row changes nothing.
+ */
+export async function reconcileRefund(refundId: string): Promise<{
+  ok: boolean;
+  status?: string;
+  changed?: boolean;
+  error?: string;
+}> {
+  const res = await pool.query('SELECT * FROM refunds WHERE id = $1', [refundId]);
+  const row = res.rows[0];
+  if (!row) return { ok: false, error: 'Refund not found.' };
+  if (row.status === 'PROCESSED' || row.status === 'FAILED') {
+    return { ok: true, status: row.status, changed: false };
+  }
+
+  const payRes = await pool.query('SELECT id, provider_payment_id FROM payments WHERE id = $1', [row.payment_id]);
+  const providerPaymentId = payRes.rows[0]?.provider_payment_id;
+  if (!providerPaymentId) return { ok: false, error: 'No captured payment to reconcile against.' };
+
+  // Serialised against new refunds on the same order, so a reconciliation
+  // cannot run while another attempt is mid-flight and reach a stale verdict.
+  const locked = await withOrderRefundLock(row.order_id, async () => {
+    const gateway = getPaymentGateway();
+    const listed = await gateway.listPaymentRefunds(providerPaymentId);
+    if (!listed.ok || !listed.refunds) {
+      // Still cannot see the provider. Deliberately leaves the row as it is —
+      // guessing here is exactly what this function exists to avoid.
+      return { ok: false, error: listed.error || 'Could not reach the gateway to reconcile.' };
+    }
+
+    const match =
+      listed.refunds.find((r) => r.notes?.refundRowId === refundId) ||
+      // Fallback for a row created before refundRowId was sent in notes: match
+      // by provider id if we already captured one.
+      (row.provider_refund_id ? listed.refunds.find((r) => r.id === row.provider_refund_id) : undefined);
+
+    if (!match) {
+      await pool.query(
+        `UPDATE refunds SET status = 'FAILED',
+                error_description = 'Reconciled: the gateway holds no such refund, so the request never landed.',
+                updated_at = now()
+         WHERE id = $1 AND status IN ('PENDING', 'UNRESOLVED')`,
+        [refundId]
+      );
+      return { ok: true, status: 'FAILED', changed: true };
+    }
+
+    const mapped = mapProviderRefundStatus(match.status);
+    if (mapped === 'PENDING') {
+      await pool.query(
+        `UPDATE refunds SET status = 'PENDING', provider_refund_id = $2,
+                gateway_response = $3::jsonb, updated_at = now()
+         WHERE id = $1`,
+        [refundId, match.id, JSON.stringify(match)]
+      );
+      return { ok: true, status: 'PENDING', changed: row.status !== 'PENDING' };
+    }
+
+    if (mapped === 'FAILED') {
+      await pool.query(
+        `UPDATE refunds SET status = 'FAILED', provider_refund_id = $2,
+                error_description = 'Reconciled: the gateway reports this refund as failed.',
+                gateway_response = $3::jsonb, updated_at = now()
+         WHERE id = $1`,
+        [refundId, match.id, JSON.stringify(match)]
+      );
+      return { ok: true, status: 'FAILED', changed: true };
+    }
+
+    // Confirmed. Claim it with a conditional UPDATE so two concurrent
+    // reconciliations cannot both move the aggregates.
+    const claim = await pool.query(
+      `UPDATE refunds SET status = 'PROCESSED', provider_refund_id = $2,
+              gateway_response = $3::jsonb, updated_at = now()
+       WHERE id = $1 AND status <> 'PROCESSED'
+       RETURNING amount_minor`,
+      [refundId, match.id, JSON.stringify(match)]
+    );
+    if (claim.rows.length === 0) return { ok: true, status: 'PROCESSED', changed: false };
+
+    const amount = fromMinorUnits(Number(claim.rows[0].amount_minor));
+    await pool.query(
+      `UPDATE payments SET refunded_minor = LEAST(amount_minor, refunded_minor + $2), updated_at = now()
+       WHERE id = $1`,
+      [row.payment_id, Number(claim.rows[0].amount_minor)]
+    );
+    await recordRefund({ orderId: row.order_id, amount });
+
+    try {
+      const after = await pool.query(
+        'SELECT user_id, order_number, amount_paid, amount_refunded FROM orders WHERE id = $1',
+        [row.order_id]
+      );
+      const o = after.rows[0];
+      if (o) {
+        await notifyRefund({
+          orderIdOrRow: row.order_id,
+          // The same refund row refundOrderPayment created and left PENDING
+          // or UNRESOLVED. Reusing its id means a refund that was announced
+          // optimistically and then reconciled does not announce twice.
+          refundRef: refundId,
+          amount,
+          fullyRefunded: Number(o.amount_refunded) >= Number(o.amount_paid),
+        });
+      }
+    } catch (err) {
+      console.error(`[fulfillment] reconciled-refund notification failed for ${row.order_id}:`, err);
+    }
+
+    return { ok: true, status: 'PROCESSED', changed: true };
+  });
+
+  if (!locked.acquired) return { ok: false, error: 'A refund for this order is currently in progress.' };
+  return locked.value!;
+}
+
+/** Refunds that need a reconciliation sweep: accepted-but-unsettled, or
+ * outcome unknown. Surfaced to the admin rather than retried automatically. */
+export async function listUnresolvedRefunds(): Promise<{ id: string; orderId: string; status: string; amount: number }[]> {
+  const res = await pool.query(
+    `SELECT id, order_id, status, amount_minor FROM refunds
+     WHERE status IN ('PENDING', 'UNRESOLVED') ORDER BY created_at ASC LIMIT 100`
+  );
+  return res.rows.map((r) => ({
+    id: r.id,
+    orderId: r.order_id,
+    status: r.status,
+    amount: fromMinorUnits(Number(r.amount_minor)),
+  }));
+}
+
+/** Refund history for one order, newest first. */
+export async function listOrderRefunds(orderId: string): Promise<
+  {
+    id: string;
+    providerRefundId?: string;
+    amount: number;
+    status: string;
+    reason?: string;
+    createdBy?: string;
+    createdAt: string;
+  }[]
+> {
+  const res = await pool.query(
+    `SELECT id, provider_refund_id, amount_minor, status, reason, created_by, created_at
+     FROM refunds WHERE order_id = $1 ORDER BY created_at DESC`,
+    [orderId]
+  );
+  return res.rows.map((row) => ({
+    id: row.id,
+    providerRefundId: row.provider_refund_id || undefined,
+    amount: fromMinorUnits(Number(row.amount_minor)),
+    status: row.status,
+    reason: row.reason || undefined,
+    createdBy: row.created_by || undefined,
+    createdAt: new Date(row.created_at).toISOString(),
+  }));
 }
 
 /** True when shipments should be attempted at all. Exposed so callers can

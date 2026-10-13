@@ -19,6 +19,7 @@ import {
   getActiveSizeOptions,
   getCurrentPrice as resolveCurrentPrice,
   getCurrentStock as resolveCurrentStock,
+  resolveVariantThumbnail,
 } from '@glamirk/shared/utils/productVariant';
 import {
   normalizePhone,
@@ -94,8 +95,13 @@ import {
   destroyReviewMedia,
   orphanedReviewMedia,
 } from '../services/reviews.service';
-import { mapNotificationRow, notifyOrderStatusChange, notifyAdminNewOrder } from '../services/notifications.service';
-import { sendOrderStatusEmail, sendAdminNewOrderEmail } from '../services/email.service';
+// mapNotificationRow stays: the customer notification list endpoint reads
+// rows the engine writes, through the same shared mapper.
+import { mapNotificationRow } from '../services/notifications.service';
+import { notifyOrderStatus } from '../services/orderNotifications.service';
+import { enqueueNotification } from '../services/notificationEngine.service';
+import '../services/notificationChannels.service';
+import { sendAdminNewOrderEmail } from '../services/email.service';
 
 const router = express.Router();
 
@@ -1307,7 +1313,22 @@ function computeCouponDiscount(
   return { discount, appliedCouponCode: offer.couponCode!, offer };
 }
 
-const PAYMENT_METHODS = ['cod', 'upi', 'card', 'netbanking', 'wallet'] as const;
+/**
+ * Payment methods this route will accept.
+ *
+ * 'online' is what the storefront actually sends — the per-instrument tiles
+ * were retired when Razorpay's hosted sheet took over collecting the
+ * instrument, and it asks the customer for UPI/card/netbanking/wallet itself.
+ * Its absence here was silently rejecting every online checkout with
+ * "Please select a valid payment method" before the gateway was ever reached.
+ *
+ * The four instrument names are kept, not pruned: older frontend bundles still
+ * in a customer's cache send them, historical orders carry them in
+ * payment_method, and the admin order filter lists them. All of them mean the
+ * same thing to this route — `isOnline` below is the only distinction that
+ * matters, and it is simply "not COD".
+ */
+const PAYMENT_METHODS = ['cod', 'online', 'upi', 'card', 'netbanking', 'wallet'] as const;
 type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 /**
@@ -1537,13 +1558,17 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
         const product = findProduct(db.products, row.product_id)!;
         const shade = findShade(product, row.variant_id);
         const unitPrice = getCurrentPrice(product, shade, row.selected_size);
-        const variantPrimaryImage = shade?.images?.find((img) => img.isPrimary)?.url || shade?.images?.[0]?.url;
+        // Shared with every storefront surface that renders this line, so the
+        // image frozen onto the order is the one the customer was looking at
+        // in their bag. Replaces a local copy of this rule that skipped the
+        // empty-url filter and the sortOrder tiebreak.
+        const variantPrimaryImage = resolveVariantThumbnail(product, shade);
         const lineTotal = unitPrice * row.quantity;
         subtotal += lineTotal;
         orderItems.push({
           productId: product.id,
           productName: product.name,
-          productImage: variantPrimaryImage || product.images?.primary || '',
+          productImage: variantPrimaryImage,
           shade,
           size: row.selected_size || undefined,
           price: unitPrice,
@@ -1802,23 +1827,61 @@ router.post('/checkout', requireCustomer, async (req: AuthenticatedCustomerReque
     // order that may never be paid is noise.
     const createdStatus = result.order.status;
     const isAwaitingPayment = createdStatus === 'PENDING_PAYMENT';
+
+    // The STORE is told about every persisted order, both payment methods.
+    //
+    // This previously fired only for COD, inside the !isAwaitingPayment
+    // branch below, on the reasoning that an unpaid order might evaporate and
+    // alerting on it was noise. The cost of that was worse: once online
+    // payments went live, a prepaid order that WAS paid produced no new-order
+    // alert at all, because by then checkout had already decided to stay
+    // quiet. The store simply never learned about online sales.
+    //
+    // Reported now with the payment state said plainly — an AWAITING PAYMENT
+    // alert that says "do not dispatch" is useful; silence is not. The
+    // separate ORDER_PAID notification still fires on verification.
+    try {
+      await enqueueNotification({
+        orderId: result.order.id,
+        eventType: 'ADMIN_NEW_ORDER',
+        // One per order, so a retried checkout cannot alert twice.
+        dedupeKey: `${result.order.id}:ADMIN_NEW_ORDER`,
+        payload: {
+          orderId: result.order.id,
+          orderNumber: result.order.orderNumber,
+          customerName: resolvedName,
+          paymentMethod,
+          paymentStatus: result.order.paymentStatus,
+          total: result.order.total,
+          items: (result.order.items || []).map((i) => ({ name: i.productName, quantity: i.quantity })),
+        },
+      });
+    } catch (err) {
+      // The order is placed and its payment state is unaffected; an alerting
+      // failure must not fail the customer's checkout.
+      console.error('[checkout] admin new-order notification could not be enqueued:', err);
+    }
+
     try {
       const db = await loadDatabase();
       await Promise.all([
         insertOrderStatusHistory(result.order.id, createdStatus, isAwaitingPayment ? 'Awaiting payment confirmation' : placedNote),
+        // Still gated on isAwaitingPayment: telling a customer "your order is
+        // confirmed" before the gateway has taken their money would be a lie.
+        // The prepaid customer hears from us at verification instead, via
+        // markOrderPaid → CONFIRMED, or from PAYMENT_FAILED if it does not go
+        // through. The STORE is told either way, by the ADMIN_NEW_ORDER event
+        // enqueued above.
         ...(isAwaitingPayment
           ? []
           : [
-              notifyOrderStatusChange(userId, result.order.id, result.order.orderNumber, createdStatus),
-              notifyAdminNewOrder(result.order.id, result.order.orderNumber, resolvedName, result.order.total),
-              sendOrderStatusEmail({
-                toEmail: resolvedEmail,
-                customerName: resolvedName,
-                orderId: result.order.id,
-                orderNumber: result.order.orderNumber,
-                status: createdStatus,
-                total: result.order.total,
-              }),
+              notifyOrderStatus(result.order.id, createdStatus, { includeItems: true }),
+              // Retained deliberately. This is a plain email to the store's
+              // own contactEmail from CMS settings — a different recipient
+              // and a different purpose from the ADMIN_NEW_ORDER event, which
+              // drives the in-panel notification bell. Folding it into the
+              // engine would mean inventing an admin-email channel, which is
+              // its own change.
               sendAdminNewOrderEmail({
                 toEmail: db.globalSettings?.contactEmail,
                 orderNumber: result.order.orderNumber,
@@ -1890,8 +1953,22 @@ router.get('/payments/config', async (_req: Request, res: Response) => {
  *   * The amount is read back from the gateway, not from the request, and is
  *     checked against what the order actually costs — a verified signature for
  *     a ₹1 payment must not settle a ₹5,000 order.
+ *
+ * Rate limited because every call costs an outbound gateway lookup, so a retry
+ * loop or a stuck client would spend Razorpay's rate budget rather than ours.
+ * The ceiling is well above a genuine checkout — a customer confirms once,
+ * twice if they retry a declined card — and the signature is a SHA-256 HMAC,
+ * so this throttles load rather than defending the secret.
  */
-router.post('/payments/verify', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+const paymentVerifyLimiter = rateLimit({
+  scope: 'payment-verify',
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  message:
+    'Too many payment confirmation attempts. Please wait a moment — your order will update automatically if the payment went through.',
+});
+
+router.post('/payments/verify', requireCustomer, paymentVerifyLimiter, async (req: AuthenticatedCustomerRequest, res: Response) => {
   const { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body || {};
   if (!orderId || !razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
     return res.status(400).json({ error: 'Incomplete payment confirmation.' });
@@ -1947,7 +2024,27 @@ router.post('/payments/verify', requireCustomer, async (req: AuthenticatedCustom
   const payment = fetched.payment;
   if (payment.status !== 'PAID') {
     await recordPaymentAttempt({ paymentRowId: paymentRow.id, payment, signature: String(razorpaySignature) });
+
+    // PENDING is not a decline. mapRazorpayStatus returns it for 'authorized',
+    // 'created' and 'pending' — a UPI collect request the customer has not
+    // approved yet, or an authorisation awaiting capture. Cancelling the order
+    // here would charge a customer whose payment captures a moment later
+    // against an order that no longer exists. Left PENDING_PAYMENT instead, so
+    // the webhook settles it and the expiry sweep reclaims it if it never does.
+    if (payment.status === 'PENDING') {
+      return res.status(202).json({
+        pending: true,
+        error: 'Your payment is still being confirmed. We will update this order as soon as it completes.',
+      });
+    }
+
     await markOrderPaymentFailed({ orderId, status: 'FAILED', reason: payment.errorDescription || 'Payment not captured' });
+    // Stock was reserved at order creation (see the INSERT in /checkout), and
+    // markOrderPaymentFailed has just moved the order to CANCELLED/FAILED —
+    // past the window expirePendingPaymentOrders() looks at. Without this
+    // release the reservation would never be reclaimed by anything. Matches
+    // what the payment.failed webhook and the customer-cancel route already do.
+    await restoreOrderStock(orderId);
     return res.status(402).json({ error: payment.errorDescription || 'Your payment was not completed.' });
   }
 
@@ -2026,6 +2123,114 @@ router.get('/payments/:orderId/status', requireCustomer, async (req: Authenticat
  * the expiry sweep, and it refuses to act if the gateway has meanwhile
  * confirmed the payment.
  */
+/**
+ * Re-opens payment on an order the customer never completed.
+ *
+ * Why a FRESH gateway order rather than reusing the old one: the payment
+ * adapter exposes createOrder, fetchPayment and refund — there is no
+ * fetchOrder, so there is no way to ask Razorpay whether the previous order is
+ * still payable. Reusing a handle whose state we cannot see would be guessing,
+ * and guessing wrong means handing the customer a checkout that silently
+ * fails. A new order costs nothing; the abandoned one simply expires at
+ * Razorpay. The unique index on (provider, provider_order_id) is satisfied by
+ * construction because the new handle is new.
+ *
+ * Stock is NOT re-reserved. It was taken at order creation for both payment
+ * methods and is still held — `stock_committed = true AND stock_restored =
+ * false` is part of the eligibility check precisely so a retry cannot deduct a
+ * second time. A retry that found the reservation already released is refused,
+ * because the units may have been sold to someone else in the meantime.
+ *
+ * markOrderPaid remains the single writer of PAID and is idempotent, so even
+ * if both the old and new gateway orders were somehow paid, the order is
+ * confirmed once.
+ */
+router.post('/payments/:orderId/retry', requireCustomer, paymentVerifyLimiter, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  if (!onlinePaymentsEnabled()) {
+    return res.status(400).json({ error: 'Online payments are not available at the moment.' });
+  }
+
+  const orderRes = await pool.query(
+    `SELECT id, order_number, user_id, total, status, payment_status, payment_method,
+            stock_committed, stock_restored
+     FROM orders WHERE id = $1 AND user_id = $2`,
+    [req.params.orderId, req.customer!.id]
+  );
+  const order = orderRes.rows[0];
+  if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+  // Eligibility, each clause load-bearing:
+  //   PENDING_PAYMENT + PENDING  the order is genuinely awaiting money. A PAID
+  //                              order must never be re-opened, and a
+  //                              CANCELLED/EXPIRED one is finished.
+  //   not COD                    there is nothing to pay online.
+  //   stock still reserved       see above; without this a retry on a released
+  //                              order could oversell.
+  if (order.payment_method === 'cod') {
+    return res.status(400).json({ error: 'This is a Cash on Delivery order — there is nothing to pay online.' });
+  }
+  if (order.payment_status === 'PAID') {
+    return res.status(409).json({ error: 'This order has already been paid.' });
+  }
+  if (order.status !== 'PENDING_PAYMENT' || order.payment_status !== 'PENDING') {
+    return res.status(409).json({ error: 'This order is no longer awaiting payment. Please place a new order.' });
+  }
+  if (!order.stock_committed || order.stock_restored) {
+    return res.status(409).json({
+      error: 'The items on this order are no longer held for you. Please place a new order.',
+    });
+  }
+
+  // Priced from the ORDER, not from the cart — the cart was emptied at
+  // checkout, and the customer agreed to this total. Nothing in the request
+  // body influences it.
+  const amountMinor = toMinorUnits(Number(order.total));
+
+  const gateway = getPaymentGateway();
+  const created = await gateway.createOrder({
+    amountMinor,
+    currency: 'INR',
+    receipt: order.order_number,
+    notes: { orderId: order.id, orderNumber: order.order_number, userId: order.user_id, retry: 'true' },
+  });
+  if (!created.ok || !created.order) {
+    // Nothing is released here, unlike checkout: the order and its reservation
+    // predate this request and are still legitimately the customer's. They
+    // expire on their own if the retry is abandoned too.
+    return res.status(502).json({ error: 'We could not start the payment. Please try again in a moment.' });
+  }
+
+  // A NEW ledger row, not an update of the old one. Each gateway order gets
+  // its own row so /payments/verify can match the exact (order, gatewayOrder)
+  // pair the browser returns, and so a late webhook for the abandoned attempt
+  // still resolves to the right row instead of being credited to this one.
+  const paymentRowId = 'pay-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  await pool.query(
+    `INSERT INTO payments (id, order_id, user_id, provider, provider_order_id, amount_minor, currency, status)
+     VALUES ($1, $2, $3, $4, $5, $6, 'INR', 'PENDING')`,
+    [paymentRowId, order.id, order.user_id, gateway.name, created.order.id, amountMinor]
+  );
+
+  await pool.query(
+    `UPDATE orders SET payment_details = jsonb_set(payment_details, '{gatewayOrderId}', to_jsonb($2::text))
+     WHERE id = $1`,
+    [order.id, created.order.id]
+  );
+
+  await insertOrderStatusHistory(order.id, 'PENDING_PAYMENT', 'Payment retried by customer');
+
+  res.json({
+    payment: {
+      provider: gateway.name,
+      gatewayOrderId: created.order.id,
+      keyId: publishableKeyId(),
+      amountMinor,
+      currency: 'INR',
+      isMock: gateway.isMock,
+    },
+  });
+});
+
 router.post('/payments/:orderId/cancel', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
   const result = await pool.query(
     `SELECT id, payment_status FROM orders WHERE id = $1 AND user_id = $2 AND status = 'PENDING_PAYMENT'`,
@@ -2112,15 +2317,7 @@ router.post('/orders/:id/cancel', requireCustomer, async (req: AuthenticatedCust
   // concurrently instead of serializing behind an SMTP round-trip.
   await Promise.all([
     insertOrderStatusHistory(row.id, 'CANCELLED', reason ? `Cancelled by customer: ${reason}` : 'Cancelled by customer'),
-    notifyOrderStatusChange(req.customer!.id, row.id, row.order_number, 'CANCELLED'),
-    sendOrderStatusEmail({
-      toEmail: row.customer_email,
-      customerName: row.customer_name,
-      orderId: row.id,
-      orderNumber: row.order_number,
-      status: 'CANCELLED',
-      total: Number(row.total),
-    }),
+    notifyOrderStatus(row, 'CANCELLED'),
   ]);
 
   const db = await loadDatabase();

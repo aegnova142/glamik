@@ -49,7 +49,14 @@ export interface GatewayPayment {
 export interface GatewayRefund {
   id: string;
   amountMinor: number;
+  /** The PROVIDER's own status, verbatim — Razorpay sends 'processed',
+   * 'pending' or 'failed'. Never overwritten with ours: a refund to some
+   * instruments stays 'pending' for days, and reporting it as complete would
+   * tell a customer money had arrived that has not. */
   status: string;
+  /** Notes echoed back by the provider. Carries `refundRowId`, which is how a
+   * reconciliation identifies an attempt whose response we never received. */
+  notes?: Record<string, string>;
 }
 
 /**
@@ -77,6 +84,19 @@ export interface PaymentGateway {
     amountMinor: number;
     notes?: Record<string, string>;
   }): Promise<GatewayResult<'refund', GatewayRefund>>;
+  /**
+   * Every refund the provider holds against one payment.
+   *
+   * Exists for one reason: a refund request that times out is ambiguous. The
+   * money may have gone back. Retrying blindly could send it twice, and
+   * marking it failed could leave a real refund unrecorded. The only safe move
+   * is to ask the provider what it actually has — which is what this does.
+   *
+   * Matching is by the `refundRowId` we put in `notes` at request time, so a
+   * reconciliation can tell OUR orphaned attempt from an unrelated refund on
+   * the same payment.
+   */
+  listPaymentRefunds(paymentId: string): Promise<GatewayResult<'refunds', GatewayRefund[]>>;
 }
 
 /** Razorpay's payment states mapped onto Glamirk's payment vocabulary. */
@@ -180,12 +200,44 @@ const liveGateway: PaymentGateway = {
       headers: { Authorization: basicAuthHeader() },
       body: { amount: amountMinor, notes },
       timeoutMs: 20000,
-      attempts: 2,
+      // attempts: 1 — NOT 2. httpJson retries on a timeout or 5xx, and a
+      // refund POST that timed out may already have been accepted. A second
+      // attempt would send the money twice. An ambiguous single attempt is
+      // resolved by reconciliation (listPaymentRefunds), never by retrying.
+      attempts: 1,
     });
     if (!res.ok || !res.data?.id) {
       return { ok: false, error: res.error || 'Gateway did not confirm the refund.', retryable: res.retryable };
     }
-    return { ok: true, refund: { id: res.data.id, amountMinor: Number(res.data.amount), status: res.data.status } };
+    return {
+      ok: true,
+      refund: {
+        id: res.data.id,
+        amountMinor: Number(res.data.amount),
+        status: res.data.status,
+        notes: res.data.notes || undefined,
+      },
+    };
+  },
+
+  async listPaymentRefunds(paymentId) {
+    const res = await httpJson<any>(`${RAZORPAY_API}/payments/${encodeURIComponent(paymentId)}/refunds`, {
+      headers: { Authorization: basicAuthHeader() },
+      timeoutMs: 15000,
+      attempts: 3,
+    });
+    if (!res.ok || !Array.isArray(res.data?.items)) {
+      return { ok: false, error: res.error || 'Gateway did not return refunds.', retryable: res.retryable };
+    }
+    return {
+      ok: true,
+      refunds: res.data.items.map((item: any) => ({
+        id: item.id,
+        amountMinor: Number(item.amount),
+        status: item.status,
+        notes: item.notes || undefined,
+      })),
+    };
   },
 };
 
@@ -203,6 +255,7 @@ const liveGateway: PaymentGateway = {
  * depend on a shape that would change at go-live.
  */
 const mockPayments = new Map<string, GatewayPayment>();
+const mockRefunds = new Map<string, GatewayRefund[]>();
 const mockOrders = new Map<string, GatewayOrder>();
 
 function mockId(prefix: string): string {
@@ -211,8 +264,15 @@ function mockId(prefix: string): string {
 
 export const mockGateway: PaymentGateway & {
   /** Test seam: drives a mock payment to a chosen outcome, as the real
-   * gateway's hosted checkout would. */
-  simulatePayment(input: { gatewayOrderId: string; outcome: 'success' | 'failed'; method?: string }): GatewayPayment;
+   * gateway's hosted checkout would. 'pending' stands in for the states
+   * mapRazorpayStatus folds into PENDING — an unapproved UPI collect request,
+   * or an authorisation not yet captured. It is a distinct outcome from
+   * 'failed' because the two must not be handled the same way: a decline is
+   * final, a pending payment may still take the customer's money. */
+  simulatePayment(input: { gatewayOrderId: string; outcome: 'success' | 'failed' | 'pending'; method?: string }): GatewayPayment;
+  /** Refunds the mock provider believes it holds, including ones whose
+   * response the caller never received. */
+  listPaymentRefunds(paymentId: string): Promise<GatewayResult<'refunds', GatewayRefund[]>>;
   reset(): void;
 } = {
   name: 'razorpay-mock',
@@ -235,21 +295,47 @@ export const mockGateway: PaymentGateway & {
     return { ok: true, payment };
   },
 
-  async refund({ paymentId, amountMinor }) {
+  async refund({ paymentId, amountMinor, notes }) {
     const payment = mockPayments.get(paymentId);
     if (!payment) return { ok: false, error: 'No such payment.', retryable: false };
     if (payment.status !== 'PAID') return { ok: false, error: 'Only a captured payment can be refunded.', retryable: false };
-    return { ok: true, refund: { id: mockId('rfnd'), amountMinor, status: 'processed' } };
+
+    const refund: GatewayRefund = {
+      id: mockId('rfnd'),
+      amountMinor,
+      // Honours a requested provider-side state so the 'pending' branch is
+      // reachable: a real Razorpay refund to some instruments is not instant.
+      status: notes?.simulate === 'pending_refund' ? 'pending' : 'processed',
+      notes,
+    };
+    const list = mockRefunds.get(paymentId) || [];
+    list.push(refund);
+    mockRefunds.set(paymentId, list);
+
+    // The ambiguous case, and the whole reason listPaymentRefunds exists: the
+    // provider ACCEPTED the refund but the response never arrived. Recorded
+    // on the provider side, reported to us as a retryable transport failure —
+    // exactly what a real timeout looks like.
+    if (notes?.simulate === 'timeout') {
+      return { ok: false, error: 'Request timed out after 20000ms', retryable: true };
+    }
+    return { ok: true, refund };
+  },
+
+  async listPaymentRefunds(paymentId) {
+    if (!mockPayments.has(paymentId)) return { ok: false, error: 'No such payment.', retryable: false };
+    return { ok: true, refunds: [...(mockRefunds.get(paymentId) || [])] };
   },
 
   simulatePayment({ gatewayOrderId, outcome, method = 'upi' }) {
     const order = mockOrders.get(gatewayOrderId);
+    const status: PaymentStatus = outcome === 'success' ? 'PAID' : outcome === 'pending' ? 'PENDING' : 'FAILED';
     const payment: GatewayPayment = {
       id: mockId('pay'),
       orderId: gatewayOrderId,
       amountMinor: order?.amountMinor ?? 0,
       currency: order?.currency ?? 'INR',
-      status: outcome === 'success' ? 'PAID' : 'FAILED',
+      status,
       method,
       errorCode: outcome === 'failed' ? 'BAD_REQUEST_ERROR' : undefined,
       errorDescription: outcome === 'failed' ? 'Payment was declined by the issuing bank.' : undefined,
@@ -262,6 +348,7 @@ export const mockGateway: PaymentGateway & {
   reset() {
     mockPayments.clear();
     mockOrders.clear();
+    mockRefunds.clear();
   },
 };
 

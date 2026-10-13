@@ -135,21 +135,34 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         />
       </button>
 
+      {/* Try-on: a floating circular action in the opposite corner to the
+          wishlist, sharing its token vocabulary (gold border, white wash,
+          soft shadow, pink accent) so the two read as one pair rather than
+          two unrelated controls. It was a full-width bar across the foot of
+          the image, which covered the product at the exact moment a shopper
+          was looking at it.
+
+          Sized 40/44px rather than matching the wishlist's 26/32px: this one
+          is revealed on hover and sits over the artwork, so it needs a real
+          touch target. The wishlist is deliberately left as it is.
+
+          Visibility rules are unchanged — always shown on touch, revealed on
+          hover on desktop — with focus-visible added to both, because the
+          previous `sm:opacity-0` made the button invisible to a keyboard user
+          who had tabbed onto it. */}
       {viewMode === 'grid' && product.shades && product.enableTryOn !== false && (
-        <div className="absolute inset-x-2 bottom-2 z-10 flex opacity-100 transition-all duration-200 sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100">
-          <button
-            id={`tryon-btn-${product.id}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onTryItOn(product);
-            }}
-            className="flex w-full items-center justify-center gap-1 rounded-lg border border-[#E8D5A8] bg-white/95 px-2.5 py-2 text-[10px] font-bold text-[#F05A7E] shadow-sm transition-colors hover:bg-[#FCE8ED]"
-            title="Virtual Try-On"
-          >
-            <Sparkles className="h-3 w-3 text-[#F05A7E]" />
-            <span>Try On</span>
-          </button>
-        </div>
+        <button
+          id={`tryon-btn-${product.id}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTryItOn(product);
+          }}
+          className="absolute bottom-2 right-2 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-[#E8D5A8] bg-white/90 shadow-sm backdrop-blur-xs transition-all duration-200 hover:scale-110 hover:bg-white focus-visible:scale-110 focus-visible:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F05A7E] focus-visible:ring-offset-1 sm:h-11 sm:w-11 sm:translate-y-2 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100 sm:focus-visible:translate-y-0 sm:focus-visible:opacity-100"
+          title="Try on this product"
+          aria-label={`Try on ${product.name}`}
+        >
+          <Sparkles className="h-4 w-4 text-[#F05A7E] sm:h-5 sm:w-5" />
+        </button>
       )}
     </div>
   );

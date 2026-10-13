@@ -841,6 +841,36 @@ export const SHIPPING_TO_ORDER_STATUS: Partial<Record<ShippingStatus, OrderStatu
   RTO_DELIVERED: 'RTO',
 };
 
+/**
+ * One row of the admin-facing refund history (migration 017). Distinct from
+ * RefundRecord, which is the customer's return-driven view: this is the
+ * gateway-level record, including the provider's own refund id and the admin
+ * who authorised it.
+ */
+export interface RefundRecordDetail {
+  id: string;
+  /** Razorpay's refund handle. Absent while PENDING or after a FAILED attempt. */
+  providerRefundId?: string;
+  /** Rupees, converted at the edge so no UI ever divides by 100. */
+  amount: number;
+  /** 'PENDING' | 'PROCESSED' | 'FAILED' */
+  status: string;
+  reason?: string;
+  /** Admin id, or 'system' for the automatic refund on customer cancellation. */
+  createdBy?: string;
+  createdAt: string;
+}
+
+/** What the admin order panel needs to decide whether a refund is offerable,
+ * computed server-side so the button and refundOrderPayment cannot disagree. */
+export interface RefundSummary {
+  amountPaid: number;
+  amountRefunded: number;
+  refundable: number;
+  isCod: boolean;
+  canRefund: boolean;
+}
+
 export interface PaymentRecordDetail {
   id: string;
   orderId: string;

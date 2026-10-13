@@ -14,7 +14,7 @@ import { verifyWebhookSignature, fromMinorUnits } from '../services/payment.serv
 import {
   markOrderPaid,
   markOrderPaymentFailed,
-  recordRefund,
+  recordProviderRefund,
   restoreOrderStock,
   applyShippingStatus,
   recordTrackingEvents,
@@ -229,14 +229,24 @@ router.post('/webhooks/razorpay', rawJson, async (req: Request, res: Response) =
 
       case 'refund.created':
       case 'refund.processed': {
+        // Both event types describe the SAME refund, and Razorpay also sends
+        // them for refunds we issued ourselves. This used to apply the amount
+        // unconditionally on every delivery, so one ₹400 refund could be
+        // recorded three times. recordProviderRefund dedupes on the provider's
+        // own refund id, so whichever delivery arrives first applies it and
+        // the rest are no-ops.
         const refundMinor = Number(entity.amount) || 0;
-        await pool.query(
-          `UPDATE payments SET refunded_minor = LEAST(amount_minor, refunded_minor + $2), updated_at = now()
-           WHERE id = $1`,
-          [resolved.paymentRowId, refundMinor]
+        const applied = await recordProviderRefund({
+          orderId: resolved.orderId,
+          paymentRowId: resolved.paymentRowId,
+          providerRefundId: entity.id || null,
+          amountMinor: refundMinor,
+        });
+        await finishEvent(
+          claim.rowId,
+          'PROCESSED',
+          applied.applied ? undefined : 'Refund already recorded; no change applied'
         );
-        await recordRefund({ orderId: resolved.orderId, amount: fromMinorUnits(refundMinor) });
-        await finishEvent(claim.rowId, 'PROCESSED');
         return;
       }
 
@@ -575,10 +585,20 @@ export async function reconcileStuckWebhookEvents(): Promise<{ examined: number;
  */
 export async function expirePendingPaymentOrders(): Promise<number> {
   const stale = await pool.query(
-    `SELECT id FROM orders
-     WHERE status = 'PENDING_PAYMENT'
-       AND payment_status = 'PENDING'
-       AND created_at < now() - interval '30 minutes'
+    // Keyed on the LATEST payment attempt, not the order's creation time.
+    // With retry-payment, an order created 29 minutes ago can have an attempt
+    // opened seconds ago; sweeping on created_at alone would cancel it out
+    // from under a customer who is mid-payment, and a payment landing after
+    // that leaves a PAID order stuck CANCELLED with its stock released.
+    // COALESCE keeps the original behaviour for orders that never got a
+    // payment row at all.
+    `SELECT o.id FROM orders o
+     WHERE o.status = 'PENDING_PAYMENT'
+       AND o.payment_status = 'PENDING'
+       AND COALESCE(
+             (SELECT MAX(p.created_at) FROM payments p WHERE p.order_id = o.id),
+             o.created_at
+           ) < now() - interval '30 minutes'
      LIMIT 100`
   );
 

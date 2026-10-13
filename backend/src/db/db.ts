@@ -251,6 +251,12 @@ export function withStockLock<T>(fn: () => Promise<T>): Promise<T> {
 const SHIPMENT_ADVISORY_LOCK_NAMESPACE = 8421508;
 
 /**
+ * Namespace for per-order REFUND locks. Its own key so a refund never queues
+ * behind a shipment booking, or vice versa.
+ */
+const REFUND_ADVISORY_LOCK_NAMESPACE = 8421509;
+
+/**
  * Serialises courier booking for ONE order across every process.
  *
  * Unlike withStockLock this does not queue: a second caller for the same order
@@ -282,6 +288,48 @@ export async function withOrderShipmentLock<T>(
       // strand the lock and wedge every later attempt on this order.
       await client
         .query('SELECT pg_advisory_unlock($1::int, hashtext($2))', [SHIPMENT_ADVISORY_LOCK_NAMESPACE, orderId])
+        .catch(() => undefined);
+    }
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Serialises refunding for ONE order across every process.
+ *
+ * Same shape as withOrderShipmentLock, and for the same reason: this does NOT
+ * queue. A second caller for the same order is told the lock is busy and gives
+ * up. Queueing would be exactly wrong here — a refund is not a
+ * read-modify-write that must eventually run, it is a call that moves real
+ * money out, and "wait and then do it too" is how one order gets refunded
+ * twice. That was the live defect: two concurrent requests both read the same
+ * amount_refunded, both found the full amount available, and both called
+ * Razorpay.
+ *
+ * Keyed on the order id via hashtext(), so unrelated orders refund in
+ * parallel. Takes a dedicated client because an advisory lock belongs to the
+ * session — acquiring and releasing on two different pooled connections would
+ * release a lock this caller never held.
+ */
+export async function withOrderRefundLock<T>(
+  orderId: string,
+  fn: () => Promise<T>
+): Promise<{ acquired: boolean; value?: T }> {
+  const client = await pool.connect();
+  try {
+    const got = await client.query('SELECT pg_try_advisory_lock($1::int, hashtext($2)) AS acquired', [
+      REFUND_ADVISORY_LOCK_NAMESPACE,
+      orderId,
+    ]);
+    if (!got.rows[0]?.acquired) return { acquired: false };
+    try {
+      return { acquired: true, value: await fn() };
+    } finally {
+      // Best-effort, in a finally: a throw inside the critical section must not
+      // strand the lock and wedge every later refund on this order.
+      await client
+        .query('SELECT pg_advisory_unlock($1::int, hashtext($2))', [REFUND_ADVISORY_LOCK_NAMESPACE, orderId])
         .catch(() => undefined);
     }
   } finally {

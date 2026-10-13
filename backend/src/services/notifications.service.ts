@@ -92,3 +92,72 @@ export async function notifyAdminNewOrder(orderId: string, orderNumber: string, 
 export async function notifyAdminOrderDelivered(orderId: string, orderNumber: string): Promise<void> {
   await insertAdminNotification('ORDER_DELIVERED', 'Order Delivered', `Order #${orderNumber} has been delivered.`, orderId);
 }
+
+/**
+ * A prepaid order whose payment the gateway has actually confirmed.
+ *
+ * Separate from notifyAdminNewOrder because the two fire at different moments
+ * and mean different things. A COD order is real the instant it is placed, so
+ * the store is told at checkout. An online order at checkout is only a
+ * *request* to pay — it may never be paid, and alerting on it would fill the
+ * feed with orders that evaporate. So checkout stays silent for online
+ * (customer.routes.ts gates on isAwaitingPayment) and this fires instead, once
+ * the money is in.
+ *
+ * That gap was the bug: nothing fired at either point for a prepaid order, so
+ * with COD being every live order today the store simply never learned about
+ * an online sale.
+ */
+export async function notifyAdminOrderPaid(
+  orderId: string,
+  orderNumber: string,
+  customerName: string,
+  total: number
+): Promise<void> {
+  await insertAdminNotification(
+    'ORDER_PAID',
+    'Payment Received',
+    `${customerName || 'A customer'} paid ₹${total} for order #${orderNumber}.`,
+    orderId
+  );
+}
+
+/** Money confirmed back to the customer by the gateway. */
+export async function notifyAdminRefundIssued(
+  orderId: string,
+  orderNumber: string,
+  amount: number,
+  fullyRefunded: boolean
+): Promise<void> {
+  await insertAdminNotification(
+    'REFUND_ISSUED',
+    fullyRefunded ? 'Order Refunded' : 'Partial Refund Issued',
+    `₹${amount} refunded on order #${orderNumber}.`,
+    orderId
+  );
+}
+
+/**
+ * Tells the customer their money is on the way back.
+ *
+ * Deliberately not routed through RETURN_STATUS_NOTIFICATION's 'REFUNDED'
+ * entry: that one belongs to the return workflow and only fires when an admin
+ * moves a return request. A refund can happen with no return at all — a
+ * cancelled prepaid order is refunded directly — and before this, every one of
+ * those was silent.
+ */
+export async function notifyCustomerRefund(
+  userId: string,
+  orderId: string,
+  orderNumber: string,
+  amount: number,
+  fullyRefunded: boolean
+): Promise<void> {
+  await insertNotification(
+    userId,
+    'REFUND',
+    fullyRefunded ? 'Refund Issued' : 'Partial Refund Issued',
+    `₹${amount} has been refunded for order #${orderNumber}. It should reach your account in 5–7 working days.`,
+    orderId
+  );
+}

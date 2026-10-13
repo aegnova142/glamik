@@ -39,6 +39,28 @@ export function variantGalleryResetKey(product: Product, shade: Shade | undefine
   return `${product.id}:${shade?.id ?? 'default'}`;
 }
 
+/**
+ * The single image that stands for a chosen variant — cart line, bag row,
+ * checkout summary, order item.
+ *
+ * Deliberately the head of resolveVariantGallery rather than its own pass over
+ * `shade.images`. The gallery already decides what "first image" means: drop
+ * entries with no url, primary first, then sortOrder, and fall back to the
+ * product's own images when the shade has none. A second implementation of
+ * that — `images.find(isPrimary) || images[0]` — is the obvious shortcut and
+ * it was already in the checkout route, where it silently disagreed: it could
+ * return an entry whose url was empty, ignored sortOrder, and fell back only
+ * to `images.primary` instead of the product's full set.
+ *
+ * Returns '' when there is genuinely nothing to show. Callers pass it straight
+ * to ProductImage, which renders its own placeholder for an empty or dead URL.
+ * The url is handed back exactly as stored — no path is built here, so a
+ * Cloudinary, external or legacy relative URL all survive untouched.
+ */
+export function resolveVariantThumbnail(product: Product, shade: Shade | undefined): string {
+  return resolveVariantGallery(product, shade)[0]?.url ?? '';
+}
+
 export function getVariantPrice(product: Product, shade: Shade | undefined): number {
   return shade?.price ?? product.price;
 }

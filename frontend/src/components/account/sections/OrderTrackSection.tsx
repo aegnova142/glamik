@@ -89,7 +89,7 @@ export const OrderTrackSection: React.FC<OrderTrackSectionProps> = ({
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="font-serif text-lg text-[#121212]">#{orderNumber}</span>
-              <StatusBadge status={status} tone={orderStatusTone(status)} />
+              <StatusBadge status={ORDER_STATUS_LABEL[status] || status} tone={orderStatusTone(status)} />
             </div>
             <p className="text-[11.5px] text-[#6B6B6B] mt-1">
               {status === 'DELIVERED'

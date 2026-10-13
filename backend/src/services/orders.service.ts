@@ -11,6 +11,7 @@ import {
   OrderItem,
   OrderStatus,
   OrderTimelineEvent,
+  PaymentDetails,
   PaymentStatus,
   Product,
   ReturnRequest,
@@ -266,13 +267,42 @@ function assembleOrder(
   shipmentRow?: any
 ): Order {
   const createdAt = new Date(row.created_at).toISOString();
+
+  // ------------------------------------------------------------------
+  // payment_details is a snapshot written once, at order creation, and never
+  // re-written afterwards — the only later touch is a jsonb_set that patches
+  // `gatewayOrderId` (customer.routes.ts). Every real payment transition moves
+  // the `payment_status` COLUMN instead (markOrderPaid, markOrderPaymentFailed,
+  // recordRefund, the COD-on-delivery update).
+  //
+  // So the snapshot's `status` is frozen at 'PENDING' or 'COD_PENDING' for the
+  // life of the order, and six storefront surfaces read it — including the
+  // printed invoice and the confirmation screen, which told a customer who had
+  // just paid that the amount was still due.
+  //
+  // Reconciled here rather than by back-filling the JSONB: the column is
+  // already the single source of truth that every write path maintains, and
+  // rewriting stored rows to fix a display bug would mean a migration plus a
+  // second thing to keep in sync forever. Everything else in the snapshot —
+  // method, gatewayOrderId, any instrument metadata — is spread through
+  // untouched.
+  // ------------------------------------------------------------------
+  const persistedPaymentStatus = (row.payment_status || 'COD_PENDING') as PaymentStatus;
+  const paymentSnapshot: PaymentDetails = {
+    method: row.payment_method,
+    ...(row.payment_details || {}),
+    status: persistedPaymentStatus,
+  };
+
   return {
     refundStatus: furthestReturnStatus(returnRows),
     // The three lifecycles. payment_status has carried COD_PENDING/PAID since
     // migration 002 and now carries the wider vocabulary too; shipping_status
     // was backfilled for every pre-existing row by migration 011, so neither
     // needs a fallback for "old row" — only for a row read mid-migration.
-    paymentStatus: (row.payment_status || 'COD_PENDING') as PaymentStatus,
+    // Top-level and nested now come from the same resolved value, so the two
+    // can never disagree again.
+    paymentStatus: persistedPaymentStatus,
     shippingStatus: (row.shipping_status || 'NOT_SHIPPED') as ShippingStatus,
     amountPaid: Number(row.amount_paid) || 0,
     amountRefunded: Number(row.amount_refunded) || 0,
@@ -290,7 +320,7 @@ function assembleOrder(
     tax: 0,
     total: Number(row.total),
     deliveryAddress: row.shipping_address,
-    payment: row.payment_details || { method: row.payment_method, status: row.payment_status },
+    payment: paymentSnapshot,
     estimatedDelivery: new Date(new Date(row.created_at).getTime() + 5 * 24 * 60 * 60 * 1000).toISOString(),
     // Null until an admin attaches an AWB (PUT /api/admin/orders/:id/shipment).
     trackingNumber: row.tracking_number || undefined,

@@ -174,6 +174,16 @@ export function getDefaultShade(product: Product): Shade | undefined {
  * drop them back to 30g — and falls back to the new shade's first size when it
  * does not. Returns undefined when the new selection has no size dimension at
  * all, so a stale label can never survive onto a shade that has no sizes.
+ *
+ * With no current choice, a shade-less product's own `selectedSize` wins over
+ * the first label in the list. This used to hold only when the product had no
+ * size options to choose from — the one branch where honouring it is
+ * impossible anyway, since the label it returns is then not among the options.
+ * Wherever there WERE options it was ignored, and the two cleansers are
+ * modelled as separate products that each list ["30g", "50g"] while declaring
+ * via selectedSize which of the two they are. So the 50g product resolved to
+ * "30g": its page displayed "Size: 30g" next to the 50g price, and that label
+ * was what reached the cart line and the order item.
  */
 export function resolveSizeSelection(
   product: Product,
@@ -186,6 +196,14 @@ export function resolveSizeSelection(
     return shade ? undefined : product.selectedSize || (product.sizes ? product.sizes[0] : undefined);
   }
   if (previousLabel && options.some((o) => o.label === previousLabel)) return previousLabel;
+  // Only when no shade is in play: selectedSize describes the product's own
+  // size dimension, and a shade carrying its own sizes replaces that dimension
+  // rather than sitting alongside it. An unrelated product-level label is not
+  // among a shade's options, so it is ignored there either way — this says so
+  // outright instead of relying on the lookup to miss.
+  if (!shade && product.selectedSize && options.some((o) => o.label === product.selectedSize)) {
+    return product.selectedSize;
+  }
   return options[0].label;
 }
 

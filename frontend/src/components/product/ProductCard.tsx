@@ -1,8 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Heart, Sparkles, ShoppingBag, Star, Check, ShieldCheck } from 'lucide-react';
 import { Product, Shade, CartItem } from '@glamirk/shared/types';
 import { ProductImage } from './ProductImage';
-import { isProductSellable, LOW_STOCK_THRESHOLD } from '@glamirk/shared/utils/productVariant';
+import {
+  isProductSellable,
+  LOW_STOCK_THRESHOLD,
+  resolveVariantGallery,
+  summarizeShade,
+  getDiscountPercent,
+  getDefaultShade,
+  getCurrentStock,
+  resolveSizeSelection,
+  selectableShades,
+} from '@glamirk/shared/utils/productVariant';
 
 interface ProductCardProps {
   product: Product;
@@ -44,12 +54,30 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onGoToCart,
   onBuyNow,
 }) => {
-  const [selectedShade, setSelectedShade] = useState<Shade | undefined>(
-    product.shades ? product.shades[0] : undefined
-  );
+  // getDefaultShade, not shades[0] — the first shade may be paused, and
+  // preselecting one the server will refuse to sell is how this card ended up
+  // offering an Add to Cart that could only fail.
+  const [selectedShade, setSelectedShade] = useState<Shade | undefined>(getDefaultShade(product));
   const [isHovered, setIsHovered] = useState(false);
 
-  const resolvedSize = product.selectedSize || (product.sizes ? product.sizes[0] : undefined);
+  // The size this card will actually add.
+  //
+  // This used to read product.sizes alone, which is blind to the per-shade
+  // sizes a variant carries: for a shade sold in 3ml and 6ml it resolved to
+  // undefined, so Add to Cart posted no size and the server rejected the whole
+  // request ("Please select a size for … before adding to bag"). The listing
+  // card's Add to Cart simply did not work for any product whose shades carry
+  // sizes.
+  //
+  // resolveSizeSelection is the same function the product page resolves its
+  // own default with, so the card and the page agree on what "this product,
+  // this shade" means — which is also what lets the already-in-cart check
+  // below match a line the page created. Honouring the product's own
+  // selectedSize is that function's job, not this one's.
+  const resolvedSize = useMemo(
+    () => resolveSizeSelection(product, selectedShade, undefined),
+    [product, selectedShade]
+  );
   // "Already in cart" means this exact product+shade+size combo — a
   // different shade of the same product is a different line item, so it
   // should still read as addable rather than already-in-cart.
@@ -70,26 +98,86 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     onBuyNow(product, selectedShade, resolvedSize);
   };
 
-  const displayImage = isHovered && product.images.secondary
-    ? product.images.secondary
-    : product.images.primary;
+  // The card shows the shade the shopper has picked, not a fixed product shot
+  // — clicking a swatch repaints the image the same way the product page does.
+  //
+  // resolveVariantGallery is what makes that a one-liner rather than a second
+  // rule: it already returns the shade's own images (primary first, then
+  // sortOrder) and falls back to the product's set when the shade has none. So
+  // a shade with no gallery of its own, and every product with no shades at
+  // all, render exactly what they rendered before — the fallback's first two
+  // entries ARE images.primary and images.secondary, in that order.
+  //
+  // Hover keeps its meaning of "show me the next picture", which for a shade
+  // with its own gallery is that shade's second image rather than the
+  // product's. A single-image shade simply has nothing to swap to and holds
+  // still, which is the same thing a product with no secondary image does.
+  // Memoised on [product, selectedShade] so that hovering — which toggles
+  // isHovered and re-renders the whole card — only re-picks which of the two
+  // already-resolved images to show, instead of rebuilding the gallery.
+  const galleryImages = useMemo(
+    () => resolveVariantGallery(product, selectedShade),
+    [product, selectedShade]
+  );
+  const displayImage = (isHovered && galleryImages[1]) || galleryImages[0];
 
-  const discountPercent =
-    product.originalPrice && product.originalPrice > product.price
-      ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
-      : 0;
+  // Price follows the selected shade, the same way the image above does — a
+  // card that repaints to a shade but keeps quoting the product's base price
+  // contradicts the product page the swatch leads to.
+  //
+  // For a shade sold in several sizes the card states its STARTING price: one
+  // card has room for one number, and a shade available in 3ml and 6ml has
+  // two. summarizeShade is what already resolves that, and the reason to go
+  // through it rather than min() here is the compare-at — it takes the
+  // strike-through from whichever unit set the starting price, so the two
+  // numbers always describe the same jar instead of advertising a saving that
+  // no single purchase can produce.
+  //
+  // A product with no shades is deliberately untouched and keeps quoting its
+  // own price exactly as before.
+  //
+  // Memoised because summarizeShade walks enumerateStockUnits(product), which
+  // expands EVERY shade and size of the product before discarding all but this
+  // one shade's units. The live catalog has a 50-shade product; unmemoised,
+  // every mouseenter and mouseleave on its card paid for that full expansion
+  // to recompute a price that cannot have changed.
+  const shadeSummary = useMemo(
+    () => (selectedShade ? summarizeShade(product, selectedShade) : undefined),
+    [product, selectedShade]
+  );
+  const displayPrice = shadeSummary ? shadeSummary.startingPrice : product.price;
+  const displayCompareAtPrice = shadeSummary ? shadeSummary.startingCompareAtPrice : product.originalPrice;
+  // Derived, never stored — and null rather than a negative for a compare-at
+  // at or below the price, which the inline arithmetic this replaces turned
+  // into a wrong badge instead of no badge.
+  const discountPercent = getDiscountPercent(displayPrice, displayCompareAtPrice) ?? 0;
 
   // Availability is resolved across every sellable unit, not from the
   // product-level pool alone: a shaded product whose pool has drained is
   // still buyable while its shades have stock, and must not be greyed out.
-  const sellable = isProductSellable(product);
+  // A second full enumerateStockUnits pass, for the same reason as above.
+  const sellable = useMemo(() => isProductSellable(product), [product]);
+  // …but the button adds ONE unit, so it answers the narrower question: is the
+  // shade and size this card has selected in stock? Without this, picking a
+  // sold-out shade of an otherwise healthy product left an enabled button
+  // whose only outcome was "Only 0 available" from the server. The product
+  // page already gates its own Add to Bag this way.
+  const selectedUnitStock = useMemo(
+    () => getCurrentStock(product, selectedShade, resolvedSize),
+    [product, selectedShade, resolvedSize]
+  );
+  const canAddSelectedUnit = sellable && selectedUnitStock > 0;
   const isLowStock = sellable && typeof product.stock === 'number' && product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD;
 
   const ImageArea = (
     <div className={`relative shrink-0 overflow-hidden rounded-lg bg-[#FCE8ED] ${viewMode === 'list' ? 'aspect-square w-28 sm:w-40' : 'aspect-[4/3] w-full'}`}>
       <ProductImage
-        src={displayImage}
-        alt={product.name}
+        src={displayImage?.url}
+        // Names the shade when the picture is of a shade, so a screen reader
+        // hears which one is on screen rather than the product name repeated
+        // for every swatch. Falls back to the product name, which is what the
+        // gallery's own alt resolves to for an unshaded product anyway.
+        alt={displayImage?.alt || product.name}
         loading="lazy"
         // A card is at most half the viewport on a phone and roughly a
         // quarter of it on desktop, where the grid is 3-4 across. Telling the
@@ -175,27 +263,50 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     </div>
   );
 
-  const ShadeRow = product.shades && product.shades.length > 0 && (
+  // Only shades a customer may actually pick. The row used to render
+  // product.shades directly, so a paused shade appeared here as a swatch while
+  // the product page correctly hid it — and selecting one produced an Add to
+  // Cart the server answered with "… is no longer available". selectableShades
+  // is the same rule the page's selector and the cart endpoint both read, so a
+  // swatch shown here can always be bought.
+  // Resolved once per product rather than per render, and the sold-out flag is
+  // computed here too — it ran resolveSizeSelection + getCurrentStock for each
+  // of the six visible swatches on every hover.
+  const visibleShades = useMemo(() => {
+    return selectableShades(product)
+      .slice(0, 7)
+      .map((shade) => ({
+        shade,
+        soldOut: getCurrentStock(product, shade, resolveSizeSelection(product, shade, undefined)) <= 0,
+      }));
+  }, [product]);
+  const totalSelectableShades = useMemo(() => selectableShades(product).length, [product]);
+
+  const ShadeRow = visibleShades.length > 0 && (
     <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
-      {product.shades.slice(0, 6).map((shade) => (
-        <button
-          key={shade.id}
-          onClick={(e) => {
-            e.stopPropagation();
-            setSelectedShade(shade);
-          }}
-          className={`h-3.5 w-3.5 rounded-full border transition-all duration-150 ${
-            selectedShade?.id === shade.id
-              ? 'border-[#F05A7E] scale-125 ring-2 ring-[#F05A7E]/25'
-              : 'border-[#0B0B0B]/15 hover:scale-110'
-          }`}
-          style={{ backgroundColor: shade.hex }}
-          title={`${shade.name} (${shade.undertone} undertone)`}
-          aria-label={`Select shade ${shade.name}`}
-        />
-      ))}
-      {product.shades.length > 6 && (
-        <span className="text-[10px] font-medium text-[#6B6B6B]">+{product.shades.length - 6}</span>
+      {visibleShades.slice(0, 6).map(({ shade, soldOut }) => {
+        return (
+          <button
+            key={shade.id}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedShade(shade);
+            }}
+            className={`h-3.5 w-3.5 rounded-full border transition-all duration-150 ${
+              selectedShade?.id === shade.id
+                ? 'border-[#F05A7E] scale-125 ring-2 ring-[#F05A7E]/25'
+                : 'border-[#0B0B0B]/15 hover:scale-110'
+            } ${soldOut ? 'opacity-40' : ''}`}
+            style={{ backgroundColor: shade.hex }}
+            title={`${shade.name} (${shade.undertone} undertone)${soldOut ? ' — out of stock' : ''}`}
+            // Sold-out is in the label rather than only in the dimming, so it
+            // reaches a screen reader too. Matches the product page's swatches.
+            aria-label={`Select shade ${shade.name}${soldOut ? ', out of stock' : ''}`}
+          />
+        );
+      })}
+      {totalSelectableShades > 6 && (
+        <span className="text-[10px] font-medium text-[#6B6B6B]">+{totalSelectableShades - 6}</span>
       )}
     </div>
   );
@@ -203,12 +314,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const PriceRow = (
     <div className={`flex items-center gap-2.5 ${viewMode === 'list' ? '' : 'flex-wrap'}`}>
       <span className="text-base font-bold text-[#121212] sm:text-lg">
-        {product.currency}{product.price}
+        {product.currency}{displayPrice}
       </span>
       {discountPercent > 0 && (
         <>
           <span className="text-xs text-[#6B6B6B] line-through">
-            {product.currency}{product.originalPrice}
+            {product.currency}{displayCompareAtPrice}
           </span>
           <span className="text-[10.5px] font-bold text-[#F05A7E]">{discountPercent}% OFF</span>
         </>
@@ -216,37 +327,40 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     </div>
   );
 
+  // isInCart is checked BEFORE stock: a line already in the bag stays
+  // reachable even if that shade has since sold out — "Go to Cart" navigates
+  // rather than adding, so there is nothing for stock to refuse.
   const AddToCartButton = (
     <button
       id={`quickadd-btn-${product.id}`}
-      disabled={!sellable}
+      disabled={!isInCart && !canAddSelectedUnit}
       onClick={
-        !sellable
-          ? undefined
-          : isInCart
+        isInCart
           ? (e) => {
               e.stopPropagation();
               onGoToCart();
             }
-          : handleAddToCartClick
+          : canAddSelectedUnit
+          ? handleAddToCartClick
+          : undefined
       }
       className={`flex items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold shadow-sm transition-all active:scale-95 ${
-        !sellable
-          ? 'cursor-not-allowed bg-[#E8D5A8]/50 text-[#6B6B6B]'
-          : isInCart
+        isInCart
           ? 'cursor-pointer border border-[#0B0B0B] bg-white text-[#121212] hover:bg-[#FAF9F6]'
+          : !canAddSelectedUnit
+          ? 'cursor-not-allowed bg-[#E8D5A8]/50 text-[#6B6B6B]'
           : 'cursor-pointer bg-[#F05A7E] text-white hover:bg-[#e0496c]'
       } ${viewMode === 'list' ? 'w-full sm:w-auto sm:flex-1' : 'flex-1'}`}
     >
-      {!sellable ? (
-        <>
-          <ShoppingBag className="h-3.5 w-3.5" />
-          <span>Out of Stock</span>
-        </>
-      ) : isInCart ? (
+      {isInCart ? (
         <>
           <Check className="h-3.5 w-3.5" />
           <span>Go to Cart</span>
+        </>
+      ) : !canAddSelectedUnit ? (
+        <>
+          <ShoppingBag className="h-3.5 w-3.5" />
+          <span>Out of Stock</span>
         </>
       ) : (
         <>
@@ -260,7 +374,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const BuyNowButton = (
     <button
       id={`buynow-btn-${product.id}`}
-      disabled={!sellable}
+      // Buy Now adds the same unit as Add to Cart and then jumps to checkout,
+      // so it has to answer the same question — gating it on the product alone
+      // let a sold-out shade reach the server and fail there instead.
+      disabled={!canAddSelectedUnit}
       onClick={handleBuyNowClick}
       className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E8D5A8] bg-white px-3.5 py-2 text-xs font-bold uppercase tracking-wide text-[#121212] shadow-sm transition-all hover:border-[#F05A7E] hover:bg-[#FCE8ED] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#E8D5A8] disabled:hover:bg-white"
     >

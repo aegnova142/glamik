@@ -466,8 +466,22 @@ section('SIZE RESET — switching shades');
     })()
   );
 
+  // The fixture sets selectedSize to the SECOND label on purpose: "its own
+  // default size" is only a meaningful claim when that differs from the first
+  // one in the list. This asserted '30g' — the first label — which contradicted
+  // the name and froze the live defect in place: the 50g cleanser's page
+  // displayed "Size: 30g" beside the 50g price, and shipped that label onto
+  // the cart line and the order item.
   const jar = baseProduct({ shades: undefined, sizes: ['30g', '50g'], selectedSize: '50g' });
-  check('a shade-less product keeps its own default size', resolveSizeSelection(jar, undefined, undefined) === '30g');
+  check('a shade-less product keeps its own default size', resolveSizeSelection(jar, undefined, undefined) === '50g');
+  check(
+    'and a current choice still beats that default',
+    resolveSizeSelection(jar, undefined, '30g') === '30g'
+  );
+  check(
+    'a product-level default is ignored for a shade carrying its own sizes',
+    resolveSizeSelection({ ...catalogProduct(), selectedSize: '50g' }, ceremonial, undefined) === '30g'
+  );
 }
 
 // ==========================================

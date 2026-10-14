@@ -35,9 +35,10 @@ export const ProductStory: React.FC<ProductStoryProps> = ({ product, selectedSha
     // Products often reuse one file for several slots; show each picture once.
   ].filter((img, i, all) => !!img.src && all.findIndex((o) => o.src === img.src) === i);
 
-  // The selected shade's own description already sits under the swatches in
-  // the purchase panel, so the story uses the product description only.
-  const hasStory = !!product.description;
+  // The selected colour's full description (admin: Colour Description) leads
+  // the story; the swatch box above shows only its short line.
+  const shadeStory = selectedShade?.description?.trim() || '';
+  const hasStory = !!product.description || !!shadeStory;
   if (benefits.length === 0 && !hasStory && highlights.length === 0) return null;
 
   return (
@@ -71,6 +72,9 @@ export const ProductStory: React.FC<ProductStoryProps> = ({ product, selectedSha
             {selectedShade ? selectedShade.name : product.name}
           </h2>
           <div className="mt-2.5 space-y-2 max-w-[62ch] text-[13px] sm:text-[14px] leading-relaxed text-[#4A4642]">
+            {/* The selected colour's own description first — it changes as
+                the customer picks another colour. Line breaks are kept. */}
+            {shadeStory && <p className="whitespace-pre-line text-[#121212]">{shadeStory}</p>}
             {product.description && <p>{product.description}</p>}
           </div>
 

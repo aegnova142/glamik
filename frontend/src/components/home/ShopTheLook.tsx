@@ -18,11 +18,11 @@ export const ShopTheLook: React.FC<ShopTheLookProps> = ({ onSelectLook }) => {
   const visibleLooks = showAll ? displayLooks : displayLooks.slice(0, CARDS_PER_ROW);
   const hasMore = displayLooks.length > CARDS_PER_ROW;
   return (
-    <section id="shop-the-look" className="py-16 sm:py-24 bg-white border-b border-[#E8D5A8]">
+    <section id="shop-the-look" className="home-section bg-white border-b border-[#E8D5A8]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
-        <div className="text-center max-w-2xl mx-auto mb-12 sm:mb-16 space-y-2.5">
+        <div className="home-section-header text-center max-w-2xl mx-auto space-y-2.5">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#FCE8ED] border border-[#E8D5A8] rounded-full">
             <Sparkles className="w-3.5 h-3.5 text-[#F05A7E]" />
             <span className="text-[10.5px] font-bold tracking-wider uppercase text-[#F05A7E]">

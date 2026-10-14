@@ -996,7 +996,10 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#121212] font-sans antialiased selection:bg-[#C9972B] selection:text-white relative">
+    <div className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#121212] font-sans antialiased selection:bg-[#C9972B] selection:text-white relative pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
+      {/* pb on mobile = the fixed MobileBottomNav (h-16 + safe area), so the end of
+          the footer is never hidden behind it. It used to sit on <main> instead,
+          which left an 80px blank band above the footer and none below it. */}
 
       {/* Offline Connectivity Resilience Banner */}
       <OfflineBanner />
@@ -1058,7 +1061,7 @@ function AppContent() {
       />
 
       {/* Main Dynamic View Routing */}
-      <main className="flex-grow pb-20 md:pb-0">
+      <main className="flex-grow">
         
         {/* VIEW 1: HOMEPAGE */}
         {currentRoute.page === 'home' && (
@@ -1210,6 +1213,17 @@ function AppContent() {
             onOpenShadeFinder={navigateToFindMyShade}
             wishlist={wishlist}
             onToggleWishlist={handleToggleWishlist}
+            onNavigate={(url) => {
+              // Site paths go through the router (no reload); full URLs open
+              // in a new tab. Both are validated as safe before they get here.
+              if (url.startsWith('/')) {
+                const q = url.indexOf('?');
+                setCurrentRoute(pathToRoute(q === -1 ? url : url.slice(0, q), q === -1 ? '' : url.slice(q)));
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              } else {
+                window.open(url, '_blank', 'noopener,noreferrer');
+              }
+            }}
           />
         )}
 

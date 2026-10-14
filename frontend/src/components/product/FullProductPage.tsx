@@ -225,6 +225,7 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
               resetKey={galleryResetKey}
               productName={product.name}
               tag={product.tag}
+              videos={product.videos}
             />
             {/* Fills what was a blank column under the gallery on desktop.
                 Below lg it renders inside the panel instead (see below), so

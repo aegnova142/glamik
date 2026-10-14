@@ -11,6 +11,7 @@ import {
   withStockLock,
   StoredUser,
   JWT_SECRET,
+  InternalCMSDatabaseSchema,
 } from '../db/db';
 import {
   ORDER_STATUS_SEQUENCE,
@@ -93,8 +94,13 @@ import {
   UploadedAsset,
 } from '../services/media.service';
 import { findBrokenShadeImageUrls } from '@glamirk/shared/utils/shadeMatch';
-import { validateProductVariants } from '@glamirk/shared/utils/productValidation';
+import { validateProductVariants, validateProductVideos } from '@glamirk/shared/utils/productValidation';
 import { isHomeBannerLive, validateHomeBannerConfig } from '@glamirk/shared/utils/homeBanners';
+import {
+  DEFAULT_LIVE_PRIVILEGES_POPUP,
+  normalizeLivePrivilegesConfig,
+  validateLivePrivilegesConfig,
+} from '@glamirk/shared/utils/livePrivilegesPopup';
 import { env } from '../config/env';
 import { requireAdmin, AuthenticatedRequest } from '../middleware/requireAdmin';
 import {
@@ -325,6 +331,9 @@ router.get('/cms/content', async (req: Request, res: Response) => {
       intervalMs: db.homeBanners?.intervalMs,
       banners: (db.homeBanners?.banners || []).filter((b) => isHomeBannerLive(b)),
     },
+    // Live Privileges popup: the PUBLISHED config only — the admin's draft
+    // never leaves the server on this route. Never configured = defaults.
+    livePrivilegesPopup: db.livePrivilegesPopup?.published ?? DEFAULT_LIVE_PRIVILEGES_POPUP,
     shadeFinderTeaser: db.shadeFinderTeaser,
     // [Glamik CMS] 2026-10-03 — expose Personalized Beauty + Shop mega-menu to
     // the storefront (active-only, sorted) alongside the existing sections.
@@ -1572,6 +1581,8 @@ function validateProduct(product: Partial<Product>): string | null {
   // two can never drift into disagreeing about what is saveable.
   const variantError = validateProductVariants(product);
   if (variantError) return variantError;
+  const videoError = validateProductVideos(product);
+  if (videoError) return videoError;
 
   if ((product.benefits || []).some((b) => !b || !b.trim())) {
     return 'Benefit text cannot be empty.';
@@ -2295,6 +2306,92 @@ router.put('/admin/promo-banners', requireAdmin, async (req: AuthenticatedReques
   broadcastEvent('CMS_UPDATE', 'promoBanners', db.promoBanners);
 
   res.json(db.promoBanners);
+});
+
+// --- Live Privileges popup (Shop the Look) ---
+// Draft/publish: admins edit `draft`; customers only ever see `published`
+// (served by /cms/content above). Coupon rules are NOT stored here — each
+// card links to a real offer by id, so checkout and the popup always agree.
+
+function livePrivilegesAdminView(db: InternalCMSDatabaseSchema) {
+  const state = db.livePrivilegesPopup;
+  return {
+    draft: state?.draft ?? state?.published ?? DEFAULT_LIVE_PRIVILEGES_POPUP,
+    published: state?.published ?? null,
+    publishedAt: state?.publishedAt ?? null,
+    updatedAt: state?.updatedAt ?? null,
+    updatedBy: state?.updatedBy ?? null,
+  };
+}
+
+function parseLivePrivilegesBody(body: unknown, db: InternalCMSDatabaseSchema) {
+  const errors = validateLivePrivilegesConfig(body);
+  if (errors.length) return { errors };
+  const config = normalizeLivePrivilegesConfig(body);
+  // Each card must point at an offer that exists (it may be inactive — the
+  // storefront hides those — but a dangling id is a client bug).
+  const known = new Set((db.offers || []).map((o) => o.id));
+  const missing = config.offers.filter((o) => !known.has(o.offerId)).map((o) => o.offerId);
+  if (missing.length) return { errors: [`Unknown offer(s): ${missing.join(', ')}`] };
+  return { config };
+}
+
+router.get('/admin/live-privileges', requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  res.json(livePrivilegesAdminView(db));
+});
+
+router.put('/admin/live-privileges/draft', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const parsed = parseLivePrivilegesBody(req.body, db);
+  if (!parsed.config) {
+    return res.status(400).json({ error: `Draft was not saved. ${parsed.errors.join(' · ')}`, details: parsed.errors });
+  }
+  db.livePrivilegesPopup = {
+    ...(db.livePrivilegesPopup || { published: null }),
+    draft: parsed.config,
+    updatedAt: new Date().toISOString(),
+    updatedBy: req.user?.email,
+  };
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_LIVE_PRIVILEGES_DRAFT', 'LIVE_PRIVILEGES', 'live-privileges', 'Live Privileges popup draft saved');
+  res.json(livePrivilegesAdminView(db));
+});
+
+// Publishes the submitted config (which also becomes the draft), so "Publish"
+// never ships something other than what the admin is looking at.
+router.post('/admin/live-privileges/publish', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const parsed = parseLivePrivilegesBody(req.body, db);
+  if (!parsed.config) {
+    return res.status(400).json({ error: `Nothing was published. ${parsed.errors.join(' · ')}`, details: parsed.errors });
+  }
+  const now = new Date().toISOString();
+  db.livePrivilegesPopup = {
+    draft: parsed.config,
+    published: parsed.config,
+    publishedAt: now,
+    updatedAt: now,
+    updatedBy: req.user?.email,
+  };
+  await saveDatabase(db);
+  await logAudit(req, 'PUBLISH_LIVE_PRIVILEGES', 'LIVE_PRIVILEGES', 'live-privileges', 'Live Privileges popup published');
+  broadcastEvent('CMS_UPDATE', 'livePrivilegesPopup', parsed.config);
+  res.json(livePrivilegesAdminView(db));
+});
+
+router.post('/admin/live-privileges/discard', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  db.livePrivilegesPopup = {
+    published: db.livePrivilegesPopup?.published ?? null,
+    publishedAt: db.livePrivilegesPopup?.publishedAt,
+    draft: db.livePrivilegesPopup?.published ?? DEFAULT_LIVE_PRIVILEGES_POPUP,
+    updatedAt: new Date().toISOString(),
+    updatedBy: req.user?.email,
+  };
+  await saveDatabase(db);
+  await logAudit(req, 'DISCARD_LIVE_PRIVILEGES_DRAFT', 'LIVE_PRIVILEGES', 'live-privileges', 'Live Privileges popup draft discarded');
+  res.json(livePrivilegesAdminView(db));
 });
 
 // --- Homepage Banner Carousel (inline, above the hero) ---

@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* Components shared with the other app (e.g. LivePrivilegesPopupView) live
+   outside this package; scan them so their utility classes are generated. */
+@source "../../shared/src";
 
 @layer base {
   :root {
@@ -401,4 +404,19 @@
 
 @media (prefers-reduced-motion: reduce) {
   .stl-filter, .stl-cta, .stl-cta .stl-cta-arrow { transition: none; }
+}
+
+/* ------------------------------------------------------------------
+   Homepage section rhythm. Every section pads both edges, so two
+   neighbours meet with twice this value around their 1px divider:
+   64px on phones, 72px at sm, 80px from lg. Sections used to carry
+   py-16/py-20/py-24 each, which stacked to 160-190px of blank space.
+   ------------------------------------------------------------------ */
+@layer components {
+  .home-section { padding-block: 2rem; }
+  @media (min-width: 40rem) { .home-section { padding-block: 2.25rem; } }
+  @media (min-width: 64rem) { .home-section { padding-block: 2.5rem; } }
+  /* Section heading block to its cards/content. */
+  .home-section-header { margin-bottom: 1.5rem; }
+  @media (min-width: 40rem) { .home-section-header { margin-bottom: 2rem; } }
 }

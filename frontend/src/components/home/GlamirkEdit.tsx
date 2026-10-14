@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { GLAMIRK_PRODUCTS } from '@glamirk/shared/data/products';
 import { ProductCard } from '../product/ProductCard';
 import { Product, Shade, CartItem } from '@glamirk/shared/types';
-import { ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 
 interface GlamirkEditProps {
@@ -34,8 +34,10 @@ export const GlamirkEdit: React.FC<GlamirkEditProps> = ({
   const sourceProducts = bestSellers.length >= 3 ? bestSellers : allProducts;
 
   const [activeCategory, setActiveCategory] = useState<'ALL' | 'MAKEUP' | 'SKIN'>('ALL');
-  const [showAll, setShowAll] = useState(false);
-  const CARDS_PER_ROW = 3;
+  // Every product in the result set is shown as a real card, up to two full
+  // desktop rows. A "View More (n)" toggle used to hide everything past the
+  // third card — with a four-product catalogue that buried one product.
+  const MAX_CARDS = 8;
 
   const filteredProducts = sourceProducts.filter((product) => {
     if (activeCategory === 'ALL') return true;
@@ -44,15 +46,15 @@ export const GlamirkEdit: React.FC<GlamirkEditProps> = ({
     return true;
   });
 
-  const visibleProducts = showAll ? filteredProducts : filteredProducts.slice(0, CARDS_PER_ROW);
-  const hasMore = filteredProducts.length > CARDS_PER_ROW;
+  const visibleProducts = filteredProducts.slice(0, MAX_CARDS);
+  const hasMore = filteredProducts.length > MAX_CARDS;
 
   return (
-    <section id="the-glamirk-edit" className="py-16 sm:py-24 bg-[#FCE8ED]/40 border-b border-[#E8D5A8]">
+    <section id="the-glamirk-edit" className="home-section bg-[#FCE8ED]/40 border-b border-[#E8D5A8]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 sm:mb-14 gap-6">
+        <div className="home-section-header flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="space-y-2.5 max-w-2xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#FCE8ED] border border-[#E8D5A8] rounded-full">
               <span className="w-2 h-2 rounded-full bg-[#F05A7E]"></span>
@@ -74,10 +76,7 @@ export const GlamirkEdit: React.FC<GlamirkEditProps> = ({
               {(['ALL', 'MAKEUP', 'SKIN'] as const).map((cat) => (
                 <button
                   key={cat}
-                  onClick={() => {
-                    setActiveCategory(cat);
-                    setShowAll(false);
-                  }}
+                  onClick={() => setActiveCategory(cat)}
                   className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all cursor-pointer ${
                     activeCategory === cat
                       ? 'bg-[#F05A7E] text-white shadow-xs'
@@ -102,7 +101,9 @@ export const GlamirkEdit: React.FC<GlamirkEditProps> = ({
         </div>
 
         {/* Product Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[30px]">
+        {/* 4 across on wide desktop; 2 below that, so four products form a
+            clean 2×2 instead of a row of three and an orphan. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 xl:gap-[30px]">
           {visibleProducts.map((product) => (
             <ProductCard
               key={product.id}
@@ -119,14 +120,15 @@ export const GlamirkEdit: React.FC<GlamirkEditProps> = ({
           ))}
         </div>
 
-        {hasMore && (
+        {/* Only when a category outgrows two rows: the rest live in the Shop. */}
+        {hasMore && onExploreShop && (
           <div className="flex justify-end mt-6">
             <button
-              onClick={() => setShowAll((prev) => !prev)}
-              className="flex items-center gap-1.5 px-5 py-2.5 border border-[#E8D5A8] rounded-full text-xs font-semibold text-[#121212] hover:border-[#F05A7E] hover:text-[#F05A7E] transition-colors bg-white"
+              onClick={onExploreShop}
+              className="flex items-center gap-1.5 px-5 py-2.5 border border-[#E8D5A8] rounded-full text-xs font-semibold text-[#121212] hover:border-[#F05A7E] hover:text-[#F05A7E] transition-colors bg-white cursor-pointer"
             >
-              <span>{showAll ? 'View Less' : `View More (${filteredProducts.length - CARDS_PER_ROW})`}</span>
-              {showAll ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              <span>View all {filteredProducts.length} in Shop</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         )}

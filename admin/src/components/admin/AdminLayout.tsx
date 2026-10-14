@@ -48,6 +48,7 @@ import { AdminOffers } from './AdminOffers';
 import { AdminPromoBanners } from './AdminPromoBanners';
 import { AdminHomeBanners } from './AdminHomeBanners';
 import { AdminWishlistBanner } from './AdminWishlistBanner';
+import { AdminLivePrivileges } from './AdminLivePrivileges';
 import { AdminNavigation } from './AdminNavigation';
 import { AdminFooter } from './AdminFooter';
 import { AdminBlog } from './AdminBlog';
@@ -79,6 +80,7 @@ type AdminTab =
   | 'categories'
   | 'tryOnModels'
   | 'offers'
+  | 'livePrivileges'
   | 'homeBanners'
   | 'promoBanners'
   | 'wishlistBanner'
@@ -122,6 +124,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         { id: 'personalizedBeauty', label: 'Personalized Beauty (Home)', icon: Sparkles },
         { id: 'shopMegaMenu', label: 'Shop Mega-Menu', icon: Layers },
         { id: 'looks', label: 'Shop The Look', icon: Sparkles },
+        { id: 'livePrivileges', label: 'Live Privileges Popup', icon: Tag },
         { id: 'wishlistBanner', label: 'Wishlist Banner', icon: Heart },
         { id: 'blog', label: 'Journal & Guides', icon: BookOpen },
         { id: 'pages', label: 'Pages & Sections Builder', icon: FileText },
@@ -363,6 +366,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
             {activeTab === 'promoBanners' && <AdminPromoBanners />}
             {activeTab === 'homeBanners' && <AdminHomeBanners />}
             {activeTab === 'wishlistBanner' && <AdminWishlistBanner />}
+            {activeTab === 'livePrivileges' && <AdminLivePrivileges onOpenOffers={() => setActiveTab('offers')} />}
             {activeTab === 'navigation' && <AdminNavigation />}
             {activeTab === 'footer' && <AdminFooter />}
             {activeTab === 'blog' && <AdminBlog />}

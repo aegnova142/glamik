@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { GLAMIRK_LOOKS } from '@glamirk/shared/data/looks';
 import { GLAMIRK_PRODUCTS } from '@glamirk/shared/data/products';
 import { CMSOffer, Look, Product, Shade } from '@glamirk/shared/types';
@@ -7,6 +7,7 @@ import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { OffersPopupModal } from '../marketing/OffersPopupModal';
 import { Leaf, Petal, OrnamentDefs } from '../marketing/BotanicalOrnaments';
 import { ProductImage } from './ProductImage';
+import { isLivePrivilegesScheduled, resolveLivePrivilegesCards } from '@glamirk/shared/utils/livePrivilegesPopup';
 
 const OFFERS_POPUP_SESSION_KEY = 'glamirk_offers_popup_shown';
 const FILTER_TABS = ['ALL', 'EVERYDAY GLAM', 'DATE NIGHT', 'WEDDING GLAM', 'MINIMAL GLAM'];
@@ -20,6 +21,8 @@ interface ShopTheLookPageProps {
   /** Product ids the customer has saved. Omit to hide the heart buttons. */
   wishlist?: string[];
   onToggleWishlist?: (productId: string) => void;
+  /** Where the Live Privileges popup's CTA goes (in-app path or https URL). */
+  onNavigate?: (url: string) => void;
 }
 
 export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
@@ -27,8 +30,9 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
   onSelectProduct,
   wishlist,
   onToggleWishlist,
+  onNavigate,
 }) => {
-  const { looks, activeOffers, products: cmsProducts } = useCMS();
+  const { looks, activeOffers, products: cmsProducts, livePrivilegesPopup } = useCMS();
   const catalogProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
   const displayLooks = looks && looks.length > 0 ? looks : GLAMIRK_LOOKS;
   const [selectedFilter, setSelectedFilter] = useState<string>('ALL');
@@ -48,20 +52,40 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
     window.setTimeout(() => setCopyStatus((s) => (s?.code === code ? null : s)), 2200);
   };
 
-  // Greet the admin's active offers once per browser session, the first
-  // time the shopper lands on this page — not on every visit. The ref makes
-  // sure this decision only ever runs once per mount, even if `activeOffers`
-  // updates its array reference again later (a 30s poll, an SSE update).
-  const hasCheckedOffersPopupRef = useRef(false);
+  // The Live Privileges popup, as the admin published it: only when enabled,
+  // inside its schedule, and with at least one live card — never empty.
+  const popupCards = useMemo(
+    () => resolveLivePrivilegesCards(livePrivilegesPopup, activeOffers),
+    [livePrivilegesPopup, activeOffers]
+  );
+  const popupEligible =
+    livePrivilegesPopup.enabled && isLivePrivilegesScheduled(livePrivilegesPopup) && popupCards.length > 0;
+  const { delayMs, frequency } = livePrivilegesPopup.display;
+
+  // Opens at most once per mount. `hasOpened` is set only when it actually
+  // opens, so a content refresh that re-runs this effect before the delay
+  // elapses simply reschedules instead of cancelling the popup for good.
+  const hasOpenedOffersPopupRef = useRef(false);
   useEffect(() => {
-    if (hasCheckedOffersPopupRef.current) return;
-    if (activeOffers.length === 0) return;
-    hasCheckedOffersPopupRef.current = true;
-    if (!sessionStorage.getItem(OFFERS_POPUP_SESSION_KEY)) {
-      sessionStorage.setItem(OFFERS_POPUP_SESSION_KEY, '1');
-      setIsOffersPopupOpen(true);
+    if (hasOpenedOffersPopupRef.current || !popupEligible) return;
+    let seen = false;
+    try {
+      seen = frequency === 'session' && !!sessionStorage.getItem(OFFERS_POPUP_SESSION_KEY);
+    } catch {
+      /* storage blocked — treat as not seen */
     }
-  }, [activeOffers]);
+    if (seen) return;
+    const timer = window.setTimeout(() => {
+      hasOpenedOffersPopupRef.current = true;
+      try {
+        sessionStorage.setItem(OFFERS_POPUP_SESSION_KEY, '1');
+      } catch {
+        /* storage blocked — the popup still works, it may just show again */
+      }
+      setIsOffersPopupOpen(true);
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [popupEligible, delayMs, frequency]);
 
   const filteredLooks =
     selectedFilter === 'ALL' ? displayLooks : displayLooks.filter((l) => l.category === selectedFilter);
@@ -183,7 +207,13 @@ export const ShopTheLookPage: React.FC<ShopTheLookPageProps> = ({
         )}
       </div>
 
-      <OffersPopupModal isOpen={isOffersPopupOpen} onClose={() => setIsOffersPopupOpen(false)} offers={activeOffers} />
+      <OffersPopupModal
+        isOpen={isOffersPopupOpen && popupEligible}
+        onClose={() => setIsOffersPopupOpen(false)}
+        config={livePrivilegesPopup}
+        cards={popupCards}
+        onNavigate={(url) => onNavigate?.(url)}
+      />
     </div>
   );
 };

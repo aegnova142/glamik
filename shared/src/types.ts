@@ -357,6 +357,11 @@ export interface Look {
   video?: string;
   category: 'EVERYDAY GLAM' | 'DATE NIGHT' | 'WEDDING GLAM' | 'MINIMAL GLAM' | string;
   productsUsed: LookProductItem[];
+  /** Focal point for the editorial image as CSS object-position ("50% 30%").
+   * The card crops with object-cover; this keeps faces in frame. Absent = centre. */
+  imageFocus?: string;
+  /** ISO timestamp of the last admin save. Set by the server. */
+  updatedAt?: string;
 }
 
 export interface ArticleSection {
@@ -1839,6 +1844,16 @@ export interface CMSGlobalSettings {
   };
   /** Server-enforced Cash on Delivery eligibility — the frontend never decides this on its own. */
   codRules: CODRules;
+  /** Image behind the "Your Beauty Edit" hero on /wishlist. The heading stays
+   * real HTML on top; an empty or disabled banner leaves a plain black hero. */
+  wishlistBanner?: CMSWishlistBanner;
+}
+
+export interface CMSWishlistBanner {
+  enabled: boolean;
+  imageUrl: string;
+  /** Optional portrait crop for phones; falls back to `imageUrl`. */
+  mobileImageUrl?: string;
 }
 
 export interface CODRules {

@@ -2107,25 +2107,82 @@ router.delete('/admin/try-on-models/:id', requireAdmin, async (req: Authenticate
 });
 
 // --- Shop The Look Management ---
-router.post('/admin/looks', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
-  const { title, tagline, description, image, video, category, productsUsed } = req.body || {};
-  if (!title || !String(title).trim()) {
-    return res.status(400).json({ error: 'Title is required.' });
+
+const LOOK_CATEGORIES = ['EVERYDAY GLAM', 'DATE NIGHT', 'WEDDING GLAM', 'MINIMAL GLAM'];
+/** "50% 30%" — two percentages, what the public card passes to object-position. */
+const LOOK_FOCUS_PATTERN = /^(100|[1-9]?\d)(\.\d+)?% (100|[1-9]?\d)(\.\d+)?%$/;
+
+/**
+ * Whitelists and validates an incoming look body. Only the fields a look
+ * actually has are copied — a previous version spread req.body straight into
+ * the stored record, so any extra property an admin client sent became part
+ * of public CMS content. `partial` is for PUT, where absent fields are kept.
+ */
+function parseLookInput(
+  body: any,
+  partial: boolean
+): { status: 'valid'; value: Partial<Look> } | { status: 'invalid'; error: string } {
+  const b = body && typeof body === 'object' ? body : {};
+  const out: Partial<Look> = {};
+  const has = (k: string) => b[k] !== undefined;
+  const text = (k: string, max: number) => String(b[k] ?? '').trim().slice(0, max);
+  const isMediaUrl = (v: string) => /^https:\/\//i.test(v) || /^\/(?!\/)/.test(v);
+
+  if (!partial || has('title')) {
+    out.title = text('title', 120);
+    if (!out.title) return { status: 'invalid', error: 'Title is required.' };
   }
-  if (!image || !String(image).trim()) {
-    return res.status(400).json({ error: 'Image is required.' });
+  if (has('tagline') || !partial) out.tagline = text('tagline', 300);
+  if (has('description') || !partial) out.description = text('description', 2000);
+  if (!partial || has('category')) {
+    const category = text('category', 40).toUpperCase() || 'EVERYDAY GLAM';
+    if (!LOOK_CATEGORIES.includes(category)) return { status: 'invalid', error: 'Unknown look category.' };
+    out.category = category;
+  }
+  if (!partial || has('image')) {
+    // Blank is allowed on update (see the PUT handler); a value must be a
+    // real https URL or a same-origin path — never javascript:, data: or a
+    // local filesystem path.
+    const image = text('image', 2048);
+    if (!partial && !image) return { status: 'invalid', error: 'Image is required.' };
+    if (image && !isMediaUrl(image)) return { status: 'invalid', error: 'Image must be an https:// URL from the media library.' };
+    out.image = image;
+  }
+  if (has('video')) {
+    const video = text('video', 2048);
+    if (video && !isMediaUrl(video)) return { status: 'invalid', error: 'Video must be an https:// URL from the media library.' };
+    out.video = video || undefined;
+  }
+  if (has('imageFocus')) {
+    const focus = text('imageFocus', 20);
+    if (focus && !LOOK_FOCUS_PATTERN.test(focus)) return { status: 'invalid', error: 'Image focal point must look like "50% 30%".' };
+    out.imageFocus = focus || undefined;
+  }
+  if (!partial || has('productsUsed')) {
+    if (b.productsUsed !== undefined && !Array.isArray(b.productsUsed)) {
+      return { status: 'invalid', error: 'productsUsed must be a list.' };
+    }
+    out.productsUsed = (b.productsUsed || []).slice(0, 12).map((item: any) => ({
+      productId: String(item?.productId ?? '').trim().slice(0, 120),
+      productName: String(item?.productName ?? '').trim().slice(0, 200),
+      shadeName: String(item?.shadeName ?? '').trim().slice(0, 120) || undefined,
+      role: String(item?.role ?? '').trim().slice(0, 80),
+    })).filter((item: { productId: string }) => item.productId);
+  }
+  return { status: 'valid', value: out };
+}
+
+router.post('/admin/looks', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const parsed = parseLookInput(req.body, false);
+  if (parsed.status === 'invalid') {
+    return res.status(400).json({ error: parsed.error });
   }
 
   const db = await loadDatabase();
   const newLook: Look = {
+    ...(parsed.value as Look),
     id: 'look-' + Date.now(),
-    title,
-    tagline: tagline || '',
-    description: description || '',
-    image,
-    video: video || undefined,
-    category: category || 'EVERYDAY GLAM',
-    productsUsed: Array.isArray(productsUsed) ? productsUsed : [],
+    updatedAt: new Date().toISOString(),
   };
 
   db.looks = [...(db.looks || []), newLook];
@@ -2143,9 +2200,9 @@ router.put('/admin/looks/:id', requireAdmin, async (req: AuthenticatedRequest, r
     return res.status(404).json({ error: 'Look not found' });
   }
 
-  const { title } = req.body || {};
-  if (title !== undefined && !String(title).trim()) {
-    return res.status(400).json({ error: 'Title cannot be empty.' });
+  const parsed = parseLookInput(req.body, true);
+  if (parsed.status === 'invalid') {
+    return res.status(400).json({ error: parsed.error });
   }
   // Image is intentionally NOT required on update, unlike creation — an admin
   // clearing a placeholder pending a real upload is the same "blank until
@@ -2157,7 +2214,7 @@ router.put('/admin/looks/:id', requireAdmin, async (req: AuthenticatedRequest, r
   // stays a normal, deletable Media Library entry until an admin explicitly
   // removes it via DELETE /admin/media/:id, which re-verifies at that point
   // that nothing still points at it.
-  db.looks[idx] = { ...db.looks[idx], ...req.body };
+  db.looks[idx] = { ...db.looks[idx], ...parsed.value, id: db.looks[idx].id, updatedAt: new Date().toISOString() };
 
   await saveDatabase(db);
   await logAudit(req, 'UPDATE_LOOK', 'LOOK', db.looks[idx].id, db.looks[idx].title);
@@ -2559,6 +2616,23 @@ router.delete('/admin/faqs/:id', requireAdmin, async (req: AuthenticatedRequest,
 
 // --- Global Settings ---
 router.put('/admin/settings', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  // The wishlist banner URL is rendered straight into a public page, so only
+  // https:// or same-site paths get through — never javascript:, data: or http.
+  const banner = req.body?.wishlistBanner;
+  if (banner !== undefined) {
+    const isSafeImageUrl = (u: unknown) =>
+      u === '' || (typeof u === 'string' && u.length <= 2048 && /^(https:\/\/|\/(?!\/))/i.test(u));
+    if (typeof banner !== 'object' || banner === null || !isSafeImageUrl(banner.imageUrl) ||
+        (banner.mobileImageUrl !== undefined && !isSafeImageUrl(banner.mobileImageUrl))) {
+      return res.status(400).json({ error: 'Banner image must be an https:// URL or an uploaded image.' });
+    }
+    req.body.wishlistBanner = {
+      enabled: banner.enabled === true,
+      imageUrl: banner.imageUrl,
+      mobileImageUrl: banner.mobileImageUrl || '',
+    };
+  }
+
   const db = await loadDatabase();
   // A replaced logo is left alone — see the "Rollback & Cleanup Timing"
   // policy at the top of this file.

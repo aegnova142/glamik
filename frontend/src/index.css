@@ -224,3 +224,181 @@
 }
 
 
+
+/* ------------------------------------------------------------------
+   Customer auth modal (AuthModal / MobileOtpSignIn)
+   Tokens first; the few classes below cover what Tailwind utilities
+   can't express cleanly (gradients, custom checkbox, focus ring).
+   ------------------------------------------------------------------ */
+:root {
+  --auth-bg: #0B0B0B;
+  --auth-bg-raised: #121212;
+  --auth-text: #FAF9F6;
+  --auth-text-secondary: #B5B0AA;
+  --auth-text-muted: #6B6B6B;
+  --auth-gold: #C9972B;
+  --auth-gold-soft: #E8D5A8;
+  --auth-pink: #F05A7E;
+  --auth-pink-deep: #E0265F;
+  --auth-error: #FF7A99;
+  --auth-border: #C9A04A;
+  --auth-divider: rgb(232 213 168 / 0.2);
+  --auth-input-bg: #0B0B0B;
+  --auth-input-border: rgb(201 151 43 / 0.85);
+  --auth-overlay: rgb(11 11 11 / 0.72);
+  --auth-banner-bg: rgb(240 90 126 / 0.07);
+  --auth-banner-border: rgb(240 90 126 / 0.55);
+  --auth-cta: linear-gradient(180deg, #E8336F 0%, var(--auth-pink-deep) 55%, #D11F57 100%);
+  --auth-cta-hover: linear-gradient(180deg, #F0457D 0%, #E8336F 55%, var(--auth-pink-deep) 100%);
+  --auth-modal-w: 708px;
+  --auth-modal-max-h: calc(100dvh - 2rem);
+  --auth-radius-modal: 22px;
+  --auth-radius-control: 10px;
+  --auth-control-h: 3.5rem;
+  --auth-shadow: 0 40px 120px -20px rgb(0 0 0 / 0.85), 0 0 0 1px rgb(0 0 0 / 0.6);
+  --auth-focus-ring: 0 0 0 2px var(--auth-bg), 0 0 0 4px var(--auth-gold-soft);
+  --auth-duration: 200ms;
+  --auth-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --auth-z: 60;
+}
+
+@layer components {
+  .auth-focus:focus-visible {
+    outline: none;
+    box-shadow: var(--auth-focus-ring);
+  }
+
+  .auth-control {
+    height: var(--auth-control-h);
+    background: var(--auth-input-bg);
+    border: 1px solid var(--auth-input-border);
+    border-radius: var(--auth-radius-control);
+    color: var(--auth-text);
+    transition: border-color var(--auth-duration) var(--auth-ease), box-shadow var(--auth-duration) var(--auth-ease);
+  }
+  .auth-control:hover { border-color: var(--auth-gold); }
+  .auth-control:focus-within,
+  .auth-control:focus-visible {
+    outline: none;
+    border-color: var(--auth-gold-soft);
+    box-shadow: 0 0 0 3px rgb(201 151 43 / 0.25);
+  }
+  .auth-control[aria-invalid='true'],
+  .auth-control:has([aria-invalid='true']) {
+    border-color: var(--auth-error);
+    box-shadow: 0 0 0 3px rgb(240 90 126 / 0.18);
+  }
+  .auth-control:has(:disabled) { opacity: 0.5; cursor: not-allowed; }
+
+  .auth-cta {
+    position: relative;
+    background: var(--auth-cta);
+    border: 1.5px solid #D9AE4F;
+    border-radius: var(--auth-radius-control);
+    color: #fff;
+    box-shadow: 0 6px 18px -10px rgb(224 38 95 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.16);
+    transition: background var(--auth-duration) var(--auth-ease), transform var(--auth-duration) var(--auth-ease),
+      box-shadow var(--auth-duration) var(--auth-ease), opacity var(--auth-duration);
+  }
+  /* The thin gold glint along the top edge in the reference. */
+  .auth-cta::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 18%;
+    right: 18%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #FFF6DD 50%, transparent);
+    pointer-events: none;
+  }
+  .auth-cta:hover:not(:disabled) { background: var(--auth-cta-hover); box-shadow: 0 10px 26px -10px rgb(224 38 95 / 0.7), inset 0 1px 0 rgb(255 255 255 / 0.22); }
+  .auth-cta:active:not(:disabled) { transform: translateY(1px); }
+  .auth-cta:focus-visible { outline: none; box-shadow: var(--auth-focus-ring); }
+  .auth-cta:disabled { opacity: 0.45; cursor: not-allowed; }
+  .auth-cta[data-ready='false']:not(:disabled) { opacity: 0.6; box-shadow: none; }
+  .auth-cta .auth-cta-arrow { transition: transform var(--auth-duration) var(--auth-ease); }
+  .auth-cta:hover:not(:disabled) .auth-cta-arrow { transform: translateX(3px); }
+
+  .auth-check {
+    appearance: none;
+    width: 1.375rem;
+    height: 1.375rem;
+    flex-shrink: 0;
+    border-radius: 5px;
+    border: 1px solid var(--auth-input-border);
+    background: var(--auth-bg) center / 70% no-repeat;
+    cursor: pointer;
+    transition: background-color var(--auth-duration) var(--auth-ease), border-color var(--auth-duration);
+  }
+  .auth-check:checked {
+    background-color: #F28C8C;
+    border-color: #F6A9A0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23C2185B' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+  }
+  .auth-check:hover { border-color: var(--auth-gold); }
+  .auth-check:focus-visible { outline: none; box-shadow: var(--auth-focus-ring); }
+
+  .auth-tab-indicator { transition: transform var(--auth-duration) var(--auth-ease), width var(--auth-duration) var(--auth-ease); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-cta, .auth-cta .auth-cta-arrow, .auth-control, .auth-check, .auth-tab-indicator { transition: none; }
+}
+
+/* ------------------------------------------------------------------
+   Shop the Look (ShopTheLookPage). Builds on the auth palette above.
+   ------------------------------------------------------------------ */
+:root {
+  --stl-surface: #FAF9F6;
+  --stl-card: #FFFFFF;
+  --stl-ink: #121212;
+  --stl-ink-soft: #4A4642;
+  --stl-muted: #6B6B6B;
+  --stl-gold: #C9972B;
+  --stl-gold-bright: #E3B84B;
+  --stl-border: rgb(201 151 43 / 0.55);
+  --stl-border-soft: rgb(232 213 168 / 0.9);
+  --stl-blush: #FCE8ED;
+  --stl-pink: #F05A7E;
+  --stl-cta: linear-gradient(90deg, #F05A7E 0%, #E0265F 100%);
+  --stl-cta-hover: linear-gradient(90deg, #F36A8A 0%, #E8336F 100%);
+  --stl-shadow-card: 0 1px 2px rgb(18 18 18 / 0.04), 0 12px 32px -18px rgb(201 151 43 / 0.35);
+  --stl-duration: 200ms;
+  --stl-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --stl-focus-ring: 0 0 0 2px var(--stl-surface), 0 0 0 4px var(--stl-gold);
+}
+
+@layer components {
+  .stl-focus:focus-visible { outline: none; box-shadow: var(--stl-focus-ring); }
+
+  .stl-filter {
+    border: 1px solid var(--stl-border);
+    background: var(--stl-card);
+    color: var(--stl-ink);
+    transition: background-color var(--stl-duration) var(--stl-ease), color var(--stl-duration), border-color var(--stl-duration);
+  }
+  .stl-filter:hover { border-color: var(--stl-pink); color: var(--stl-pink); }
+  .stl-filter[aria-pressed='true'] { background: #0B0B0B; border-color: #0B0B0B; color: #FAF9F6; }
+  .stl-filter:focus-visible { outline: none; box-shadow: var(--stl-focus-ring); }
+
+  .stl-cta {
+    background: var(--stl-cta);
+    border: 1px solid var(--stl-gold-bright);
+    color: #fff;
+    box-shadow: 0 8px 22px -14px rgb(224 38 95 / 0.8);
+    transition: background var(--stl-duration) var(--stl-ease), transform var(--stl-duration) var(--stl-ease), opacity var(--stl-duration);
+  }
+  .stl-cta:hover:not(:disabled) { background: var(--stl-cta-hover); }
+  .stl-cta:active:not(:disabled) { transform: translateY(1px); }
+  .stl-cta:focus-visible { outline: none; box-shadow: var(--stl-focus-ring); }
+  .stl-cta:disabled { opacity: 0.5; cursor: not-allowed; }
+  .stl-cta .stl-cta-arrow { transition: transform var(--stl-duration) var(--stl-ease); }
+  .stl-cta:hover:not(:disabled) .stl-cta-arrow { transform: translateX(3px); }
+
+  .stl-no-scrollbar { scrollbar-width: none; }
+  .stl-no-scrollbar::-webkit-scrollbar { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stl-filter, .stl-cta, .stl-cta .stl-cta-arrow { transition: none; }
+}

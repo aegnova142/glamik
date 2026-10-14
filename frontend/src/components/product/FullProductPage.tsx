@@ -3,6 +3,7 @@ import { ProductGallery } from './ProductGallery';
 import { ShadeSelector } from './ShadeSelector';
 import { CompleteTheLook } from './CompleteTheLook';
 import { RelatedProducts } from './RelatedProducts';
+import { ProductStory } from './ProductStory';
 import { RecentlyViewed } from './RecentlyViewed';
 import { ProductReviews } from './ProductReviews';
 import { DeliveryCheck } from './DeliveryCheck';
@@ -225,6 +226,12 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
               productName={product.name}
               tag={product.tag}
             />
+            {/* Fills what was a blank column under the gallery on desktop.
+                Below lg it renders inside the panel instead (see below), so
+                mobile reads gallery → purchase → story → details. */}
+            <div className="hidden lg:block mt-6">
+              <ProductStory product={product} selectedShade={selectedShade} />
+            </div>
           </div>
 
           {/* Right Column: Product Information & Purchase Hub (5 cols on lg) */}
@@ -420,6 +427,10 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                 <ShieldCheck className="w-4 h-4 text-[#F05A7E] flex-shrink-0" />
                 <span>100% Authentic formula calibrated for Indian complexions</span>
               </div>
+            </div>
+
+            <div className="lg:hidden">
+              <ProductStory product={product} selectedShade={selectedShade} />
             </div>
 
             {/* Product Information Hierarchy Accordions */}

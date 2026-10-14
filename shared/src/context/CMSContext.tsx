@@ -148,7 +148,8 @@ export interface CMSContextType {
   deleteBenefit: (id: string) => Promise<boolean>;
   saveTryOnModel: (model: Partial<TryOnModelPreset>) => Promise<boolean>;
   deleteTryOnModel: (id: string) => Promise<boolean>;
-  saveLook: (look: Partial<Look>) => Promise<boolean>;
+  /** error carries the server's validation message for the admin form. */
+  saveLook: (look: Partial<Look>) => Promise<{ success: boolean; error?: string }>;
   deleteLook: (id: string) => Promise<boolean>;
   saveArticle: (article: Partial<JournalArticle>) => Promise<boolean>;
   deleteArticle: (id: string) => Promise<boolean>;
@@ -786,15 +787,15 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
-  const saveLook = async (look: Partial<Look>): Promise<boolean> => {
+  const saveLook = async (look: Partial<Look>): Promise<{ success: boolean; error?: string }> => {
     const endpoint = look.id && looks.some((l) => l.id === look.id) ? `/api/admin/looks/${look.id}` : '/api/admin/looks';
     const method = look.id && looks.some((l) => l.id === look.id) ? 'PUT' : 'POST';
     const res = await apiFetch(endpoint, { method, body: JSON.stringify(look) });
     if (res.status < 400) {
       await loadPublicContent();
-      return true;
+      return { success: true };
     }
-    return false;
+    return { success: false, error: res.error };
   };
 
   const deleteLook = async (id: string): Promise<boolean> => {

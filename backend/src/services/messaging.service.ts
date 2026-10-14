@@ -309,9 +309,31 @@ async function sendWhatsAppViaTwilio(msg: OtpMessage): Promise<DeliveryResult> {
 // Dispatch
 // ------------------------------------------
 
+/**
+ * SMS_PROVIDER="console" — local development only. Prints the code to the
+ * server terminal instead of sending anything, so sign-in can be exercised
+ * without a vendor account. This is the one deliberate exception to "the
+ * code is never logged", which is why it refuses to run in production: a
+ * stray SMS_PROVIDER="console" on the server must not turn the log file
+ * into the OTP channel.
+ */
+function consoleProviderAllowed(): boolean {
+  // An allow-list, not "anything but production": a staging box with
+  // NODE_ENV=staging must not log codes. Unset counts as development, the
+  // same default env.nodeEnv uses.
+  return ['development', 'test'].includes(process.env.NODE_ENV || 'development');
+}
+
+async function sendSmsViaConsole(msg: OtpMessage): Promise<DeliveryResult> {
+  if (!consoleProviderAllowed()) return { status: 'unconfigured', provider: 'console' };
+  console.log(`[otp:dev] ${msg.method.toUpperCase()} to ${msg.phone} — code ${msg.otp} (SMS_PROVIDER=console, nothing was sent)`);
+  return { status: 'sent', provider: 'console' };
+}
+
 const SMS_PROVIDERS: Record<string, (msg: OtpMessage) => Promise<DeliveryResult>> = {
   twilio: sendSmsViaTwilio,
   msg91: sendSmsViaMsg91,
+  console: sendSmsViaConsole,
 };
 
 const WHATSAPP_PROVIDERS: Record<string, (msg: OtpMessage) => Promise<DeliveryResult>> = {
@@ -327,6 +349,7 @@ export function channelConfigured(method: OtpChannel): boolean {
   if (method === 'sms') {
     const send = SMS_PROVIDERS[names.smsProvider];
     if (!send) return false;
+    if (names.smsProvider === 'console') return consoleProviderAllowed();
     return names.smsProvider === 'twilio'
       ? !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN &&
            (process.env.TWILIO_SMS_FROM || process.env.TWILIO_MESSAGING_SERVICE_SID))

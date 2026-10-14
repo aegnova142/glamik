@@ -31,6 +31,8 @@ interface ProductImageProps {
    * being scarce.
    */
   priority?: boolean;
+  /** Passed to the <img>, e.g. objectPosition for a focal point. */
+  style?: React.CSSProperties;
 }
 
 /**
@@ -63,6 +65,7 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   preset = 'card',
   sizes,
   priority = false,
+  style,
 }) => {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
@@ -111,6 +114,7 @@ export const ProductImage: React.FC<ProductImageProps> = ({
       draggable={draggable}
       onError={() => setFailedSrc(src)}
       className={className}
+      style={style}
     />
   );
 };

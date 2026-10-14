@@ -164,8 +164,8 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
         </div>
 
         {/* Page Header */}
-        <div className="mb-8 border-b border-[#E8D5A8] pb-5">
-          <span className="text-[10.5px] font-semibold tracking-[0.24em] uppercase text-[#C9972B]">
+        <div className="mb-8 border-b border-[#F3D9E0] pb-5">
+          <span className="text-[10.5px] font-semibold tracking-[0.24em] uppercase text-[#F05A7E]">
             ATELIER CHECKOUT
           </span>
           <h1 className="font-serif text-3xl sm:text-4xl text-[#121212] mt-1">
@@ -178,8 +178,8 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
 
         {cartItems.length === 0 && savedItems.length === 0 ? (
           /* Empty Bag State */
-          <div className="py-20 text-center space-y-6 max-w-md mx-auto border border-[#E8D5A8] bg-white p-10">
-            <ShoppingBag className="w-12 h-12 text-[#C9972B] mx-auto stroke-[1.2]" />
+          <div className="py-20 text-center space-y-6 max-w-md mx-auto border border-[#F3D9E0] bg-white p-10">
+            <ShoppingBag className="w-12 h-12 text-[#F05A7E] mx-auto stroke-[1.2]" />
             <div className="space-y-2">
               <h2 className="font-serif text-2xl text-[#121212]">
                 YOUR SHOPPING BAG IS WAITING
@@ -190,7 +190,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
             </div>
             <button
               onClick={onContinueShopping}
-              className="px-8 py-3.5 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-widest uppercase hover:bg-[#0B0B0B] transition-colors cursor-pointer"
+              className="px-8 py-3.5 bg-[#E0265F] text-white text-xs font-semibold tracking-widest uppercase hover:bg-[#9B2D4F] transition-colors cursor-pointer"
             >
               EXPLORE THE EDIT
             </button>
@@ -203,18 +203,18 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
             <div className="lg:col-span-7 xl:col-span-8 space-y-6">
               
               {/* 1. Free Shipping Progress Bar */}
-              <div className="p-4 sm:p-5 bg-white border border-[#E8D5A8]">
+              <div className="p-4 sm:p-5 bg-white border border-[#F3D9E0]">
                 <div className="flex items-center justify-between text-xs mb-2.5">
                   <div className="flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-[#C9972B]" />
+                    <Truck className="w-4 h-4 text-[#F05A7E]" />
                     <span className="font-medium text-[#121212]">
                       {isShippingFree ? (
-                        <span className="text-[#C9972B] font-semibold">
+                        <span className="text-[#F05A7E] font-semibold">
                           COMPLIMENTARY LUXURY DELIVERY UNLOCKED
                         </span>
                       ) : (
                         <span>
-                          YOU'RE <strong className="text-[#C9972B]">₹{remainingForFreeShipping}</strong> AWAY FROM FREE SHIPPING
+                          YOU'RE <strong className="text-[#F05A7E]">₹{remainingForFreeShipping}</strong> AWAY FROM FREE SHIPPING
                         </span>
                       )}
                     </span>
@@ -227,7 +227,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                 {/* Progress bar line */}
                 <div className="w-full h-1.5 bg-[#FAF9F6] overflow-hidden rounded-full">
                   <div
-                    className="h-full bg-[#C9972B] transition-all duration-500 rounded-full"
+                    className="h-full bg-[#F05A7E] transition-all duration-500 rounded-full"
                     style={{ width: `${shippingProgress}%` }}
                   />
                 </div>
@@ -249,12 +249,12 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                     <motion.div
                       layout
                       key={`${item.product.id}-${item.selectedShade?.id}-${item.selectedSize}-${index}`}
-                      className="p-4 sm:p-6 bg-white border border-[#E8D5A8] flex flex-col sm:flex-row gap-5 items-start relative group"
+                      className="p-4 sm:p-6 bg-white border border-[#F3D9E0] flex flex-col sm:flex-row gap-5 items-start relative group"
                     >
                       {/* Product Thumbnail */}
                       <div
                         onClick={() => onOpenProduct(item.product)}
-                        className="w-24 h-28 sm:w-28 sm:h-32 bg-[#FAF9F6] border border-[#E8D5A8] overflow-hidden flex-shrink-0 cursor-pointer relative"
+                        className="w-24 h-28 sm:w-28 sm:h-32 bg-[#FAF9F6] border border-[#F3D9E0] overflow-hidden flex-shrink-0 cursor-pointer relative"
                       >
                         <ProductImage preset="thumb"
                           src={resolveVariantThumbnail(item.product, item.selectedShade)}
@@ -277,7 +277,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                             </span>
                             <h3
                               onClick={() => onOpenProduct(item.product)}
-                              className="font-serif text-lg text-[#121212] hover:text-[#C9972B] transition-colors cursor-pointer"
+                              className="font-serif text-lg text-[#121212] hover:text-[#F05A7E] transition-colors cursor-pointer"
                             >
                               {item.product.name}
                             </h3>
@@ -291,7 +291,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                         {/* Shade / Size Indicator */}
                         <div className="flex flex-wrap items-center gap-3 text-xs text-[#6B6B6B]">
                           {item.selectedShade && (
-                            <div className="flex items-center gap-1.5 bg-[#FAF9F6] px-2.5 py-1 border border-[#E8D5A8]">
+                            <div className="flex items-center gap-1.5 bg-[#FAF9F6] px-2.5 py-1 border border-[#F3D9E0]">
                               <span
                                 className="w-3 h-3 rounded-full border border-[#0B0B0B]/10 flex-shrink-0"
                                 style={{ backgroundColor: item.selectedShade.hex }}
@@ -306,7 +306,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                           )}
 
                           {item.selectedSize && (
-                            <div className="bg-[#FAF9F6] px-2.5 py-1 border border-[#E8D5A8] font-medium text-[#121212]">
+                            <div className="bg-[#FAF9F6] px-2.5 py-1 border border-[#F3D9E0] font-medium text-[#121212]">
                               Size: {item.selectedSize}
                             </div>
                           )}
@@ -320,10 +320,10 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                         <div className="pt-3 border-t border-[#FAF9F6] flex flex-wrap items-center justify-between gap-4">
                           
                           {/* Stepper */}
-                          <div className="flex items-center border border-[#E8D5A8] bg-[#FAF9F6]">
+                          <div className="flex items-center border border-[#F3D9E0] bg-[#FAF9F6]">
                             <button
                               onClick={() => onUpdateQuantity(index, item.quantity - 1)}
-                              className="px-3 py-1.5 text-xs text-[#121212] hover:bg-[#E8D5A8] transition-colors cursor-pointer"
+                              className="px-3 py-1.5 text-xs text-[#121212] hover:bg-[#F3D9E0] transition-colors cursor-pointer"
                               aria-label="Decrease quantity"
                             >
                               −
@@ -333,7 +333,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                             </span>
                             <button
                               onClick={() => onUpdateQuantity(index, item.quantity + 1)}
-                              className="px-3 py-1.5 text-xs text-[#121212] hover:bg-[#E8D5A8] transition-colors cursor-pointer"
+                              className="px-3 py-1.5 text-xs text-[#121212] hover:bg-[#F3D9E0] transition-colors cursor-pointer"
                               aria-label="Increase quantity"
                             >
                               +
@@ -344,7 +344,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                           <div className="flex items-center gap-4 text-xs font-medium tracking-wider uppercase">
                             <button
                               onClick={() => onSaveForLater(index)}
-                              className="text-[#6B6B6B] hover:text-[#C9972B] flex items-center gap-1 transition-colors cursor-pointer"
+                              className="text-[#6B6B6B] hover:text-[#F05A7E] flex items-center gap-1 transition-colors cursor-pointer"
                             >
                               <Bookmark className="w-3.5 h-3.5" />
                               <span>SAVE FOR LATER</span>
@@ -352,9 +352,9 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
 
                             <button
                               onClick={() => onMoveToWishlist(index, item.product)}
-                              className="text-[#6B6B6B] hover:text-[#C9972B] flex items-center gap-1 transition-colors cursor-pointer"
+                              className="text-[#6B6B6B] hover:text-[#F05A7E] flex items-center gap-1 transition-colors cursor-pointer"
                             >
-                              <Heart className={`w-3.5 h-3.5 ${isWishlisted ? 'fill-[#C9972B] text-[#C9972B]' : ''}`} />
+                              <Heart className={`w-3.5 h-3.5 ${isWishlisted ? 'fill-[#F05A7E] text-[#F05A7E]' : ''}`} />
                               <span>MOVE TO WISHLIST</span>
                             </button>
 
@@ -378,25 +378,25 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
               {savedItems.length > 0 && (
                 <div className="space-y-3 pt-2">
                   <div className="flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-[#6B6B6B]">
-                    <Bookmark className="w-3.5 h-3.5 text-[#C9972B]" />
+                    <Bookmark className="w-3.5 h-3.5 text-[#F05A7E]" />
                     <span>SAVED FOR LATER ({savedItems.length})</span>
                   </div>
                   <div className="space-y-3">
                     {savedItems.map((item, index) => (
                       <div
                         key={`${item.product.id}-${item.selectedShade?.id}-${item.selectedSize}-${index}`}
-                        className="p-3.5 sm:p-4 bg-[#FAF9F6] border border-[#E8D5A8] flex items-center gap-4"
+                        className="p-3.5 sm:p-4 bg-[#FAF9F6] border border-[#F3D9E0] flex items-center gap-4"
                       >
                         <div
                           onClick={() => onOpenProduct(item.product)}
-                          className="w-16 h-19 bg-white border border-[#E8D5A8] overflow-hidden flex-shrink-0 cursor-pointer"
+                          className="w-16 h-19 bg-white border border-[#F3D9E0] overflow-hidden flex-shrink-0 cursor-pointer"
                         >
                           <ProductImage preset="thumb" src={resolveVariantThumbnail(item.product, item.selectedShade)} alt={item.product.name} className="w-full h-full object-cover" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <h4
                             onClick={() => onOpenProduct(item.product)}
-                            className="font-serif text-sm text-[#121212] hover:text-[#C9972B] transition-colors cursor-pointer truncate"
+                            className="font-serif text-sm text-[#121212] hover:text-[#F05A7E] transition-colors cursor-pointer truncate"
                           >
                             {item.product.name}
                           </h4>
@@ -406,7 +406,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                           <div className="flex items-center gap-4 mt-2 text-[11px] font-medium tracking-wider uppercase">
                             <button
                               onClick={() => onMoveSavedToCart(index)}
-                              className="text-[#C9972B] hover:underline flex items-center gap-1 cursor-pointer"
+                              className="text-[#F05A7E] hover:underline flex items-center gap-1 cursor-pointer"
                             >
                               <ShoppingBag className="w-3.5 h-3.5" />
                               <span>MOVE TO BAG</span>
@@ -427,21 +427,21 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
               )}
 
               {/* 3. Luxury Gifting Foundation */}
-              <div className="p-5 bg-white border border-[#E8D5A8] space-y-3">
+              <div className="p-5 bg-white border border-[#F3D9E0] space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-[#121212]">
                     <input
                       type="checkbox"
                       checked={isGift}
                       onChange={(e) => setIsGift(e.target.checked)}
-                      className="w-4 h-4 accent-[#C9972B] rounded-none cursor-pointer"
+                      className="w-4 h-4 accent-[#F05A7E] rounded-none cursor-pointer"
                     />
                     <div className="flex items-center gap-2">
-                      <Gift className="w-4 h-4 text-[#C9972B]" />
+                      <Gift className="w-4 h-4 text-[#F05A7E]" />
                       <span>THIS ORDER IS A LUXURY GIFT</span>
                     </div>
                   </label>
-                  <span className="text-[10px] uppercase font-semibold text-[#C9972B] bg-[#C9972B]/10 px-2 py-0.5">
+                  <span className="text-[10px] uppercase font-semibold text-[#F05A7E] bg-[#F05A7E]/10 px-2 py-0.5">
                     COMPLIMENTARY
                   </span>
                 </div>
@@ -461,7 +461,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                       value={giftMessage}
                       onChange={(e) => setGiftMessage(e.target.value)}
                       placeholder="e.g. For Dearest Diya, celebrating your graceful radiance..."
-                      className="w-full p-3 text-xs bg-[#FAF9F6] border border-[#E8D5A8] focus:border-[#0B0B0B] focus:outline-hidden"
+                      className="w-full p-3 text-xs bg-[#FAF9F6] border border-[#F3D9E0] focus:border-[#0B0B0B] focus:outline-hidden"
                     />
                     <p className="text-[10px] text-[#6B6B6B]">
                       Includes signature Glamirk matte black box with champagne wax seal and omitted price tags.
@@ -471,9 +471,9 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
               </div>
 
               {/* 4. AI Cart Assistant Concierge Strip */}
-              <div className="p-5 bg-[#FAF9F6] border border-[#E8D5A8] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="p-5 bg-[#FAF9F6] border border-[#F3D9E0] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-start gap-3">
-                  <Sparkles className="w-5 h-5 text-[#C9972B] flex-shrink-0 mt-0.5" />
+                  <Sparkles className="w-5 h-5 text-[#F05A7E] flex-shrink-0 mt-0.5" />
                   <div>
                     <h4 className="font-serif text-sm text-[#121212]">
                       ✨ ASK GLAMIRK BEAUTY ASSISTANT
@@ -497,7 +497,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                 <div className="pt-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] font-semibold tracking-[0.24em] uppercase text-[#C9972B]">
+                      <span className="text-[10px] font-semibold tracking-[0.24em] uppercase text-[#F05A7E]">
                         COMPLEMENTARY CREATIONS
                       </span>
                       <h3 className="font-serif text-xl text-[#121212]">
@@ -512,7 +512,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                       return (
                         <div
                           key={rec.id}
-                          className="p-4 bg-white border border-[#E8D5A8] flex flex-col justify-between space-y-3 group"
+                          className="p-4 bg-white border border-[#F3D9E0] flex flex-col justify-between space-y-3 group"
                         >
                           <div
                             onClick={() => onOpenProduct(rec)}
@@ -531,7 +531,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                             </span>
                             <h4
                               onClick={() => onOpenProduct(rec)}
-                              className="font-serif text-sm text-[#121212] truncate hover:text-[#C9972B] cursor-pointer"
+                              className="font-serif text-sm text-[#121212] truncate hover:text-[#F05A7E] cursor-pointer"
                             >
                               {rec.name}
                             </h4>
@@ -559,8 +559,8 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
             <div className="lg:col-span-5 xl:col-span-4 space-y-6 lg:sticky lg:top-24">
               
               {/* Order Summary Card */}
-              <div className="p-6 bg-white border border-[#E8D5A8] space-y-5 shadow-xs">
-                <h2 className="font-serif text-xl text-[#121212] border-b border-[#E8D5A8] pb-3">
+              <div className="p-6 bg-white border border-[#F3D9E0] space-y-5 shadow-xs">
+                <h2 className="font-serif text-xl text-[#121212] border-b border-[#F3D9E0] pb-3">
                   ORDER SUMMARY
                 </h2>
 
@@ -571,14 +571,14 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                   </label>
                   
                   {appliedCoupon && isCouponEligible ? (
-                    <div className="p-3 bg-[#FAF9F6] border border-[#C9972B]/40 flex items-center justify-between">
+                    <div className="p-3 bg-[#FAF9F6] border border-[#F05A7E]/40 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Tag className="w-4 h-4 text-[#C9972B]" />
+                        <Tag className="w-4 h-4 text-[#F05A7E]" />
                         <div>
                           <span className="font-mono text-xs font-semibold text-[#121212]">
                             {appliedCoupon.code}
                           </span>
-                          <span className="text-[11px] text-[#C9972B] block font-medium">
+                          <span className="text-[11px] text-[#F05A7E] block font-medium">
                             -₹{discountAmount} applied ({appliedCoupon.title})
                           </span>
                         </div>
@@ -600,7 +600,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                           setPromoError(null);
                         }}
                         placeholder="ENTER PROMO CODE"
-                        className="flex-1 px-3 py-2.5 text-xs bg-[#FAF9F6] border border-[#E8D5A8] uppercase placeholder:normal-case focus:border-[#0B0B0B] focus:outline-hidden font-mono"
+                        className="flex-1 px-3 py-2.5 text-xs bg-[#FAF9F6] border border-[#F3D9E0] uppercase placeholder:normal-case focus:border-[#0B0B0B] focus:outline-hidden font-mono"
                       />
                       <button
                         type="submit"
@@ -618,7 +618,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
 
                   <button
                     onClick={() => setIsOffersDrawerOpen(true)}
-                    className="text-[11px] font-semibold tracking-wider text-[#C9972B] hover:underline uppercase flex items-center gap-1 pt-1 cursor-pointer"
+                    className="text-[11px] font-semibold tracking-wider text-[#F05A7E] hover:underline uppercase flex items-center gap-1 pt-1 cursor-pointer"
                   >
                     <Tag className="w-3.5 h-3.5" />
                     <span>VIEW AVAILABLE OFFERS</span>
@@ -626,14 +626,14 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                 </div>
 
                 {/* Price Breakdown */}
-                <div className="space-y-2.5 pt-3 border-t border-[#E8D5A8] text-xs text-[#6B6B6B]">
+                <div className="space-y-2.5 pt-3 border-t border-[#F3D9E0] text-xs text-[#6B6B6B]">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
                     <span className="text-[#121212] font-medium font-mono">₹{subtotal}</span>
                   </div>
 
                   {discountAmount > 0 && (
-                    <div className="flex justify-between text-[#C9972B] font-medium">
+                    <div className="flex justify-between text-[#F05A7E] font-medium">
                       <span>Privilege Discount</span>
                       <span className="font-mono">-₹{discountAmount}</span>
                     </div>
@@ -643,7 +643,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                     <span>Estimated Shipping</span>
                     <span className="text-[#121212] font-medium">
                       {shippingFee === 0 ? (
-                        <span className="text-[#C9972B] uppercase font-semibold">FREE</span>
+                        <span className="text-[#F05A7E] uppercase font-semibold">FREE</span>
                       ) : (
                         `₹${shippingFee}`
                       )}
@@ -656,7 +656,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                   </div>
 
                   {/* Grand Total */}
-                  <div className="pt-3 border-t border-[#E8D5A8] flex justify-between items-baseline">
+                  <div className="pt-3 border-t border-[#F3D9E0] flex justify-between items-baseline">
                     <span className="font-serif text-base text-[#121212] font-medium">
                       Total Payable
                     </span>
@@ -674,17 +674,17 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
                   className="w-full py-4 bg-[#0B0B0B] text-[#FAF9F6] text-xs sm:text-[13px] font-semibold tracking-[0.22em] uppercase hover:bg-[#0B0B0B] active:scale-[0.99] transition-all duration-300 flex items-center justify-center gap-2 shadow-md cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <span>PROCEED TO CHECKOUT</span>
-                  <ArrowRight className="w-4 h-4 text-[#C9972B]" />
+                  <ArrowRight className="w-4 h-4 text-[#F05A7E]" />
                 </button>
 
                 {/* Trust & Guarantee Strip */}
                 <div className="pt-3 space-y-2 border-t border-[#FAF9F6] text-[11px] text-[#6B6B6B]">
                   <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-3.5 h-3.5 text-[#C9972B] flex-shrink-0" />
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#F05A7E] flex-shrink-0" />
                     <span>100% Authentic formulations crafted for Indian skin</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Truck className="w-3.5 h-3.5 text-[#C9972B] flex-shrink-0" />
+                    <Truck className="w-3.5 h-3.5 text-[#F05A7E] flex-shrink-0" />
                     <span>Dispatched via Blue Dart & Delhivery Express</span>
                   </div>
                 </div>
@@ -698,7 +698,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
 
         {/* Bottom Trust Badge Strip */}
         {cartItems.length > 0 && (
-          <div className="mt-10 pt-8 border-t border-[#E8D5A8] grid grid-cols-2 sm:grid-cols-4 gap-6">
+          <div className="mt-10 pt-8 border-t border-[#F3D9E0] grid grid-cols-2 sm:grid-cols-4 gap-6">
             {[
               { icon: ShieldCheck, title: '100% Authentic', subtitle: 'Sourced Directly' },
               { icon: Heart, title: 'Cruelty-Free', subtitle: 'We never test on animals' },
@@ -706,7 +706,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
               { icon: Check, title: 'Dermatologist Approved', subtitle: 'Trusted & tested' },
             ].map((badge) => (
               <div key={badge.title} className="flex items-center gap-2.5 text-center sm:text-left flex-col sm:flex-row">
-                <badge.icon className="w-5 h-5 text-[#C9972B] shrink-0" />
+                <badge.icon className="w-5 h-5 text-[#F05A7E] shrink-0" />
                 <div>
                   <p className="text-xs font-semibold text-[#121212]">{badge.title}</p>
                   <p className="text-[10px] text-[#6B6B6B]">{badge.subtitle}</p>
@@ -720,7 +720,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
 
       {/* Sticky Mobile Checkout CTA Bar */}
       {cartItems.length > 0 && (
-        <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-[#E8D5A8] p-4 shadow-2xl z-30 flex items-center justify-between gap-4">
+        <div className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-[#F3D9E0] p-4 shadow-2xl z-30 flex items-center justify-between gap-4">
           <div>
             <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B] block">
               TOTAL PAYABLE
@@ -735,7 +735,7 @@ export const ShoppingBagPage: React.FC<ShoppingBagPageProps> = ({
             className="flex-1 py-3.5 px-6 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-[0.2em] uppercase hover:bg-[#0B0B0B] flex items-center justify-center gap-2 cursor-pointer"
           >
             <span>CHECKOUT</span>
-            <ArrowRight className="w-3.5 h-3.5 text-[#C9972B]" />
+            <ArrowRight className="w-3.5 h-3.5 text-[#F05A7E]" />
           </button>
         </div>
       )}

@@ -21,8 +21,11 @@ import {
 // where renaming a name-keyed category made its products disappear.
 // ==========================================================================
 
-const SECTIONS = ['Makeup', 'Skin', 'Nails'] as const;
-type Section = (typeof SECTIONS)[number];
+// Sections used to be a fixed trio here. They are rows now (migration 022),
+// so the check moved to productSection.service — imported lazily inside the
+// functions that need it, because that module imports this one for its type
+// counts and a top-level import either way would be a cycle.
+type Section = string;
 
 /** Postgres error code for a unique-violation. */
 const UNIQUE_VIOLATION = '23505';
@@ -104,12 +107,9 @@ export interface TypeMutationResult {
   type?: ProductType;
 }
 
-function validateSection(raw: unknown): { ok: boolean; value?: Section | null; error?: string } {
-  if (raw === undefined || raw === null || raw === '') return { ok: true, value: null };
-  if (typeof raw !== 'string' || !SECTIONS.includes(raw as Section)) {
-    return { ok: false, error: `Section must be one of ${SECTIONS.join(', ')}.` };
-  }
-  return { ok: true, value: raw as Section };
+async function validateSection(raw: unknown): Promise<{ ok: boolean; value?: Section | null; error?: string }> {
+  const { validateSectionNameForType } = await import('./productSection.service');
+  return validateSectionNameForType(raw);
 }
 
 /**
@@ -132,7 +132,7 @@ export async function createProductType(input: {
   const descCheck = validateTypeDescription(input.description);
   if (!descCheck.ok) return { ok: false, error: descCheck.error, status: 400 };
 
-  const sectionCheck = validateSection(input.category);
+  const sectionCheck = await validateSection(input.category);
   if (!sectionCheck.ok) return { ok: false, error: sectionCheck.error, status: 400 };
 
   const name = nameCheck.name!;
@@ -204,7 +204,7 @@ export async function updateProductType(
 
   let category = current.category;
   if (input.category !== undefined) {
-    const sectionCheck = validateSection(input.category);
+    const sectionCheck = await validateSection(input.category);
     if (!sectionCheck.ok) return { ok: false, error: sectionCheck.error, status: 400 };
     category = sectionCheck.value ?? null;
   }

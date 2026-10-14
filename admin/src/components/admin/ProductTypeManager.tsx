@@ -10,7 +10,6 @@ import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { apiFetch } from '@glamirk/shared/utils/cmsClient';
 import { TYPE_NAME_MAX_LENGTH, TYPE_DESCRIPTION_MAX_LENGTH } from '@glamirk/shared/utils/productType';
 
-const SECTIONS = ['Makeup', 'Skin', 'Nails'] as const;
 
 /**
  * Manage product types: create, rename, describe, pause, reassign, delete.
@@ -26,7 +25,7 @@ const SECTIONS = ['Makeup', 'Skin', 'Nails'] as const;
  * safe to delete.
  */
 export const ProductTypeManager: React.FC = () => {
-  const { saveProductType, deleteProductType, reassignProductType, productTypes } = useCMS();
+  const { saveProductType, deleteProductType, reassignProductType, productTypes, productSections } = useCMS();
 
   const [rows, setRows] = useState<ProductTypeWithUsage[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -235,11 +234,15 @@ export const ProductTypeManager: React.FC = () => {
                     className="px-3 py-2 bg-[#171717] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
                   >
                     <option value="">No section</option>
-                    {SECTIONS.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
+                    {/* Sections are rows now (migration 022), so this offers
+                        whatever the admin has created rather than a fixed trio. */}
+                    {productSections
+                      .filter((sec) => sec.isActive || sec.name === draft.category)
+                      .map((sec) => (
+                        <option key={sec.id} value={sec.name}>
+                          {sec.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
                 <input

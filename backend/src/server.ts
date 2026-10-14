@@ -15,7 +15,8 @@ import webhooksRouter, {
   reconcileStuckWebhookEvents,
   expirePendingPaymentOrders,
 } from './routes/webhooks.routes';
-import { ensureSchema } from './db/db';
+import { ensureSchema, loadDatabase } from './db/db';
+import { ensureSectionsForCatalog } from './services/productSection.service';
 import { setupSocketIO } from './services/realtime.service';
 import { purgeExpiredOtpCodes } from './services/otp.service';
 import { registerDelhiveryTracking } from './services/couriers/delhivery.service';
@@ -100,6 +101,20 @@ async function startServer() {
   // through loadDatabase(), which is where this used to happen as a side effect).
   warnOnWeakConfig();
   await ensureSchema();
+
+  // Migration 022 backfills sections from the catalog as it stood when the
+  // migration ran — which on a fresh install is before `npm run seed` has
+  // written any products. This closes that ordering: it creates a section for
+  // any product category that lacks one, and is a no-op on every boot after
+  // the first.
+  try {
+    const seeded = await ensureSectionsForCatalog((await loadDatabase()).products);
+    if (seeded > 0) console.log(`[sections] created ${seeded} missing product section(s) from the catalog`);
+  } catch (err) {
+    // Never block startup on this — the admin can create sections by hand,
+    // and a storefront with no sections still sells everything it did before.
+    console.error('Product section reconciliation failed (continuing):', err);
+  }
 
   setupSocketIO(httpServer);
 

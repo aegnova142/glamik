@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { Product, ProductAttribute, UsageStep } from '@glamirk/shared/types';
 import { ProductTypePicker } from './ProductTypePicker';
+import { ProductSectionPicker } from './ProductSectionPicker';
 import {
   Package,
   Plus,
@@ -37,7 +38,7 @@ type ProductImageSlot = 'primary' | 'secondary' | 'detail' | 'texture' | 'lifest
 
 
 export const AdminProducts: React.FC = () => {
-  const { products, categories, saveProduct, deleteProduct, duplicateProduct } = useCMS();
+  const { products, categories, productSections, saveProduct, deleteProduct, duplicateProduct } = useCMS();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -834,31 +835,21 @@ export const AdminProducts: React.FC = () => {
                 </p>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                  Category
-                </label>
-                <select
-                  value={editingProduct.category}
-                  onChange={(e) => {
-                    // Section and type are independent now. This used to reset
-                    // subCategory to the first entry of a fixed per-section
-                    // list, which would silently detach the product from the
-                    // type chosen below — the Product Type picker owns that
-                    // field, and a type can legitimately sit under any section
-                    // or none.
-                    setEditingProduct({
-                      ...editingProduct,
-                      category: e.target.value as 'Makeup' | 'Skin' | 'Nails',
-                    });
-                  }}
-                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
-                >
-                  <option value="Makeup">Makeup</option>
-                  <option value="Skin">Skin</option>
-                  <option value="Nails">Nails</option>
-                </select>
-              </div>
+              <ProductSectionPicker
+                value={editingProduct.sectionId}
+                legacyCategory={editingProduct.category}
+                onChange={(sectionId, sectionName) =>
+                  setEditingProduct({
+                    ...editingProduct,
+                    sectionId,
+                    // category keeps the section's name so the PDP breadcrumb,
+                    // search matching and the legacy Shop filter path all keep
+                    // describing this product the same way. The server does the
+                    // same on save; this is so the form agrees immediately.
+                    category: sectionName ?? editingProduct.category,
+                  })
+                }
+              />
 
               <ProductTypePicker
                 value={editingProduct.typeId}
@@ -1246,9 +1237,13 @@ export const AdminProducts: React.FC = () => {
             className="px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none"
           >
             <option value="ALL">All Categories</option>
-            <option value="Makeup">Makeup</option>
-            <option value="Skin">Skin</option>
-            <option value="Nails">Nails</option>
+            {/* Every section, so a product filed under one an admin created is
+                still findable in this list. */}
+            {productSections.map((section) => (
+              <option key={section.id} value={section.name}>
+                {section.name}
+              </option>
+            ))}
           </select>
         </div>
       </div>

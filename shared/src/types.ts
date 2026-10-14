@@ -140,6 +140,32 @@ export interface TryOnConfig {
 }
 
 /**
+ * An admin-defined section — "Makeup", "Skin", "Nails", "Fragrance".
+ *
+ * The level above ProductType, and the same kind of object: immutable id,
+ * freely renameable name, slug as URL identity, `isActive` that hides without
+ * orphaning. Rows live in `product_sections` (migration 022).
+ */
+export interface ProductSection {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** A section plus how many products sit in it. Admin-only — the count is what
+ *  makes deactivating or deleting a decision rather than a guess. */
+export interface ProductSectionWithUsage extends ProductSection {
+  productCount: number;
+  /** Types nesting under it. Deleting a section with types is refused too. */
+  typeCount: number;
+}
+
+/**
  * An admin-defined product type — "Lipstick", "Sindoor", "Lip Care".
  *
  * The id is immutable and is what a product references. The name is a display
@@ -160,7 +186,10 @@ export interface ProductType {
   description: string;
   /** Section this type nests under. Null when unassigned — it still lists and
    *  still filters, it simply does not group under a section. */
-  category: 'Makeup' | 'Skin' | 'Nails' | null;
+  /** Section this type nests under, by name. Admin-defined (see
+   *  `product_sections`, migration 022) rather than a fixed enum — null when
+   *  unassigned, which still lists and still filters. */
+  category: string | null;
   /** Inactive types stay assigned to their products and keep resolving; they
    *  are only withheld from the storefront's filter list. Never a deletion. */
   isActive: boolean;
@@ -179,7 +208,17 @@ export interface Product {
   id: string;
   name: string;
   slug?: string;
-  category: 'Makeup' | 'Skin' | 'Nails';
+  /**
+   * Section this product sits in — "Makeup", "Skin", "Nails", or any section
+   * an admin has since created.
+   *
+   * Widened from a closed union to a free string when sections became
+   * admin-definable. It is stored as the NAME because that is what every
+   * existing consumer reads: the PDP breadcrumb, search matching, the 404
+   * page. `sectionId` below is the stable reference; this is kept in step with
+   * it exactly as `subCategory` is kept in step with `typeId`.
+   */
+  category: string;
   subCategory: string;
   /**
    * The admin-defined type this product belongs to, by id.
@@ -191,6 +230,14 @@ export interface Product {
    * and is kept in step when a type is assigned.
    */
   typeId?: string;
+  /**
+   * The section this product sits in, by id.
+   *
+   * Optional and additive, exactly like `typeId`. A product saved before
+   * sections existed has none and resolves through its `category` name
+   * instead, so nothing had to be rewritten.
+   */
+  sectionId?: string;
   subtitle: string;
   description: string;
   ritual: string;

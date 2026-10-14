@@ -90,8 +90,15 @@ async function main() {
   // ...and replay 021 against it. Dropping the table and its ledger row is
   // what a database that has never seen this migration looks like, which is
   // the only state in which the backfill's behaviour can actually be observed.
+  // 022 is replayed alongside 021 because it backfills SECTIONS from the same
+  // catalog, and a type's section is validated against those rows — without
+  // them, assigning a type to "Makeup" is correctly refused as a section that
+  // does not exist, and the assertions below would be testing that instead.
   await pool.query('DROP TABLE IF EXISTS product_types');
-  await pool.query(`DELETE FROM schema_migrations WHERE version = '021_product_types.sql'`);
+  await pool.query('DROP TABLE IF EXISTS product_sections');
+  await pool.query(
+    `DELETE FROM schema_migrations WHERE version IN ('021_product_types.sql', '022_product_sections.sql')`
+  );
   await runMigrations(pool);
   invalidateProductTypeCache();
 

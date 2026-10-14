@@ -33,7 +33,9 @@
     "inventory:rollback": "tsx src/db/cli-inventory.ts rollback",
     "inventory:repair-flags": "tsx src/db/cli-inventory.ts repair-flags",
     "images:cleanup": "tsx src/db/cli-cleanup-seed-images.ts",
-    "delhivery:check": "tsx src/db/cli-delhivery.ts"
+    "delhivery:check": "tsx src/db/cli-delhivery.ts",
+    "test:producttypes": "tsx src/test/producttypes.e2e.ts",
+    "test:producttypesdb": "tsx src/test/producttypes.db.e2e.ts"
   },
   "dependencies": {
     "@glamirk/shared": "*",

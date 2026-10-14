@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { Product, ProductAttribute, UsageStep } from '@glamirk/shared/types';
+import { ProductTypePicker } from './ProductTypePicker';
 import {
   Package,
   Plus,
@@ -26,7 +27,6 @@ import {
 } from 'lucide-react';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { useDragReorder } from '../../hooks/useDragReorder';
-import { PRODUCT_TAXONOMY } from '@glamirk/shared/data/taxonomy';
 import { apiFetch } from '@glamirk/shared/utils/cmsClient';
 import { InventoryPanel, ReadOnlyStockField } from './InventoryPanel';
 import { ShadeEditor } from './ShadeEditor';
@@ -841,16 +841,15 @@ export const AdminProducts: React.FC = () => {
                 <select
                   value={editingProduct.category}
                   onChange={(e) => {
-                    const nextCategory = e.target.value as 'Makeup' | 'Skin' | 'Nails';
-                    const validSubs = PRODUCT_TAXONOMY[nextCategory] || [];
+                    // Section and type are independent now. This used to reset
+                    // subCategory to the first entry of a fixed per-section
+                    // list, which would silently detach the product from the
+                    // type chosen below — the Product Type picker owns that
+                    // field, and a type can legitimately sit under any section
+                    // or none.
                     setEditingProduct({
                       ...editingProduct,
-                      category: nextCategory as any,
-                      // The old sub-category almost certainly doesn't belong to the
-                      // new category — falling back to its first valid sub-category
-                      // keeps the product filterable on Shop instead of silently
-                      // carrying over a mismatched value (the original bug here).
-                      subCategory: validSubs.includes(editingProduct.subCategory) ? editingProduct.subCategory : validSubs[0] || '',
+                      category: e.target.value as 'Makeup' | 'Skin' | 'Nails',
                     });
                   }}
                   className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
@@ -861,35 +860,22 @@ export const AdminProducts: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                  Sub-Category
-                </label>
-                <select
-                  value={editingProduct.subCategory}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, subCategory: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6]"
-                >
-                  {(() => {
-                    const validSubs = PRODUCT_TAXONOMY[editingProduct.category as 'Makeup' | 'Skin' | 'Nails'] || [];
-                    // Surface a currently-saved value that isn't in the valid list
-                    // instead of hiding it — a silent mismatch here is exactly
-                    // what made this product invisible to the Shop filter.
-                    const options = validSubs.includes(editingProduct.subCategory)
-                      ? validSubs
-                      : [editingProduct.subCategory, ...validSubs].filter(Boolean);
-                    return options.map((sub) => (
-                      <option key={sub} value={sub}>
-                        {sub}
-                        {!validSubs.includes(sub) ? ' (not in Shop taxonomy — please reselect)' : ''}
-                      </option>
-                    ));
-                  })()}
-                </select>
-                <p className="text-[10px] text-[#6B6B6B] mt-1">
-                  This list drives Shop's category filter — a value not on it (shown with a warning above) won't be filterable by customers until you reselect a valid one.
-                </p>
-              </div>
+              <ProductTypePicker
+                value={editingProduct.typeId}
+                legacySubCategory={editingProduct.subCategory}
+                onChange={(typeId, typeName) =>
+                  setEditingProduct({
+                    ...editingProduct,
+                    typeId,
+                    // subCategory is kept in step with the type's name so every
+                    // consumer that predates types — the homepage grid, saved
+                    // ?subCategory= links, the legacy filter path — keeps
+                    // describing this product the same way. The server does the
+                    // same on save; this is just so the form shows it too.
+                    subCategory: typeName ?? editingProduct.subCategory,
+                  })
+                }
+              />
 
               <div>
                 <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">

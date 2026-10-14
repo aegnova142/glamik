@@ -44,6 +44,15 @@ import {
 } from '../services/fulfillment.service';
 import { getShipmentProvider } from '../services/couriers/delhivery.service';
 import {
+  listProductTypes,
+  listProductTypesWithUsage,
+  getProductType,
+  createProductType,
+  updateProductType,
+  deleteProductType,
+  resolveTypeForProductSave,
+} from '../services/productType.service';
+import {
   listNotificationDeliveries,
   getNotificationDelivery,
   retryNotification,
@@ -270,6 +279,17 @@ router.get('/cms/content', async (req: Request, res: Response) => {
     pages: db.pages.filter((p) => p.status === 'published'),
     products: db.products.filter((p) => p.inStock !== undefined),
     categories: db.categories.filter((c) => c.isVisible),
+    // Shop's filter list is derived from these. Shipped inside the single
+    // content payload the storefront already fetches rather than as a second
+    // endpoint, so adding dynamic types costs zero extra round trips — and
+    // served from an in-process cache, so it costs no extra query either
+    // except on the first call after an admin edit.
+    //
+    // INACTIVE TYPES ARE INCLUDED. A product assigned to a deactivated type
+    // must still resolve to it, or it would fall back to the legacy name match
+    // and could disappear from the catalog entirely. selectableTypes() on the
+    // client is what decides which of these a shopper is actually offered.
+    productTypes: await listProductTypes(),
     navigation: db.navigation.filter((n) => n.isVisible),
     footer: db.footer,
     offers: evaluatedOffers.filter((o) => o.status === 'active'),
@@ -1127,6 +1147,100 @@ router.get('/admin/orders/:id/payments', requireAdmin, async (req: Authenticated
 });
 
 // ==========================================
+// PRODUCT TYPES
+//
+// Admin-defined types ("Lipstick", "Lip Care"). Reads carry usage counts
+// because every destructive choice here — deactivate, delete, reassign —
+// depends on how many products are affected, and an admin should never have
+// to guess that.
+//
+// Uniqueness, validation and cache invalidation all live in
+// productType.service.ts; these routes only translate its results into status
+// codes, so the rules cannot drift between HTTP and any other caller.
+// ==========================================
+
+router.get('/admin/product-types', requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  res.json({ types: await listProductTypesWithUsage(db.products) });
+});
+
+router.post('/admin/product-types', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const result = await createProductType(req.body || {});
+  if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+
+  await logAudit(req, 'CREATE_PRODUCT_TYPE', 'PRODUCT_TYPE', result.type!.id, result.type!.name);
+  // Shop's filter list is derived from this, so connected storefronts pick the
+  // new type up without a reload — the same channel product edits use.
+  broadcastEvent('CMS_UPDATE', 'productTypes', result.type);
+  res.json(result.type);
+});
+
+router.put('/admin/product-types/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  // The catalog is handed in so a rename can pin the products that would
+  // otherwise be stranded by it — see updateProductType, which owns that rule.
+  const result = await updateProductType(req.params.id, req.body || {}, db.products);
+  if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+  if ((result.productsTouched || 0) > 0) await saveDatabase(db);
+
+  await logAudit(req, 'UPDATE_PRODUCT_TYPE', 'PRODUCT_TYPE', result.type!.id, result.type!.name);
+  broadcastEvent('CMS_UPDATE', 'productTypes', result.type);
+  res.json(result.type);
+});
+
+/**
+ * Reassigns every product on one type to another, then optionally removes the
+ * source. The safe alternative to deleting a type that is still in use.
+ */
+router.post('/admin/product-types/:id/reassign', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const from = await getProductType(req.params.id);
+  if (!from) return res.status(404).json({ error: 'Product type not found.' });
+
+  const { targetTypeId, deleteAfter } = req.body || {};
+  const to = await getProductType(targetTypeId);
+  if (!to) return res.status(400).json({ error: 'Choose an existing product type to reassign to.' });
+  if (to.id === from.id) return res.status(400).json({ error: 'Choose a different product type to reassign to.' });
+
+  const db = await loadDatabase();
+  const fromName = from.name.trim().toLowerCase();
+  let moved = 0;
+  for (const product of db.products) {
+    const matchesById = product.typeId === from.id;
+    const matchesByName = !product.typeId && (product.subCategory || '').trim().toLowerCase() === fromName;
+    if (matchesById || matchesByName) {
+      product.typeId = to.id;
+      product.subCategory = to.name;
+      moved++;
+    }
+  }
+  if (moved > 0) await saveDatabase(db);
+
+  let deleted = false;
+  if (deleteAfter) {
+    const removal = await deleteProductType(from.id, db.products);
+    // A refusal here means something still references it; report the move that
+    // did happen rather than failing the whole request.
+    deleted = removal.ok;
+  }
+
+  await logAudit(req, 'REASSIGN_PRODUCT_TYPE', 'PRODUCT_TYPE', from.id, `${from.name} → ${to.name} (${moved})`);
+  broadcastEvent('CMS_UPDATE', 'productTypes', { from: from.id, to: to.id });
+  res.json({ moved, deleted, from: from.id, to: to.id });
+});
+
+router.delete('/admin/product-types/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const result = await deleteProductType(req.params.id, db.products);
+  if (!result.ok) {
+    return res.status(result.status || 400).json({ error: result.error, productCount: result.productCount });
+  }
+
+  await logAudit(req, 'DELETE_PRODUCT_TYPE', 'PRODUCT_TYPE', req.params.id, result.type!.name);
+  broadcastEvent('CMS_UPDATE', 'productTypes', { deleted: req.params.id });
+  res.json({ success: true });
+});
+
+// ==========================================
 // INVENTORY
 //
 // Every route here is behind requireAdmin — the same gate as the rest of this
@@ -1369,15 +1483,43 @@ function validateProduct(product: Partial<Product>): string | null {
   return null;
 }
 
+/**
+ * Applies a client-supplied typeId to a product payload.
+ *
+ * The id is resolved against the table rather than trusted — an id that does
+ * not exist is a 400, not a product quietly saved pointing at nothing.
+ *
+ * On success BOTH fields are written: `typeId` (the stable reference) and
+ * `subCategory` (the type's current name). Keeping the legacy field in step is
+ * what lets existing ?subCategory= links, the homepage category grid and every
+ * other consumer that predates types go on working against a typed product.
+ */
+async function applyProductType(
+  payload: Partial<Product>
+): Promise<{ ok: boolean; error?: string; product?: Partial<Product> }> {
+  if (payload.typeId === undefined) return { ok: true, product: payload };
+  const resolved = await resolveTypeForProductSave(payload.typeId);
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+  if (!resolved.type) {
+    // Explicitly cleared — the product becomes untyped and falls back to its
+    // subCategory, which is exactly how a pre-types product behaves.
+    return { ok: true, product: { ...payload, typeId: undefined } };
+  }
+  return { ok: true, product: { ...payload, typeId: resolved.type.id, subCategory: resolved.type.name } };
+}
+
 router.post('/admin/products', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
-  const validationError = validateProduct(req.body);
+  const typed = await applyProductType(req.body);
+  if (!typed.ok) return res.status(400).json({ error: typed.error });
+
+  const validationError = validateProduct(typed.product);
   if (validationError) {
     return res.status(400).json({ error: validationError });
   }
 
   const db = await loadDatabase();
   const newProduct: Product = {
-    ...req.body,
+    ...(typed.product as Product),
     id: req.body.id || 'prod-' + Date.now(),
   };
 
@@ -1400,7 +1542,10 @@ router.put('/admin/products/:id', requireAdmin, async (req: AuthenticatedRequest
     return res.status(404).json({ error: 'Product not found' });
   }
 
-  const merged = { ...db.products[idx], ...req.body };
+  const typed = await applyProductType({ ...db.products[idx], ...req.body });
+  if (!typed.ok) return res.status(400).json({ error: typed.error });
+
+  const merged = typed.product as Product;
   const validationError = validateProduct(merged);
   if (validationError) {
     return res.status(400).json({ error: validationError });

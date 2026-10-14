@@ -8,6 +8,7 @@ import {
   CMSPage,
   Product,
   CMSCategory,
+  ProductType,
   CMSNavigationItem,
   CMSFooterConfig,
   CMSOffer,
@@ -97,6 +98,23 @@ export interface CMSContextType {
   duplicateProduct: (id: string) => Promise<boolean>;
   saveCategory: (category: Partial<CMSCategory>) => Promise<boolean>;
   deleteCategory: (id: string) => Promise<boolean>;
+  /** Admin-defined product types. Active AND inactive — a product on a
+   *  deactivated type still has to resolve to it. */
+  productTypes: ProductType[];
+  /** Create or rename/describe/activate. Resolves to the saved type, or an
+   *  error message — a duplicate name is an expected outcome the form shows
+   *  inline, not an exception. */
+  saveProductType: (
+    type: Partial<ProductType>
+  ) => Promise<{ ok: boolean; error?: string; type?: ProductType }>;
+  deleteProductType: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  /** Moves every product off one type onto another, optionally removing the
+   *  source once empty. The safe path when a type is still in use. */
+  reassignProductType: (
+    fromId: string,
+    toId: string,
+    deleteAfter?: boolean
+  ) => Promise<{ ok: boolean; error?: string; moved?: number; deleted?: boolean }>;
   saveOffer: (offer: Partial<CMSOffer>) => Promise<boolean>;
   deleteOffer: (id: string) => Promise<boolean>;
   saveNavigation: (nav: CMSNavigationItem[]) => Promise<boolean>;
@@ -154,6 +172,7 @@ const CMSContext = createContext<CMSContextType | null>(null);
 export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [pages, setPages] = useState<CMSPage[]>([]);
   const [products, setProducts] = useState<Product[]>(GLAMIRK_PRODUCTS);
+  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
   const [categories, setCategories] = useState<CMSCategory[]>([
     {
       id: 'cat-makeup',
@@ -271,6 +290,9 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (res.data.pages) setPages(res.data.pages);
         if (res.data.products) setProducts(res.data.products);
         if (res.data.categories) setCategories(res.data.categories);
+        // Absent on a server that predates migration 021 — default to [] so the
+        // filter falls back to legacy subCategory matching instead of crashing.
+        setProductTypes(Array.isArray(res.data.productTypes) ? res.data.productTypes : []);
         if (res.data.navigation) setNavigation(res.data.navigation);
         if (res.data.footer) setFooter(res.data.footer);
         if (res.data.heroContent) setHeroContent(res.data.heroContent);
@@ -475,6 +497,56 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return true;
     }
     return false;
+  };
+
+  // ----------------------------------------------------------------------
+  // Product types
+  //
+  // Each mutation re-reads the public content afterwards rather than patching
+  // local state: the server rewrites product.subCategory on rename and on
+  // reassign, so a local patch would leave the catalog in this tab disagreeing
+  // with the database about which type a product is on.
+  //
+  // These return the error text instead of a bare boolean, because "that name
+  // is taken" is the single most likely outcome of creating a type and the
+  // form has to show it next to the field.
+  // ----------------------------------------------------------------------
+  const saveProductType = async (
+    type: Partial<ProductType>
+  ): Promise<{ ok: boolean; error?: string; type?: ProductType }> => {
+    const isUpdate = !!type.id && productTypes.some((t) => t.id === type.id);
+    const res = await apiFetch(isUpdate ? `/api/admin/product-types/${type.id}` : '/api/admin/product-types', {
+      method: isUpdate ? 'PUT' : 'POST',
+      body: JSON.stringify(type),
+    });
+    if (res.status >= 400) return { ok: false, error: res.error || 'Could not save this product type.' };
+    await loadPublicContent();
+    return { ok: true, type: res.data as ProductType };
+  };
+
+  const deleteProductTypeById = async (id: string): Promise<{ ok: boolean; error?: string }> => {
+    const res = await apiFetch(`/api/admin/product-types/${id}`, { method: 'DELETE' });
+    // apiFetch keeps only the message on a non-2xx, which is enough: the
+    // route's refusal already names the number of products blocking the
+    // delete, and that sentence is what the admin is shown.
+    if (res.status >= 400) return { ok: false, error: res.error || 'Could not delete this product type.' };
+    await loadPublicContent();
+    return { ok: true };
+  };
+
+  const reassignProductType = async (
+    fromId: string,
+    toId: string,
+    deleteAfter = false
+  ): Promise<{ ok: boolean; error?: string; moved?: number; deleted?: boolean }> => {
+    const res = await apiFetch(`/api/admin/product-types/${fromId}/reassign`, {
+      method: 'POST',
+      body: JSON.stringify({ targetTypeId: toId, deleteAfter }),
+    });
+    if (res.status >= 400) return { ok: false, error: res.error || 'Could not reassign products.' };
+    await loadPublicContent();
+    const body = res.data as { moved?: number; deleted?: boolean } | undefined;
+    return { ok: true, moved: body?.moved, deleted: body?.deleted };
   };
 
   const saveOffer = async (offer: Partial<CMSOffer>): Promise<boolean> => {
@@ -842,6 +914,10 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     pages,
     products,
     categories,
+    productTypes,
+    saveProductType,
+    deleteProductType: deleteProductTypeById,
+    reassignProductType,
     navigation,
     footer,
     heroContent,

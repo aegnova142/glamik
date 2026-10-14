@@ -30,6 +30,7 @@
 // ==========================================
 
 import type { Product, Shade, SizeOption } from '../types';
+import { isSafeBannerUrl } from './homeBanners';
 import { isUsableImageUrl } from './shadeMatch';
 
 // 3-digit shorthand is accepted alongside the 6-digit form the picker writes.
@@ -207,5 +208,33 @@ export function validateProductVariants(product: Partial<Product>): string | nul
     return `This product's compare-at price (₹${product.originalPrice}) is below its selling price (₹${product.price}). Compare-at must be the higher, pre-discount price.`;
   }
 
+  return null;
+}
+
+export const MAX_PRODUCT_VIDEOS = 6;
+
+/**
+ * Product videos: each needs a real URL (https or a site path — never
+ * javascript:/data:), ids must be unique, and the list is capped so a product
+ * page never turns into a video wall. Same first-problem-only contract as
+ * validateProductVariants.
+ */
+export function validateProductVideos(product: Partial<Product>): string | null {
+  const videos = product.videos;
+  if (videos === undefined) return null;
+  if (!Array.isArray(videos)) return 'Product videos are invalid.';
+  if (videos.length > MAX_PRODUCT_VIDEOS) return `A product can have at most ${MAX_PRODUCT_VIDEOS} videos.`;
+  const ids = new Set<string>();
+  for (let i = 0; i < videos.length; i++) {
+    const v = videos[i];
+    const n = `Video ${i + 1}`;
+    if (!v || typeof v.id !== 'string' || !v.id) return `${n} is missing its id.`;
+    if (ids.has(v.id)) return `${n} is listed twice.`;
+    ids.add(v.id);
+    if (typeof v.url !== 'string' || !v.url.trim()) return `${n} has no video — upload one or remove it.`;
+    if (!isSafeBannerUrl(v.url)) return `${n} must be an https:// URL from the media library.`;
+    if (v.posterUrl && !isSafeBannerUrl(v.posterUrl)) return `${n}: poster must be an https:// URL from the media library.`;
+    if (v.title !== undefined && (typeof v.title !== 'string' || v.title.length > 80)) return `${n}: title must be at most 80 characters.`;
+  }
   return null;
 }

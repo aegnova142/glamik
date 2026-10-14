@@ -83,6 +83,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
         </button>
 
         {/* 3. Shade AI (centre accent) */}
+        {/* FIND-MY-SHADE-PAUSED: tab for the paused Find My Shade page — uncomment to restore.
         <button
           id="mobile-tab-shade-finder"
           onClick={onOpenShadeFinder}
@@ -106,6 +107,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             Shade AI
           </span>
         </button>
+        */}
 
         {/* 4. Cart */}
         <button

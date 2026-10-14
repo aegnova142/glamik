@@ -11,6 +11,7 @@ import {
   withStockLock,
   StoredUser,
   JWT_SECRET,
+  InternalCMSDatabaseSchema,
 } from '../db/db';
 import {
   ORDER_STATUS_SEQUENCE,
@@ -93,8 +94,13 @@ import {
   UploadedAsset,
 } from '../services/media.service';
 import { findBrokenShadeImageUrls } from '@glamirk/shared/utils/shadeMatch';
-import { validateProductVariants } from '@glamirk/shared/utils/productValidation';
+import { validateProductVariants, validateProductVideos } from '@glamirk/shared/utils/productValidation';
 import { isHomeBannerLive, validateHomeBannerConfig } from '@glamirk/shared/utils/homeBanners';
+import {
+  DEFAULT_LIVE_PRIVILEGES_POPUP,
+  normalizeLivePrivilegesConfig,
+  validateLivePrivilegesConfig,
+} from '@glamirk/shared/utils/livePrivilegesPopup';
 import { env } from '../config/env';
 import { requireAdmin, AuthenticatedRequest } from '../middleware/requireAdmin';
 import {
@@ -325,6 +331,9 @@ router.get('/cms/content', async (req: Request, res: Response) => {
       intervalMs: db.homeBanners?.intervalMs,
       banners: (db.homeBanners?.banners || []).filter((b) => isHomeBannerLive(b)),
     },
+    // Live Privileges popup: the PUBLISHED config only — the admin's draft
+    // never leaves the server on this route. Never configured = defaults.
+    livePrivilegesPopup: db.livePrivilegesPopup?.published ?? DEFAULT_LIVE_PRIVILEGES_POPUP,
     shadeFinderTeaser: db.shadeFinderTeaser,
     // [Glamik CMS] 2026-10-03 — expose Personalized Beauty + Shop mega-menu to
     // the storefront (active-only, sorted) alongside the existing sections.
@@ -1572,6 +1581,8 @@ function validateProduct(product: Partial<Product>): string | null {
   // two can never drift into disagreeing about what is saveable.
   const variantError = validateProductVariants(product);
   if (variantError) return variantError;
+  const videoError = validateProductVideos(product);
+  if (videoError) return videoError;
 
   if ((product.benefits || []).some((b) => !b || !b.trim())) {
     return 'Benefit text cannot be empty.';
@@ -2107,25 +2118,82 @@ router.delete('/admin/try-on-models/:id', requireAdmin, async (req: Authenticate
 });
 
 // --- Shop The Look Management ---
-router.post('/admin/looks', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
-  const { title, tagline, description, image, video, category, productsUsed } = req.body || {};
-  if (!title || !String(title).trim()) {
-    return res.status(400).json({ error: 'Title is required.' });
+
+const LOOK_CATEGORIES = ['EVERYDAY GLAM', 'DATE NIGHT', 'WEDDING GLAM', 'MINIMAL GLAM'];
+/** "50% 30%" — two percentages, what the public card passes to object-position. */
+const LOOK_FOCUS_PATTERN = /^(100|[1-9]?\d)(\.\d+)?% (100|[1-9]?\d)(\.\d+)?%$/;
+
+/**
+ * Whitelists and validates an incoming look body. Only the fields a look
+ * actually has are copied — a previous version spread req.body straight into
+ * the stored record, so any extra property an admin client sent became part
+ * of public CMS content. `partial` is for PUT, where absent fields are kept.
+ */
+function parseLookInput(
+  body: any,
+  partial: boolean
+): { status: 'valid'; value: Partial<Look> } | { status: 'invalid'; error: string } {
+  const b = body && typeof body === 'object' ? body : {};
+  const out: Partial<Look> = {};
+  const has = (k: string) => b[k] !== undefined;
+  const text = (k: string, max: number) => String(b[k] ?? '').trim().slice(0, max);
+  const isMediaUrl = (v: string) => /^https:\/\//i.test(v) || /^\/(?!\/)/.test(v);
+
+  if (!partial || has('title')) {
+    out.title = text('title', 120);
+    if (!out.title) return { status: 'invalid', error: 'Title is required.' };
   }
-  if (!image || !String(image).trim()) {
-    return res.status(400).json({ error: 'Image is required.' });
+  if (has('tagline') || !partial) out.tagline = text('tagline', 300);
+  if (has('description') || !partial) out.description = text('description', 2000);
+  if (!partial || has('category')) {
+    const category = text('category', 40).toUpperCase() || 'EVERYDAY GLAM';
+    if (!LOOK_CATEGORIES.includes(category)) return { status: 'invalid', error: 'Unknown look category.' };
+    out.category = category;
+  }
+  if (!partial || has('image')) {
+    // Blank is allowed on update (see the PUT handler); a value must be a
+    // real https URL or a same-origin path — never javascript:, data: or a
+    // local filesystem path.
+    const image = text('image', 2048);
+    if (!partial && !image) return { status: 'invalid', error: 'Image is required.' };
+    if (image && !isMediaUrl(image)) return { status: 'invalid', error: 'Image must be an https:// URL from the media library.' };
+    out.image = image;
+  }
+  if (has('video')) {
+    const video = text('video', 2048);
+    if (video && !isMediaUrl(video)) return { status: 'invalid', error: 'Video must be an https:// URL from the media library.' };
+    out.video = video || undefined;
+  }
+  if (has('imageFocus')) {
+    const focus = text('imageFocus', 20);
+    if (focus && !LOOK_FOCUS_PATTERN.test(focus)) return { status: 'invalid', error: 'Image focal point must look like "50% 30%".' };
+    out.imageFocus = focus || undefined;
+  }
+  if (!partial || has('productsUsed')) {
+    if (b.productsUsed !== undefined && !Array.isArray(b.productsUsed)) {
+      return { status: 'invalid', error: 'productsUsed must be a list.' };
+    }
+    out.productsUsed = (b.productsUsed || []).slice(0, 12).map((item: any) => ({
+      productId: String(item?.productId ?? '').trim().slice(0, 120),
+      productName: String(item?.productName ?? '').trim().slice(0, 200),
+      shadeName: String(item?.shadeName ?? '').trim().slice(0, 120) || undefined,
+      role: String(item?.role ?? '').trim().slice(0, 80),
+    })).filter((item: { productId: string }) => item.productId);
+  }
+  return { status: 'valid', value: out };
+}
+
+router.post('/admin/looks', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const parsed = parseLookInput(req.body, false);
+  if (parsed.status === 'invalid') {
+    return res.status(400).json({ error: parsed.error });
   }
 
   const db = await loadDatabase();
   const newLook: Look = {
+    ...(parsed.value as Look),
     id: 'look-' + Date.now(),
-    title,
-    tagline: tagline || '',
-    description: description || '',
-    image,
-    video: video || undefined,
-    category: category || 'EVERYDAY GLAM',
-    productsUsed: Array.isArray(productsUsed) ? productsUsed : [],
+    updatedAt: new Date().toISOString(),
   };
 
   db.looks = [...(db.looks || []), newLook];
@@ -2143,9 +2211,9 @@ router.put('/admin/looks/:id', requireAdmin, async (req: AuthenticatedRequest, r
     return res.status(404).json({ error: 'Look not found' });
   }
 
-  const { title } = req.body || {};
-  if (title !== undefined && !String(title).trim()) {
-    return res.status(400).json({ error: 'Title cannot be empty.' });
+  const parsed = parseLookInput(req.body, true);
+  if (parsed.status === 'invalid') {
+    return res.status(400).json({ error: parsed.error });
   }
   // Image is intentionally NOT required on update, unlike creation — an admin
   // clearing a placeholder pending a real upload is the same "blank until
@@ -2157,7 +2225,7 @@ router.put('/admin/looks/:id', requireAdmin, async (req: AuthenticatedRequest, r
   // stays a normal, deletable Media Library entry until an admin explicitly
   // removes it via DELETE /admin/media/:id, which re-verifies at that point
   // that nothing still points at it.
-  db.looks[idx] = { ...db.looks[idx], ...req.body };
+  db.looks[idx] = { ...db.looks[idx], ...parsed.value, id: db.looks[idx].id, updatedAt: new Date().toISOString() };
 
   await saveDatabase(db);
   await logAudit(req, 'UPDATE_LOOK', 'LOOK', db.looks[idx].id, db.looks[idx].title);
@@ -2238,6 +2306,92 @@ router.put('/admin/promo-banners', requireAdmin, async (req: AuthenticatedReques
   broadcastEvent('CMS_UPDATE', 'promoBanners', db.promoBanners);
 
   res.json(db.promoBanners);
+});
+
+// --- Live Privileges popup (Shop the Look) ---
+// Draft/publish: admins edit `draft`; customers only ever see `published`
+// (served by /cms/content above). Coupon rules are NOT stored here — each
+// card links to a real offer by id, so checkout and the popup always agree.
+
+function livePrivilegesAdminView(db: InternalCMSDatabaseSchema) {
+  const state = db.livePrivilegesPopup;
+  return {
+    draft: state?.draft ?? state?.published ?? DEFAULT_LIVE_PRIVILEGES_POPUP,
+    published: state?.published ?? null,
+    publishedAt: state?.publishedAt ?? null,
+    updatedAt: state?.updatedAt ?? null,
+    updatedBy: state?.updatedBy ?? null,
+  };
+}
+
+function parseLivePrivilegesBody(body: unknown, db: InternalCMSDatabaseSchema) {
+  const errors = validateLivePrivilegesConfig(body);
+  if (errors.length) return { errors };
+  const config = normalizeLivePrivilegesConfig(body);
+  // Each card must point at an offer that exists (it may be inactive — the
+  // storefront hides those — but a dangling id is a client bug).
+  const known = new Set((db.offers || []).map((o) => o.id));
+  const missing = config.offers.filter((o) => !known.has(o.offerId)).map((o) => o.offerId);
+  if (missing.length) return { errors: [`Unknown offer(s): ${missing.join(', ')}`] };
+  return { config };
+}
+
+router.get('/admin/live-privileges', requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  res.json(livePrivilegesAdminView(db));
+});
+
+router.put('/admin/live-privileges/draft', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const parsed = parseLivePrivilegesBody(req.body, db);
+  if (!parsed.config) {
+    return res.status(400).json({ error: `Draft was not saved. ${parsed.errors.join(' · ')}`, details: parsed.errors });
+  }
+  db.livePrivilegesPopup = {
+    ...(db.livePrivilegesPopup || { published: null }),
+    draft: parsed.config,
+    updatedAt: new Date().toISOString(),
+    updatedBy: req.user?.email,
+  };
+  await saveDatabase(db);
+  await logAudit(req, 'UPDATE_LIVE_PRIVILEGES_DRAFT', 'LIVE_PRIVILEGES', 'live-privileges', 'Live Privileges popup draft saved');
+  res.json(livePrivilegesAdminView(db));
+});
+
+// Publishes the submitted config (which also becomes the draft), so "Publish"
+// never ships something other than what the admin is looking at.
+router.post('/admin/live-privileges/publish', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const parsed = parseLivePrivilegesBody(req.body, db);
+  if (!parsed.config) {
+    return res.status(400).json({ error: `Nothing was published. ${parsed.errors.join(' · ')}`, details: parsed.errors });
+  }
+  const now = new Date().toISOString();
+  db.livePrivilegesPopup = {
+    draft: parsed.config,
+    published: parsed.config,
+    publishedAt: now,
+    updatedAt: now,
+    updatedBy: req.user?.email,
+  };
+  await saveDatabase(db);
+  await logAudit(req, 'PUBLISH_LIVE_PRIVILEGES', 'LIVE_PRIVILEGES', 'live-privileges', 'Live Privileges popup published');
+  broadcastEvent('CMS_UPDATE', 'livePrivilegesPopup', parsed.config);
+  res.json(livePrivilegesAdminView(db));
+});
+
+router.post('/admin/live-privileges/discard', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  db.livePrivilegesPopup = {
+    published: db.livePrivilegesPopup?.published ?? null,
+    publishedAt: db.livePrivilegesPopup?.publishedAt,
+    draft: db.livePrivilegesPopup?.published ?? DEFAULT_LIVE_PRIVILEGES_POPUP,
+    updatedAt: new Date().toISOString(),
+    updatedBy: req.user?.email,
+  };
+  await saveDatabase(db);
+  await logAudit(req, 'DISCARD_LIVE_PRIVILEGES_DRAFT', 'LIVE_PRIVILEGES', 'live-privileges', 'Live Privileges popup draft discarded');
+  res.json(livePrivilegesAdminView(db));
 });
 
 // --- Homepage Banner Carousel (inline, above the hero) ---
@@ -2559,6 +2713,23 @@ router.delete('/admin/faqs/:id', requireAdmin, async (req: AuthenticatedRequest,
 
 // --- Global Settings ---
 router.put('/admin/settings', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  // The wishlist banner URL is rendered straight into a public page, so only
+  // https:// or same-site paths get through — never javascript:, data: or http.
+  const banner = req.body?.wishlistBanner;
+  if (banner !== undefined) {
+    const isSafeImageUrl = (u: unknown) =>
+      u === '' || (typeof u === 'string' && u.length <= 2048 && /^(https:\/\/|\/(?!\/))/i.test(u));
+    if (typeof banner !== 'object' || banner === null || !isSafeImageUrl(banner.imageUrl) ||
+        (banner.mobileImageUrl !== undefined && !isSafeImageUrl(banner.mobileImageUrl))) {
+      return res.status(400).json({ error: 'Banner image must be an https:// URL or an uploaded image.' });
+    }
+    req.body.wishlistBanner = {
+      enabled: banner.enabled === true,
+      imageUrl: banner.imageUrl,
+      mobileImageUrl: banner.mobileImageUrl || '',
+    };
+  }
+
   const db = await loadDatabase();
   // A replaced logo is left alone — see the "Rollback & Cleanup Timing"
   // policy at the top of this file.

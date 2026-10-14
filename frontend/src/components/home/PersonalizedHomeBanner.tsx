@@ -87,7 +87,7 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
     const recShade = lipstickProduct.shades?.find((s) => s.name === recShadeName) || lipstickProduct.shades?.[0];
 
     return (
-      <section id="personalized-beauty-section" className="py-12 sm:py-16 bg-gradient-to-b from-[#FCE8ED]/60 to-white border-b border-[#E8D5A8]">
+      <section id="personalized-beauty-section" className="home-section bg-gradient-to-b from-[#FCE8ED]/60 to-white border-b border-[#E8D5A8]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-white border border-[#E8D5A8] rounded-3xl p-6 sm:p-10 shadow-[0_12px_36px_rgba(240,90,126,0.08)]">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
@@ -269,7 +269,7 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
   return (
     <section
       id="personalized-beauty-section"
-      className="py-14 sm:py-20 bg-gradient-to-b from-[#FCE8ED]/50 via-white to-white border-b border-[#E8D5A8]"
+      className="home-section bg-gradient-to-b from-[#FCE8ED]/50 via-white to-white border-b border-[#E8D5A8]"
     >
       {/* Keyed fade for the preview content; disabled under reduced-motion. */}
       <style>{`
@@ -280,7 +280,7 @@ export const PersonalizedHomeBanner: React.FC<PersonalizedHomeBannerProps> = ({
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-14 space-y-3">
+        <div className="home-section-header text-center max-w-3xl mx-auto space-y-3">
           <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-[#FCE8ED] border border-[#E8D5A8] rounded-full shadow-xs">
             <Sparkles className="w-3.5 h-3.5 text-[#9B2D4F]" />
             <span className="text-[11px] font-bold tracking-wider uppercase text-[#9B2D4F]">{t.badgeText}</span>

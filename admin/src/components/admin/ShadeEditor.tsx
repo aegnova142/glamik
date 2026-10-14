@@ -145,8 +145,10 @@ export const ShadeEditor: React.FC<ShadeEditorProps> = ({ product, sqlInventoryM
 
   const { upload, error: uploadError } = useFileUpload({
     acceptedTypes: ['image/'],
-    maxSizeBytes: 8 * 1024 * 1024,
-    typeErrorMessage: 'Please choose an image file (JPG, PNG, or WebP).',
+    // The server's limit (MEDIA_MAX_IMAGE_MB, default 20); 8 MB refused
+    // ordinary phone photos before they were sent.
+    maxSizeBytes: 20 * 1024 * 1024,
+    typeErrorMessage: 'Please choose an image file (JPG, PNG, WebP or AVIF).',
   });
 
   // Reordering acts on the real list even while a search is narrowing what is
@@ -653,24 +655,34 @@ export const ShadeEditor: React.FC<ShadeEditorProps> = ({ product, sqlInventoryM
                       </p>
                     </div>
                     <div>
-                      <label className={MICRO_LABEL}>Short Description</label>
+                      <label htmlFor={`shade-short-${shade.id}`} className={MICRO_LABEL}>Short Description</label>
                       <input
+                        id={`shade-short-${shade.id}`}
                         type="text"
+                        maxLength={140}
                         value={shade.shortDescription || ''}
                         placeholder="e.g. Classic warm red"
                         onChange={(e) => updateShade(index, { shortDescription: e.target.value })}
                         className={INPUT}
                       />
+                      <p className="text-[9.5px] text-[#6B6B6B] mt-0.5">One line under the colour swatches on the product page.</p>
                     </div>
-                    <div>
-                      <label className={MICRO_LABEL}>Description</label>
-                      <input
-                        type="text"
+                    <div className="sm:col-span-3">
+                      <label htmlFor={`shade-desc-${shade.id}`} className={MICRO_LABEL}>
+                        Colour Description <span className="normal-case">({(shade.description || '').length}/1200)</span>
+                      </label>
+                      <textarea
+                        id={`shade-desc-${shade.id}`}
+                        rows={4}
+                        maxLength={1200}
                         value={shade.description}
-                        placeholder="Shown on the product page under the swatches"
+                        placeholder="Describe this colour — tone, finish, who it suits, when to wear it. Line breaks are kept."
                         onChange={(e) => updateShade(index, { description: e.target.value })}
-                        className={INPUT}
+                        className={INPUT + ' resize-y'}
                       />
+                      <p className="text-[9.5px] text-[#6B6B6B] mt-0.5">
+                        Shown in the product page's "Product Story" while this colour is selected (and under the swatches if no short description is set). Goes live when you click Save Product.
+                      </p>
                     </div>
                   </div>
 

@@ -28,6 +28,7 @@ import {
   CMSBenefitsSection,
   CMSPromoBannerConfig,
   CMSHomeBannerConfig,
+  LivePrivilegesPopupConfig,
   CMSShadeFinderTeaser,
   CMSJournalSectionCopy,
   CMSFindMyShadeResultsCopy,
@@ -35,6 +36,7 @@ import {
   CMSPersonalizedBeauty,
   CMSShopMegaMenu,
 } from '../types';
+import { DEFAULT_LIVE_PRIVILEGES_POPUP } from '../utils/livePrivilegesPopup';
 import { apiFetch, getAdminToken, setAdminAuth, clearAdminAuth, getStoredAdminUser } from '../utils/cmsClient';
 import { getSocket } from '../utils/socket';
 
@@ -43,6 +45,18 @@ import { GLAMIRK_PRODUCTS } from '../data/products';
 import { GLAMIRK_JOURNAL_ARTICLES_EXTENDED } from '../data/editorial';
 import { SUPPORT_FAQS } from '../data/commerce';
 import { GLAMIRK_LOOKS } from '../data/looks';
+
+export interface LivePrivilegesAdminView {
+  draft: LivePrivilegesPopupConfig;
+  published: LivePrivilegesPopupConfig | null;
+  publishedAt: string | null;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+export interface LivePrivilegesAdminResult {
+  data?: LivePrivilegesAdminView;
+  error?: string;
+}
 
 export interface CMSContextType {
   // Public state
@@ -62,6 +76,12 @@ export interface CMSContextType {
   promoBanners: CMSPromoBannerConfig | null;
   /** Live banners only (filtered server-side). The admin loads the full set via fetchFullAdminState. */
   homeBanners: CMSHomeBannerConfig | null;
+  /** Published Live Privileges popup config (defaults until first publish). */
+  livePrivilegesPopup: LivePrivilegesPopupConfig;
+  fetchLivePrivilegesAdmin: () => Promise<LivePrivilegesAdminResult>;
+  saveLivePrivilegesDraft: (config: LivePrivilegesPopupConfig) => Promise<LivePrivilegesAdminResult>;
+  publishLivePrivileges: (config: LivePrivilegesPopupConfig) => Promise<LivePrivilegesAdminResult>;
+  discardLivePrivilegesDraft: () => Promise<LivePrivilegesAdminResult>;
   shadeFinderTeaser: CMSShadeFinderTeaser | null;
   personalizedBeauty: CMSPersonalizedBeauty | null;
   shopMegaMenu: CMSShopMegaMenu | null;
@@ -148,7 +168,8 @@ export interface CMSContextType {
   deleteBenefit: (id: string) => Promise<boolean>;
   saveTryOnModel: (model: Partial<TryOnModelPreset>) => Promise<boolean>;
   deleteTryOnModel: (id: string) => Promise<boolean>;
-  saveLook: (look: Partial<Look>) => Promise<boolean>;
+  /** error carries the server's validation message for the admin form. */
+  saveLook: (look: Partial<Look>) => Promise<{ success: boolean; error?: string }>;
   deleteLook: (id: string) => Promise<boolean>;
   saveArticle: (article: Partial<JournalArticle>) => Promise<boolean>;
   deleteArticle: (id: string) => Promise<boolean>;
@@ -251,6 +272,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [offers, setOffers] = useState<CMSOffer[]>([]);
   const [promoBanners, setPromoBanners] = useState<CMSPromoBannerConfig | null>(null);
   const [homeBanners, setHomeBanners] = useState<CMSHomeBannerConfig | null>(null);
+  const [livePrivilegesPopup, setLivePrivilegesPopup] = useState<LivePrivilegesPopupConfig>(DEFAULT_LIVE_PRIVILEGES_POPUP);
   const [shadeFinderTeaser, setShadeFinderTeaser] = useState<CMSShadeFinderTeaser | null>(null);
   const [personalizedBeauty, setPersonalizedBeauty] = useState<CMSPersonalizedBeauty | null>(null);
   const [shopMegaMenu, setShopMegaMenu] = useState<CMSShopMegaMenu | null>(null);
@@ -319,6 +341,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (res.data.offers) setOffers(res.data.offers);
         if (res.data.promoBanners) setPromoBanners(res.data.promoBanners);
         if (res.data.homeBanners) setHomeBanners(res.data.homeBanners);
+        if (res.data.livePrivilegesPopup) setLivePrivilegesPopup(res.data.livePrivilegesPopup);
         if (res.data.shadeFinderTeaser) setShadeFinderTeaser(res.data.shadeFinderTeaser);
         if (res.data.personalizedBeauty) setPersonalizedBeauty(res.data.personalizedBeauty);
         if (res.data.shopMegaMenu) setShopMegaMenu(res.data.shopMegaMenu);
@@ -786,15 +809,33 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
-  const saveLook = async (look: Partial<Look>): Promise<boolean> => {
+  // --- Live Privileges popup (admin) ---------------------------------
+  // Each returns the server's view after the call, or its error message so
+  // the editor can keep the admin's unsaved state and say what went wrong.
+  const livePrivilegesCall = async (endpoint: string, init: RequestInit): Promise<LivePrivilegesAdminResult> => {
+    const res = await apiFetch<LivePrivilegesAdminView>(endpoint, init);
+    if (res.status < 400 && res.data) return { data: res.data };
+    return { error: res.error || 'Request failed' };
+  };
+  const fetchLivePrivilegesAdmin = () => livePrivilegesCall('/api/admin/live-privileges', { method: 'GET' });
+  const saveLivePrivilegesDraft = (config: LivePrivilegesPopupConfig) =>
+    livePrivilegesCall('/api/admin/live-privileges/draft', { method: 'PUT', body: JSON.stringify(config) });
+  const publishLivePrivileges = async (config: LivePrivilegesPopupConfig) => {
+    const result = await livePrivilegesCall('/api/admin/live-privileges/publish', { method: 'POST', body: JSON.stringify(config) });
+    if (result.data) await loadPublicContent();
+    return result;
+  };
+  const discardLivePrivilegesDraft = () => livePrivilegesCall('/api/admin/live-privileges/discard', { method: 'POST' });
+
+  const saveLook = async (look: Partial<Look>): Promise<{ success: boolean; error?: string }> => {
     const endpoint = look.id && looks.some((l) => l.id === look.id) ? `/api/admin/looks/${look.id}` : '/api/admin/looks';
     const method = look.id && looks.some((l) => l.id === look.id) ? 'PUT' : 'POST';
     const res = await apiFetch(endpoint, { method, body: JSON.stringify(look) });
     if (res.status < 400) {
       await loadPublicContent();
-      return true;
+      return { success: true };
     }
-    return false;
+    return { success: false, error: res.error };
   };
 
   const deleteLook = async (id: string): Promise<boolean> => {
@@ -983,6 +1024,11 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     offers,
     promoBanners,
     homeBanners,
+    livePrivilegesPopup,
+    fetchLivePrivilegesAdmin,
+    saveLivePrivilegesDraft,
+    publishLivePrivileges,
+    discardLivePrivilegesDraft,
     shadeFinderTeaser,
     personalizedBeauty,
     shopMegaMenu,

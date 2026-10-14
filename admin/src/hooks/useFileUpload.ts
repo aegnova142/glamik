@@ -1,6 +1,27 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { CMSMediaItem } from '@glamirk/shared/types';
+import { effectiveMimeType, isHeicFile, HEIC_HELP } from '@glamirk/shared/utils/uploadFile';
+
+// How many uploads are running anywhere in the admin right now. Editors read
+// it to keep Save disabled until every upload has finished — saving mid-upload
+// used to store the product without the new image, which then looked like the
+// upload had silently failed.
+let uploadsInFlight = 0;
+const uploadListeners = new Set<() => void>();
+const setUploadsInFlight = (delta: number) => {
+  uploadsInFlight = Math.max(0, uploadsInFlight + delta);
+  uploadListeners.forEach((l) => l());
+};
+export function useUploadsInFlight(): boolean {
+  return useSyncExternalStore(
+    (l) => {
+      uploadListeners.add(l);
+      return () => uploadListeners.delete(l);
+    },
+    () => uploadsInFlight > 0
+  );
+}
 
 interface UseFileUploadOptions {
   /** Exact MIME types (e.g. 'image/png') or prefixes (e.g. 'video/' matches any video type). */
@@ -44,7 +65,14 @@ export function useFileUpload({ acceptedTypes, maxSizeBytes, typeErrorMessage }:
     if (inFlight.current) return null;
     setError(null);
     if (!file) return null;
-    if (!matchesAcceptedType(file.type, acceptedTypes)) {
+    // iPhone photos: say exactly what to do instead of letting the server
+    // refuse it with a format message nobody can act on.
+    if (isHeicFile(file) && acceptedTypes.some((t) => t.startsWith('image'))) {
+      setError(HEIC_HELP);
+      setPhase('error');
+      return null;
+    }
+    if (!matchesAcceptedType(effectiveMimeType(file), acceptedTypes)) {
       setError(typeErrorMessage);
       setPhase('error');
       return null;
@@ -62,20 +90,29 @@ export function useFileUpload({ acceptedTypes, maxSizeBytes, typeErrorMessage }:
     }
 
     inFlight.current = true;
+    setUploadsInFlight(1);
     setIsUploading(true);
     setProgress(0);
     setPhase('uploading');
 
-    const { item, error: serverError } = await uploadMediaDetailed(file, {
-      onProgress: (percent) => {
-        setProgress(percent);
-        // The bytes are delivered but the server is still storing them.
-        // Saying so beats a bar that sits at 99% looking stuck.
-        if (percent >= 99) setPhase('processing');
-      },
-    });
+    let result: { item: CMSMediaItem | null; error: string | null };
+    try {
+      result = await uploadMediaDetailed(file, {
+        onProgress: (percent) => {
+          setProgress(percent);
+          // The bytes are delivered but the server is still storing them.
+          // Saying so beats a bar that sits at 99% looking stuck.
+          if (percent >= 99) setPhase('processing');
+        },
+      });
+    } catch {
+      // Never leave the control (or the editor's Save button) stuck busy.
+      result = { item: null, error: 'Upload failed — check your connection and try again.' };
+    }
+    const { item, error: serverError } = result;
 
     inFlight.current = false;
+    setUploadsInFlight(-1);
     setIsUploading(false);
 
     if (!item) {

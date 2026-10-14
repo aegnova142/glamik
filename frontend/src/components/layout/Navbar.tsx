@@ -7,6 +7,7 @@ import {
   Menu,
   X,
   ChevronDown,
+  ChevronRight,
   ArrowRight,
   Sparkles,
   Flower2,
@@ -38,14 +39,13 @@ const AccountMenuLink: React.FC<{ label: string; icon: React.ElementType; onClic
 }) => (
   <button
     onClick={onClick}
-    role="menuitem"
-    className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-[#0B0B0B] text-[#FAF9F6] flex items-center justify-between transition-colors cursor-pointer group"
+    className="w-full text-left px-4 sm:px-5 min-h-[48px] sm:min-h-[44px] text-[13.5px] text-[#F5F1EA] hover:text-white hover:bg-white/[0.035] flex items-center justify-between border-b border-[#34312D] last:border-b-0 transition-colors duration-200 cursor-pointer group outline-none focus-visible:bg-white/[0.05] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#C9972B]"
   >
-    <span className="flex items-center gap-2.5">
-      <Icon className="w-4 h-4 text-[#C9972B]" />
-      <span className="font-medium">{label}</span>
+    <span className="flex items-center gap-3.5">
+      <Icon className="w-[17px] h-[17px] stroke-[1.6] text-[#C9972B] group-hover:text-[#E3B84B] transition-colors duration-200" />
+      <span>{label}</span>
     </span>
-    <ArrowRight className="w-3 h-3 text-[#6B6B6B] group-hover:text-[#FAF9F6] transition-colors" />
+    <ChevronRight className="w-4 h-4 text-[#777777] group-hover:text-[#C9972B] group-hover:translate-x-0.5 transition-all duration-200" />
   </button>
 );
 
@@ -124,8 +124,23 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const accountButtonRef = useRef<HTMLButtonElement>(null);
+
   // Close account dropdown on outside click
   useClickOutside(accountDropdownRef, () => setAccountMenuOpen(false));
+
+  // Escape closes it and hands focus back to the trigger, so a keyboard user
+  // isn't left stranded on an element that just disappeared.
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setAccountMenuOpen(false);
+      accountButtonRef.current?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [accountMenuOpen]);
 
   // Every dropdown item closes the menu before navigating — otherwise it
   // would still be hanging open over the page it just took you to.
@@ -259,6 +274,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               )}
             </div>
 
+            {/* FIND-MY-SHADE-PAUSED: nav link to the paused Find My Shade page.
             <button
               id="nav-btn-shade-finder"
               onClick={onOpenShadeFinder}
@@ -271,6 +287,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Sparkles className="w-3.5 h-3.5 text-[#F05A7E]" />
               Find My Shade
             </button>
+            */}
 
             <button
               id="nav-btn-shop-look"
@@ -387,16 +404,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="relative" ref={accountDropdownRef}>
               <button
                 id="nav-account-button"
+                ref={accountButtonRef}
+                type="button"
                 onClick={() => setAccountMenuOpen(!accountMenuOpen)}
                 aria-expanded={accountMenuOpen}
-                aria-haspopup="menu"
-                className={`p-2 rounded-full hover:bg-[#FCE8ED] transition-colors cursor-pointer flex items-center gap-1 ${
-                  currentRoute.page === 'account' || currentRoute.page === 'my-glam'
+                aria-controls="nav-account-menu"
+                className={`p-2 rounded-full hover:bg-[#FCE8ED] transition-colors cursor-pointer flex items-center gap-1 outline-none focus-visible:ring-2 focus-visible:ring-[#C9972B] ${
+                  accountMenuOpen || currentRoute.page === 'account' || currentRoute.page === 'my-glam'
                     ? 'text-[#F05A7E] bg-[#FCE8ED]'
                     : 'text-[#121212] hover:text-[#F05A7E]'
                 }`}
                 title={isCustomerLoggedIn ? `Signed in as ${customerUser?.name}` : 'Account & Sign In'}
-                aria-label="Account"
+                aria-label={accountMenuOpen ? 'Close account menu' : 'Open account menu'}
               >
                 {isCustomerLoggedIn && customerUser?.avatarUrl ? (
                   <img src={cloudinaryImageUrl(customerUser.avatarUrl, 'avatar')} alt="" loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover border border-[#E8D5A8]" />
@@ -411,31 +430,49 @@ export const Navbar: React.FC<NavbarProps> = ({
               <AnimatePresence>
                 {accountMenuOpen && (
                   <motion.div
-                    role="menu"
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 top-full mt-2 w-72 bg-[#171717] border border-[#E8D5A8]/30 rounded-xl shadow-2xl overflow-hidden z-50 text-[#FAF9F6] divide-y divide-[#E8D5A8]/15"
+                    id="nav-account-menu"
+                    aria-label="Account menu"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    transition={{ duration: 0.18, ease: 'easeOut' }}
+                    className="absolute -right-2 sm:right-0 top-full mt-3 w-[340px] max-w-[calc(100vw-24px)] bg-[#0B0B0B] border border-[#C9972B]/70 rounded-2xl shadow-[0_24px_60px_-12px_rgba(0,0,0,0.55)] z-50 text-[#FAF9F6]"
                   >
-                    {isCustomerLoggedIn ? (
-                      <>
-                        {/* Header — signed in */}
-                        <div className="p-3.5 bg-[#0B0B0B]">
-                          <span className="text-[9.5px] font-mono text-[#C9972B] uppercase tracking-[0.2em] block">
-                            GLAMIRK ATELIER
-                          </span>
-                          <h4 className="font-serif text-sm text-[#FAF9F6] mt-0.5 truncate">
+                    {/* Pointer aimed at the account icon */}
+                    <span
+                      aria-hidden
+                      className="absolute -top-[7px] right-[22px] sm:right-[14px] w-3 h-3 rotate-45 bg-[#0B0B0B] border-l border-t border-[#C9972B]/70"
+                    />
+
+                    {/* Header — real text over a CSS-only gold glow, no image */}
+                    <div className="relative overflow-hidden rounded-t-2xl px-5 pt-5 pb-4 bg-[radial-gradient(circle_at_100%_0%,rgba(201,151,43,0.22)_0%,transparent_45%)]">
+                      <Sparkles aria-hidden className="absolute top-4 right-4 w-5 h-5 text-[#C9972B]/50" />
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-medium text-[#C9972B] uppercase tracking-[0.22em]">GLAMIRK ATELIER</span>
+                        <span aria-hidden className="w-12 h-px bg-gradient-to-r from-[#C9972B] to-transparent" />
+                      </div>
+                      {isCustomerLoggedIn ? (
+                        <>
+                          <h4 className="font-serif text-xl text-[#FAF9F6] mt-1 truncate">
                             Hello, {(customerUser?.name || '').trim().split(/\s+/)[0] || 'there'}
                           </h4>
                           <button
                             onClick={() => closeAccountMenu(() => onNavigateAccount())}
-                            className="text-[10.5px] text-[#C9972B] hover:text-[#E3B84B] transition-colors cursor-pointer mt-0.5"
+                            className="text-[11.5px] text-[#C9972B] hover:text-[#E3B84B] transition-colors cursor-pointer mt-1 outline-none focus-visible:underline"
                           >
                             My Glam Suite →
                           </button>
-                        </div>
+                        </>
+                      ) : (
+                        <h4 className="font-serif text-xl text-[#FAF9F6] mt-1">Account &amp; Sign In</h4>
+                      )}
+                    </div>
 
-                        <div className="p-2 space-y-0.5">
+                    <div className="mx-5 h-px bg-[#C9972B]/30" />
+
+                    {isCustomerLoggedIn ? (
+                      <>
+                        <div className="py-1">
                           {[
                             { label: 'My Orders', icon: Package, section: 'orders' as AccountSection },
                             { label: 'My Wishlist', icon: Heart, section: 'wishlist' as AccountSection },
@@ -451,7 +488,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                           ))}
                         </div>
 
-                        <div className="p-2 space-y-0.5">
+                        <div className="mx-5 h-px bg-[#C9972B]/30" />
+
+                        <div className="py-1">
                           {[
                             { label: 'My Profile', icon: User, section: 'profile' as AccountSection },
                             { label: 'Saved Addresses', icon: MapPin, section: 'addresses' as AccountSection },
@@ -467,46 +506,40 @@ export const Navbar: React.FC<NavbarProps> = ({
                           ))}
                         </div>
 
+                        <div className="mx-5 h-px bg-[#C9972B]/30" />
+
                         <div className="p-2">
                           <button
                             onClick={() => closeAccountMenu(() => onCustomerLogout?.())}
-                            role="menuitem"
-                            className="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-[#0B0B0B] text-[#F05A7E] flex items-center gap-2.5 transition-colors cursor-pointer"
+                            className="w-full text-left px-3 min-h-[44px] text-[13px] rounded-lg hover:bg-white/[0.035] text-[#F05A7E] flex items-center gap-3.5 transition-colors cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-[#F05A7E]"
                           >
-                            <LogOut className="w-4 h-4" />
+                            <LogOut className="w-[17px] h-[17px]" />
                             <span className="font-medium">Logout</span>
                           </button>
                         </div>
                       </>
                     ) : (
                       <>
-                        {/* Header — signed out. Deliberately shows no order,
-                            wishlist or reward data: those links route to sign-in. */}
-                        <div className="p-3.5 bg-[#0B0B0B]">
-                          <span className="text-[9.5px] font-mono text-[#C9972B] uppercase tracking-[0.2em] block">
-                            GLAMIRK ATELIER
-                          </span>
-                          <h4 className="font-serif text-sm text-[#FAF9F6] mt-0.5">Account &amp; Sign In</h4>
-                        </div>
-
                         {/* Signing in and creating an account are the same
                             step now — one mobile number, one code — so this is
                             one button rather than two that go to the same place. */}
-                        <div className="p-3.5 space-y-2.5">
-                          <p className="text-[11px] text-[#9C9689] leading-relaxed">
+                        <div className="px-5 pt-4 pb-5 space-y-4">
+                          <p className="text-[13px] text-[#B5B0AA] leading-relaxed">
                             Sign in with your mobile number. New here? Your account is created automatically.
                           </p>
 
                           <button
                             onClick={() => closeAccountMenu(() => onOpenAuth?.('login'))}
-                            className="w-full px-3.5 py-2.5 bg-gradient-to-r from-[#C9972B] to-[#E3B84B] text-[#0B0B0B] text-[10.5px] font-bold tracking-[0.14em] uppercase rounded-full hover:brightness-110 transition-all cursor-pointer flex items-center justify-center gap-2"
+                            className="w-full h-12 sm:h-11 px-4 bg-[#E0265F] hover:bg-[#C81E54] text-white text-[11.5px] font-semibold tracking-[0.16em] uppercase rounded-full border border-[#C9972B] shadow-[0_6px_18px_rgba(224,38,95,0.3)] transition-colors duration-200 cursor-pointer flex items-center justify-center gap-2.5 outline-none focus-visible:ring-2 focus-visible:ring-[#E3B84B] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B0B0B]"
                           >
-                            <LogIn className="w-3.5 h-3.5" />
+                            <LogIn className="w-4 h-4" />
                             Sign In / Create Account
                           </button>
                         </div>
 
-                        <div className="p-2 space-y-0.5">
+                        <div className="mx-5 h-px bg-[#C9972B]/30" />
+
+                        <div className="pb-1.5">
                           {[
                             { label: 'Orders', icon: Package, section: 'orders' as AccountSection },
                             { label: 'Wishlist', icon: Heart, section: 'wishlist' as AccountSection },
@@ -821,6 +854,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     AI &amp; AR Beauty Tools
                   </span>
                   <div className="space-y-1 bg-[#FCE8ED] p-1.5 rounded-2xl border border-[#E8D5A8]/70">
+                    {/* FIND-MY-SHADE-PAUSED: mobile-menu link to the paused Find My Shade page.
                     <button
                       onClick={() => {
                         setMobileMenuOpen(false);
@@ -836,6 +870,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         DIAGNOSTIC
                       </span>
                     </button>
+                    */}
                     <button
                       onClick={() => {
                         setMobileMenuOpen(false);
@@ -1000,6 +1035,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {/* Sticky Bottom Actions in Menu */}
               <div className="p-4 bg-[#FCE8ED] border-t border-[#E8D5A8] space-y-2 sticky bottom-0 z-10">
+                {/* FIND-MY-SHADE-PAUSED: mobile-menu CTA for the paused Find My Shade page.
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);
@@ -1010,6 +1046,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <Sparkles className="w-4 h-4" />
                   <span>FIND MY SHADE</span>
                 </button>
+                */}
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);

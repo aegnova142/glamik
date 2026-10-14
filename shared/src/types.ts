@@ -14,6 +14,16 @@ export interface VariantImage {
   isPrimary: boolean;
 }
 
+/** A product video, shown in the product page gallery after the images —
+ * for every shade. `posterUrl` is optional: Cloudinary videos get a poster
+ * generated from their first frame. */
+export interface ProductVideo {
+  id: string;
+  url: string;
+  posterUrl?: string;
+  title?: string;
+}
+
 export interface Shade {
   id: string;
   name: string;
@@ -259,6 +269,8 @@ export interface Product {
     lifestyle?: string;
     swatch?: string;
   };
+  /** Optional product videos (see ProductVideo). Absent on older products. */
+  videos?: ProductVideo[];
   shades?: Shade[];
   benefits: string[];
   isVerified?: boolean;
@@ -357,6 +369,11 @@ export interface Look {
   video?: string;
   category: 'EVERYDAY GLAM' | 'DATE NIGHT' | 'WEDDING GLAM' | 'MINIMAL GLAM' | string;
   productsUsed: LookProductItem[];
+  /** Focal point for the editorial image as CSS object-position ("50% 30%").
+   * The card crops with object-cover; this keeps faces in frame. Absent = centre. */
+  imageFocus?: string;
+  /** ISO timestamp of the last admin save. Set by the server. */
+  updatedAt?: string;
 }
 
 export interface ArticleSection {
@@ -1839,6 +1856,16 @@ export interface CMSGlobalSettings {
   };
   /** Server-enforced Cash on Delivery eligibility — the frontend never decides this on its own. */
   codRules: CODRules;
+  /** Image behind the "Your Beauty Edit" hero on /wishlist. The heading stays
+   * real HTML on top; an empty or disabled banner leaves a plain black hero. */
+  wishlistBanner?: CMSWishlistBanner;
+}
+
+export interface CMSWishlistBanner {
+  enabled: boolean;
+  imageUrl: string;
+  /** Optional portrait crop for phones; falls back to `imageUrl`. */
+  mobileImageUrl?: string;
 }
 
 export interface CODRules {
@@ -2176,6 +2203,71 @@ export interface CMSHomeBannerConfig {
   intervalMs?: number;
 }
 
+/** One offer as it appears in the Live Privileges popup. Links to a real
+ * CMSOffer by id — the coupon code, discount and minimum order always come
+ * from that record (the one checkout validates against), never from here.
+ * The optional fields only change how the card reads. Array order = card order. */
+export interface LivePrivilegesOfferItem {
+  offerId: string;
+  visible: boolean;
+  badgeIcon?: 'crown' | 'gift' | 'sparkles' | 'tag' | 'none';
+  /** Display overrides; blank means "use the offer's own text". */
+  badgeText?: string;
+  title?: string;
+  description?: string;
+  /** Decorative image on the right of the card. */
+  artworkUrl?: string;
+}
+
+export interface LivePrivilegesImage {
+  url: string;
+  /** CSS object-position, "50% 30%". Absent = centre. */
+  focus?: string;
+}
+
+export interface LivePrivilegesPopupConfig {
+  enabled: boolean;
+  eyebrow: string;
+  title: string;
+  titleAccent: string;
+  description: string;
+  image: LivePrivilegesImage;
+  /** Optional separate crop for phones; falls back to `image`. */
+  mobileImage?: LivePrivilegesImage;
+  cta: { enabled: boolean; label: string; url: string; showIcon: boolean };
+  theme: {
+    accent: string;      // CTA start, eyebrow-adjacent accents
+    accentDeep: string;  // CTA end
+    gold: string;        // borders, badges
+    surface: string;     // right panel
+    heading: string;     // headings
+    body: string;        // body text
+    titleAccent: string; // "For You"
+  };
+  layout: {
+    maxWidth: number;       // px, 760–1200
+    radius: number;         // px, 8–32
+    overlayOpacity: number; // 0.3–0.9
+    blurPx: number;         // 0–16
+  };
+  display: {
+    delayMs: number;                       // 0–10000
+    frequency: 'session' | 'every-visit';  // session = once per browser session
+    startAt?: string;                      // ISO; absent = no start bound
+    endAt?: string;                        // ISO; absent = no end bound
+  };
+  offers: LivePrivilegesOfferItem[];
+}
+
+/** Stored in cms_state. Customers only ever receive `published`. */
+export interface CMSLivePrivilegesPopupState {
+  draft: LivePrivilegesPopupConfig;
+  published: LivePrivilegesPopupConfig | null;
+  publishedAt?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
 /** Homepage "The Glamirk Journal" section heading — the 3 preview articles
  * themselves are already CMS-managed via journalArticles. */
 export interface CMSJournalSectionCopy {
@@ -2350,6 +2442,9 @@ export interface CMSDatabaseSchema {
   /** Inline banner carousel above the homepage hero. Optional: documents
    * written before it existed simply have no banners. */
   homeBanners?: CMSHomeBannerConfig;
+  /** "Live Privileges For You" popup (Shop the Look). Optional: documents
+   * written before it existed fall back to the shared defaults. */
+  livePrivilegesPopup?: CMSLivePrivilegesPopupState;
   shadeFinderTeaser: CMSShadeFinderTeaser;
   journalSectionCopy: CMSJournalSectionCopy;
   findMyShadeResultsCopy: CMSFindMyShadeResultsCopy;

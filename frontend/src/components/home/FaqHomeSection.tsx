@@ -52,9 +52,9 @@ export const FaqHomeSection: React.FC<FaqHomeSectionProps> = ({ onOpenSupport })
   };
 
   return (
-    <section className="py-16 sm:py-24 bg-[#FCE8ED]/30 border-b border-[#E8D5A8]">
+    <section className="home-section bg-[#FCE8ED]/30 border-b border-[#E8D5A8]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-xl mx-auto space-y-3 mb-10">
+        <div className="home-section-header text-center max-w-xl mx-auto space-y-3">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-[#121212]">
             How Can We <span className="text-[#F05A7E]">Help You?</span>
           </h2>

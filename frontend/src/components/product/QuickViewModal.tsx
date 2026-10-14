@@ -240,9 +240,9 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       ))}
                     </div>
 
-                    {selectedShade && (
-                      <p className="text-xs text-[#6B6B6B] bg-[#FCE8ED] p-2.5 rounded-xl border border-[#E8D5A8] mt-2">
-                        {selectedShade.description}
+                    {selectedShade && (selectedShade.shortDescription || selectedShade.description) && (
+                      <p className="text-xs text-[#6B6B6B] bg-[#FCE8ED] p-2.5 rounded-xl border border-[#E8D5A8] mt-2 whitespace-pre-line line-clamp-4">
+                        {selectedShade.shortDescription || selectedShade.description}
                       </p>
                     )}
                   </div>

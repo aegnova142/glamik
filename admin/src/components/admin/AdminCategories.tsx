@@ -9,6 +9,7 @@ import { CMSCategory } from '@glamirk/shared/types';
 import { Layers, Plus, Trash2, Edit2, Save, Check, ArrowLeft } from 'lucide-react';
 import { ImageCropUploadModal } from './ImageCropUploadModal';
 import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
+import { ProductTypeManager } from './ProductTypeManager';
 
 export const AdminCategories: React.FC = () => {
   const { categories, saveCategory, deleteCategory } = useCMS();
@@ -187,6 +188,12 @@ export const AdminCategories: React.FC = () => {
           <span>New Category</span>
         </button>
       </div>
+
+      {/* Product types sit above the category cards because they are the list
+          that actually drives Shop's filter — the cards below are the
+          homepage's presentation grid. Two taxonomies on one screen, in the
+          order of how much they affect what a shopper can do. */}
+      <ProductTypeManager />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {(categories || []).map((cat) => (

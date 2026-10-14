@@ -139,12 +139,58 @@ export interface TryOnConfig {
   opacity: number;
 }
 
+/**
+ * An admin-defined product type — "Lipstick", "Sindoor", "Lip Care".
+ *
+ * The id is immutable and is what a product references. The name is a display
+ * label and may be renamed freely without orphaning anything, which is the
+ * whole reason this is keyed by id: the previous dynamic taxonomy keyed on the
+ * NAME, so renaming a category made its products vanish from Shop's filters
+ * (see shared/src/data/taxonomy.ts for that history).
+ *
+ * Rows live in the normalized `product_types` table, not in the cms_state
+ * document, because case-insensitive uniqueness has to be enforced where it
+ * cannot be raced. See migration 021.
+ */
+export interface ProductType {
+  id: string;
+  name: string;
+  /** URL-safe form, unique. Addresses the type in ?type=<slug>. */
+  slug: string;
+  description: string;
+  /** Section this type nests under. Null when unassigned — it still lists and
+   *  still filters, it simply does not group under a section. */
+  category: 'Makeup' | 'Skin' | 'Nails' | null;
+  /** Inactive types stay assigned to their products and keep resolving; they
+   *  are only withheld from the storefront's filter list. Never a deletion. */
+  isActive: boolean;
+  sortOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** A type plus how many products reference it. Admin-only: the counts are what
+ *  make deactivating or deleting a type a decision rather than a guess. */
+export interface ProductTypeWithUsage extends ProductType {
+  productCount: number;
+}
+
 export interface Product {
   id: string;
   name: string;
   slug?: string;
   category: 'Makeup' | 'Skin' | 'Nails';
   subCategory: string;
+  /**
+   * The admin-defined type this product belongs to, by id.
+   *
+   * Optional and additive. A product saved before types existed has none, and
+   * resolveProductType() falls back to matching its `subCategory` against type
+   * names — so every existing product keeps filtering exactly as it did
+   * without being rewritten. `subCategory` remains the display/legacy value
+   * and is kept in step when a type is assigned.
+   */
+  typeId?: string;
   subtitle: string;
   description: string;
   ritual: string;
@@ -206,6 +252,23 @@ export interface CartItem {
 export interface FilterState {
   category?: string | null;
   subCategory?: string | null;
+  /**
+   * Selected product type, by id.
+   *
+   * Takes precedence over category/subCategory when set. Those two are kept
+   * in step alongside it rather than replaced, so an existing
+   * ?category=Makeup&subCategory=Lips link still selects the right thing and
+   * the URL a shopper copies keeps its current shape.
+   */
+  typeId?: string | null;
+  /**
+   * Product tag to filter on ('NEW', 'BESTSELLER', …).
+   *
+   * A separate dimension from type, not a value of it: "New Launches" is a
+   * view across every type rather than a kind of product, which is why the
+   * pill that offers it cannot be one of the dynamic type pills.
+   */
+  tag?: string | null;
   /** null = no floor/ceiling set by the shopper; the dual-range slider's own
    * catalog-derived min/max bounds apply instead. */
   priceMin: number | null;
@@ -456,7 +519,7 @@ export const ACCOUNT_SECTIONS: AccountSection[] = [
 export type PageRoute =
   | { page: 'home' }
   | { page: 'about' }
-  | { page: 'shop'; category?: string | null; subCategory?: string | null }
+  | { page: 'shop'; category?: string | null; subCategory?: string | null; tag?: string | null }
   | { page: 'product'; productId: string }
   | { page: 'shop-the-look'; lookId?: string }
   | { page: 'wishlist' }

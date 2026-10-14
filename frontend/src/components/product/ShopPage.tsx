@@ -1,19 +1,27 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CategoryHeader } from './CategoryHeader';
 import { FilterPanel } from './FilterPanel';
 import { SortSelector, SORT_OPTIONS } from './SortSelector';
 import { ProductGrid } from './ProductGrid';
 import { RecentlyViewed } from './RecentlyViewed';
-import { Product, Shade, FilterState, SortOption, CartItem } from '@glamirk/shared/types';
+import { Product, Shade, FilterState, SortOption, CartItem, ProductType } from '@glamirk/shared/types';
 import { GLAMIRK_PRODUCTS } from '@glamirk/shared/data/products';
 import { SlidersHorizontal, Sparkles, X, LayoutGrid, List, ArrowUpDown, Check } from 'lucide-react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { isProductSellable } from '@glamirk/shared/utils/productVariant';
+import {
+  countProductsByType,
+  selectableTypes,
+  indexTypesById,
+  indexTypesByName,
+  resolveProductType,
+} from '@glamirk/shared/utils/productType';
 
 interface ShopPageProps {
   initialCategory?: string | null;
   initialSubCategory?: string | null;
+  initialTag?: string | null;
   wishlist: string[];
   cartItems: CartItem[];
   recentlyViewedIds: string[];
@@ -24,12 +32,18 @@ interface ShopPageProps {
   onGoToCart: () => void;
   onBuyNow: (product: Product, shade?: Shade, size?: string) => void;
   onOpenShadeFinder: () => void;
-  onCategoryNavigate: (category: string | null, subCategory: string | null) => void;
+  onCategoryNavigate: (category: string | null, subCategory: string | null, tag?: string | null) => void;
 }
+
+/** Products per page. 12 fills the 4-across desktop grid in exact rows and
+ *  divides evenly at every breakpoint (1/2/3/4 columns). */
+const PAGE_SIZE = 12;
 
 const EMPTY_FILTERS: FilterState = {
   category: null,
   subCategory: null,
+  typeId: null,
+  tag: null,
   priceMin: null,
   priceMax: null,
   undertones: [],
@@ -61,6 +75,7 @@ function productDiscountPercent(product: Product): number {
 export const ShopPage: React.FC<ShopPageProps> = ({
   initialCategory = null,
   initialSubCategory = null,
+  initialTag = null,
   wishlist,
   cartItems,
   recentlyViewedIds,
@@ -73,32 +88,104 @@ export const ShopPage: React.FC<ShopPageProps> = ({
   onOpenShadeFinder,
   onCategoryNavigate,
 }) => {
-  const { products: cmsProducts } = useCMS();
+  const { products: cmsProducts, productTypes } = useCMS();
   const allProducts = cmsProducts && cmsProducts.length > 0 ? cmsProducts : GLAMIRK_PRODUCTS;
 
   const [filters, setFilters] = useState<FilterState>({
     ...EMPTY_FILTERS,
     category: initialCategory,
     subCategory: initialSubCategory,
+    tag: initialTag ?? null,
   });
+
+  // The catalog and the type list arrive asynchronously, so a deep link lands
+  // before there is anything to resolve its ?subCategory= against. This runs
+  // once they do and upgrades the name to the id it refers to, which is what
+  // keeps URL, filter panel and grid describing the same selection. Scoped to
+  // the case where no type is chosen yet, so it can never overwrite a shopper's
+  // own click.
+  useEffect(() => {
+    if (productTypes.length === 0) return;
+    setFilters((prev) => {
+      if (prev.tag || prev.typeId || !prev.subCategory) return prev;
+      const match = productTypes.find(
+        (t) => t.name.trim().toLowerCase() === (prev.subCategory || '').trim().toLowerCase()
+      );
+      return match ? { ...prev, typeId: match.id, category: match.category ?? prev.category } : prev;
+    });
+  }, [productTypes]);
 
   const [sortOption, setSortOption] = useState<SortOption>('featured');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [isMobileSortOpen, setIsMobileSortOpen] = useState(false);
 
-  const categoryPills = [
-    { label: 'All Products', category: null, subCategory: null },
-    { label: 'Matte Lipsticks', category: 'Makeup', subCategory: 'Lips' },
-    { label: 'Luxury Sindoor', category: 'Makeup', subCategory: 'Face' },
-    { label: 'Cleansing Rituals', category: 'Skin', subCategory: 'Cleansing' },
-    { label: 'New Launches', category: 'Makeup', subCategory: null, isNew: true },
-  ];
+  // Indexes built once per catalog/type change, then reused by the filter, the
+  // pills and the counts. Without them each of those would re-resolve every
+  // product on every keystroke.
+  const typeIndexes = useMemo(
+    () => ({ byId: indexTypesById(productTypes), byName: indexTypesByName(productTypes) }),
+    [productTypes]
+  );
+
+  // The pill row was five hardcoded entries ("Matte Lipsticks", "Luxury
+  // Sindoor", …) that no admin action could change. It is now the active
+  // types, so creating one in the admin puts it here with no edit to this
+  // file — which is the whole point of the feature.
+  const categoryPills = useMemo(() => {
+    const counts = countProductsByType(allProducts, productTypes);
+    return [
+      {
+        label: 'All Products',
+        typeId: null as string | null,
+        category: null as string | null,
+        subCategory: null as string | null,
+        tag: null as string | null,
+      },
+      ...selectableTypes(productTypes, counts).map((t) => ({
+        label: t.name,
+        typeId: t.id as string | null,
+        category: t.category as string | null,
+        subCategory: t.name as string | null,
+        tag: null as string | null,
+      })),
+      // "New Launches" is not a type — it is a view across all of them, so it
+      // cannot come from the type list and stays a fixed pill. It survives the
+      // removal of the other hardcoded pills for that reason.
+      //
+      // It filters on the NEW tag, which is what the 'newest' sort already
+      // treats as the marker for a new product. The pill this restores was
+      // pinned to `category: 'Makeup'` instead, so it listed Makeup products
+      // that carried no NEW tag and hid the one product that did.
+      ...(allProducts.some((p) => p.tag === 'NEW')
+        ? [
+            {
+              label: 'New Launches',
+              typeId: null as string | null,
+              category: null as string | null,
+              subCategory: null as string | null,
+              tag: 'NEW' as string | null,
+            },
+          ]
+        : []),
+    ];
+  }, [allProducts, productTypes]);
 
   const filteredProducts = useMemo(() => {
     return allProducts.filter((product) => {
-      if (filters.category && product.category !== filters.category) return false;
-      if (filters.subCategory && product.subCategory !== filters.subCategory) return false;
+      if (filters.tag && product.tag !== filters.tag) return false;
+
+      // Type first when one is selected — an id survives a rename, where the
+      // name comparison below would stop matching the moment an admin edited
+      // the label. The name path stays for products that predate types and
+      // for a ?category=/?subCategory= link arriving from outside.
+      if (filters.typeId) {
+        const resolved = resolveProductType(product, typeIndexes.byId, typeIndexes.byName);
+        if (resolved?.id !== filters.typeId) return false;
+      } else {
+        if (filters.category && product.category !== filters.category) return false;
+        if (filters.subCategory && product.subCategory !== filters.subCategory) return false;
+      }
 
       if (filters.priceMin !== null && product.price < filters.priceMin) return false;
       if (filters.priceMax !== null && product.price > filters.priceMax) return false;
@@ -180,23 +267,76 @@ export const ShopPage: React.FC<ShopPageProps> = ({
     }
   }, [filteredProducts, sortOption]);
 
+  // ------------------------------------------------------------------
+  // Pagination
+  //
+  // Client-side, over a catalog the storefront already holds in full from the
+  // single /api/cms/content call. That is the right place for it here: paging
+  // at the server would turn one request into one request per page without
+  // reducing any work, because the filter and sort both run over the whole
+  // catalog anyway.
+  // ------------------------------------------------------------------
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(sortedProducts.length / PAGE_SIZE));
+
+  // A filter or sort change can leave the viewer on a page that no longer
+  // exists — 40 results on page 3, filter down to 8, and page 3 is empty. Clamp
+  // rather than reset so narrowing from page 1 does not feel like a jump.
+  useEffect(() => {
+    setPage((prev) => Math.min(prev, totalPages));
+  }, [totalPages]);
+  useEffect(() => {
+    setPage(1);
+  }, [filters, sortOption]);
+
+  const pagedProducts = useMemo(
+    () => sortedProducts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [sortedProducts, page]
+  );
+
   const handleResetFilters = () => {
     setFilters({ ...EMPTY_FILTERS });
   };
 
-  const handleSelectPill = (category: string | null, subCategory: string | null) => {
-    setFilters((prev) => ({ ...prev, category, subCategory }));
-    onCategoryNavigate(category, subCategory);
+  const handleSelectPill = (
+    typeId: string | null,
+    category: string | null,
+    subCategory: string | null,
+    tag: string | null
+  ) => {
+    // Mutually exclusive: every pill sets all four, so picking "New Launches"
+    // clears the type and picking a type clears the tag. Leaving the other
+    // dimension set would silently intersect two pills while only one looked
+    // selected.
+    setFilters((prev) => ({ ...prev, typeId, category, subCategory, tag }));
+    // The URL keeps its existing ?category=&subCategory= shape — the type id
+    // is derived back from those on arrival, so every link already published
+    // keeps resolving and nothing about the SEO surface changes.
+    onCategoryNavigate(category, subCategory, tag);
   };
 
   type ActiveChip = { key: string; label: string; onRemove: () => void };
   const activeChips: ActiveChip[] = useMemo(() => {
     const chips: ActiveChip[] = [];
-    if (filters.category) {
+    // Clearing the category chip drops typeId too — leaving it behind would
+    // keep the grid filtered with nothing on screen saying why.
+    if (filters.category || filters.typeId) {
       chips.push({
         key: 'category',
-        label: filters.subCategory ? `${filters.category} · ${filters.subCategory}` : filters.category,
-        onRemove: () => setFilters((prev) => ({ ...prev, category: null, subCategory: null })),
+        label: filters.subCategory
+          ? filters.category
+            ? `${filters.category} · ${filters.subCategory}`
+            : filters.subCategory
+          : filters.category || 'Type',
+        onRemove: () =>
+          setFilters((prev) => ({ ...prev, category: null, subCategory: null, typeId: null })),
+      });
+    }
+    if (filters.tag) {
+      chips.push({
+        key: 'tag',
+        label: filters.tag === 'NEW' ? 'New Launches' : filters.tag,
+        onRemove: () => setFilters((prev) => ({ ...prev, tag: null })),
       });
     }
     if (filters.priceMin !== null || filters.priceMax !== null) {
@@ -281,14 +421,18 @@ export const ShopPage: React.FC<ShopPageProps> = ({
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 overflow-x-auto no-scrollbar px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex flex-shrink-0 items-center gap-2">
             {categoryPills.map((pill, idx) => {
-              const isActive =
-                (!pill.category && !filters.category && !filters.subCategory) ||
-                (filters.category === pill.category && (!pill.subCategory || filters.subCategory === pill.subCategory));
+              const isActive = pill.tag
+                ? filters.tag === pill.tag
+                : pill.typeId
+                ? !filters.tag &&
+                  (filters.typeId === pill.typeId ||
+                    (!filters.typeId && filters.subCategory === pill.subCategory))
+                : !filters.tag && !filters.typeId && !filters.category && !filters.subCategory;
 
               return (
                 <button
                   key={idx}
-                  onClick={() => handleSelectPill(pill.category, pill.subCategory)}
+                  onClick={() => handleSelectPill(pill.typeId, pill.category, pill.subCategory, pill.tag)}
                   className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium uppercase tracking-wider transition-all cursor-pointer ${
                     isActive
                       ? 'bg-[#0B0B0B] text-[#FAF9F6] shadow-sm'
@@ -314,7 +458,13 @@ export const ShopPage: React.FC<ShopPageProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
           <div>
             <p className="text-xs text-[#6B6B6B]">
-              Showing <strong className="font-semibold text-[#121212]">{sortedProducts.length}</strong> of {allProducts.length} products
+              Showing{' '}
+              <strong className="font-semibold text-[#121212]">
+                {sortedProducts.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–
+                {Math.min(page * PAGE_SIZE, sortedProducts.length)}
+              </strong>{' '}
+              of <strong className="font-semibold text-[#121212]">{sortedProducts.length}</strong>
+              {sortedProducts.length !== allProducts.length && <> (filtered from {allProducts.length})</>} products
             </p>
           </div>
 
@@ -410,6 +560,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({
             totalFilteredCount={sortedProducts.length}
             totalCount={allProducts.length}
             products={allProducts}
+            productTypes={productTypes}
           />
 
           {/* Clearance for the app's MobileBottomNav (h-16, md:hidden) and
@@ -418,7 +569,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({
               ~80px were dead space under the last row of products. */}
           <div className="w-full flex-1 pb-20 md:pb-0">
             <ProductGrid
-              products={sortedProducts}
+              products={pagedProducts}
               wishlist={wishlist}
               cartItems={cartItems}
               viewMode={viewMode}
@@ -431,6 +582,45 @@ export const ShopPage: React.FC<ShopPageProps> = ({
               onOpenShadeFinder={onOpenShadeFinder}
               onResetFilters={handleResetFilters}
             />
+
+            {/* Pagination. Rendered only when there is more than one page, so
+                a small catalog looks exactly as it did before. */}
+            {totalPages > 1 && (
+              <nav
+                aria-label="Product pages"
+                className="mt-10 flex flex-wrap items-center justify-center gap-2"
+              >
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="cursor-pointer rounded-full border border-[#E8D5A8] bg-white px-4 py-2 text-xs font-semibold text-[#121212] transition-colors hover:border-[#F05A7E] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#E8D5A8]"
+                >
+                  Previous
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setPage(n)}
+                    aria-label={`Page ${n}`}
+                    aria-current={n === page ? 'page' : undefined}
+                    className={`min-w-9 cursor-pointer rounded-full px-3 py-2 text-xs font-semibold transition-colors ${
+                      n === page
+                        ? 'bg-[#0B0B0B] text-[#FAF9F6]'
+                        : 'border border-[#E8D5A8] bg-white text-[#6B6B6B] hover:border-[#F05A7E] hover:text-[#121212]'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="cursor-pointer rounded-full border border-[#E8D5A8] bg-white px-4 py-2 text-xs font-semibold text-[#121212] transition-colors hover:border-[#F05A7E] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#E8D5A8]"
+                >
+                  Next
+                </button>
+              </nav>
+            )}
           </div>
         </div>
       </div>

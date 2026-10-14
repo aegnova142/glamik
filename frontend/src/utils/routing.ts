@@ -19,6 +19,7 @@ export function routeToPath(route: PageRoute): string {
       const params = new URLSearchParams();
       if (route.category) params.set('category', route.category);
       if (route.subCategory) params.set('subCategory', route.subCategory);
+      if (route.tag) params.set('tag', route.tag);
       const qs = params.toString();
       return `/shop${qs ? `?${qs}` : ''}`;
     }
@@ -105,7 +106,12 @@ export function pathToRoute(pathname: string, search: string): PageRoute {
     case 'about':
       return { page: 'about' };
     case 'shop':
-      return { page: 'shop', category: params.get('category'), subCategory: params.get('subCategory') };
+      return {
+        page: 'shop',
+        category: params.get('category'),
+        subCategory: params.get('subCategory'),
+        tag: params.get('tag'),
+      };
     case 'product':
       if (second) return { page: 'product', productId: second };
       break;

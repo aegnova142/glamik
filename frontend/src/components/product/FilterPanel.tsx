@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, ChevronDown, Filter as FilterIcon, Check } from 'lucide-react';
-import { FilterState, Product } from '@glamirk/shared/types';
-import { PRODUCT_TAXONOMY } from '@glamirk/shared/data/taxonomy';
+import { FilterState, Product, ProductType } from '@glamirk/shared/types';
+import { countProductsByType, selectableTypes } from '@glamirk/shared/utils/productType';
 
 interface FilterPanelProps {
   filters: FilterState;
@@ -13,6 +13,9 @@ interface FilterPanelProps {
   totalFilteredCount: number;
   totalCount: number;
   products: Product[];
+  /** Admin-defined types. The category filter is built from these, so a new
+   *  type appears here the moment it has products — no edit to this file. */
+  productTypes: ProductType[];
 }
 
 // Sticky offset for the desktop sidebar — clears the fixed navbar (h-16) plus
@@ -99,6 +102,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   totalFilteredCount,
   totalCount,
   products,
+  productTypes,
 }) => {
   const [openSections, setOpenSections] = useState<{ [key: string]: boolean }>({
     category: true,
@@ -114,26 +118,38 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
-  // Derived from the fixed PRODUCT_TAXONOMY (see src/data/taxonomy.ts) —
-  // never hardcoded per-product here, and never dependent on the freely
-  // admin-renameable Categories & Taxonomy CMS records (a separate,
-  // presentation-only system for the homepage category grid). Adding a
-  // subcategory to that constant makes it filterable everywhere at once.
-  const categories: { label: string; category: string | null; subCategory: string | null }[] = [
-    { label: 'All Creations', category: null, subCategory: null },
-    ...Object.entries(PRODUCT_TAXONOMY).flatMap(([category, subs]) =>
-      subs.map((sub) => ({ label: sub, category, subCategory: sub }))
-    ),
-  ];
-
-  const categoryCounts = useMemo(() => {
-    return categories.map((cat) => {
-      if (!cat.category) return products.length;
-      return products.filter(
-        (p) => p.category === cat.category && (!cat.subCategory || p.subCategory === cat.subCategory)
-      ).length;
-    });
-  }, [products]);
+  // Built from the admin's product types rather than a constant in this file.
+  //
+  // This replaces a hardcoded PRODUCT_TAXONOMY-derived list. taxonomy.ts moved
+  // Shop's filter OFF admin data because renaming a category used to make its
+  // products vanish — but the cause was keying on the NAME. These rows are
+  // keyed by an immutable type id, so a rename changes the label here and
+  // nothing else; nothing can be orphaned by one.
+  //
+  // selectableTypes also drops types with no products, so the list can never
+  // offer a row that leads to an empty grid. Counts come from one pass over
+  // the catalog rather than a filter() per row.
+  const { categories, categoryCounts } = useMemo(() => {
+    const counts = countProductsByType(products, productTypes);
+    const visible = selectableTypes(productTypes, counts);
+    return {
+      categories: [
+        {
+          label: 'All Creations',
+          typeId: null as string | null,
+          category: null as string | null,
+          subCategory: null as string | null,
+        },
+        ...visible.map((t) => ({
+          label: t.name,
+          typeId: t.id as string | null,
+          category: t.category as string | null,
+          subCategory: t.name as string | null,
+        })),
+      ],
+      categoryCounts: [products.length, ...visible.map((t) => counts.get(t.id) ?? 0)],
+    };
+  }, [products, productTypes]);
 
   // Catalog-derived price bounds — always reflects the real product range,
   // so the slider/presets never go stale as the admin adds/edits products.
@@ -204,8 +220,15 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     return Array.from(map.values());
   }, [products]);
 
-  const handleCategorySelect = (category: string | null, subCategory: string | null) => {
-    onFilterChange({ ...filters, category, subCategory });
+  const handleCategorySelect = (
+    typeId: string | null,
+    category: string | null,
+    subCategory: string | null
+  ) => {
+    // All three move together. typeId is what the grid filters on; the other
+    // two keep the URL in its existing ?category=&subCategory= shape so links
+    // already in the wild, and links copied from here, mean the same thing.
+    onFilterChange({ ...filters, typeId, category, subCategory });
   };
 
   const handleToggle = (
@@ -272,13 +295,16 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
       >
         <div className="space-y-0.5">
           {categories.map((cat, idx) => {
-            const isSelected =
-              (!cat.category && !filters.category) ||
-              (filters.category === cat.category && (!cat.subCategory || filters.subCategory === cat.subCategory));
+            // Compared by id when one is selected, falling back to the legacy
+            // name so a bookmarked ?subCategory= link still highlights the row
+            // it landed on.
+            const isSelected = cat.typeId
+              ? filters.typeId === cat.typeId || (!filters.typeId && filters.subCategory === cat.subCategory)
+              : !filters.typeId && !filters.category && !filters.subCategory;
             return (
               <button
                 key={idx}
-                onClick={() => handleCategorySelect(cat.category, cat.subCategory)}
+                onClick={() => handleCategorySelect(cat.typeId, cat.category, cat.subCategory)}
                 className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs transition-colors ${
                   isSelected ? 'bg-[#FCE8ED] font-bold text-[#F05A7E]' : 'text-[#6B6B6B] hover:bg-[#FAF9F6] hover:text-[#121212]'
                 }`}

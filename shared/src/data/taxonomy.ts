@@ -4,23 +4,29 @@
  */
 
 /**
- * Canonical category → subcategory taxonomy for product filtering.
+ * SUPERSEDED for Shop filtering — see shared/src/utils/productType.ts.
  *
- * This is deliberately a fixed, code-level mapping rather than
- * admin-editable data: `Product.category` is already a closed enum
- * ('Makeup' | 'Skin' | 'Nails', enforced by the admin's Category
- * <select>), and this list is what keeps subcategory values equally
- * closed. The separate Admin → Categories & Taxonomy screen manages
- * `CMSCategory` records for the homepage category-grid display (name,
- * image, description, order) — a presentation concern with free-text
- * names the admin can rename freely. Deriving Shop's filter from that
- * data would make filtering depend on marketing copy, which is exactly
- * what caused products to silently vanish from filters when a category
- * got renamed or a subcategory field drifted (e.g. "Eyes " with a
- * trailing space, or a value that was never added here at all).
+ * This was the closed category → subcategory mapping that drove Shop's filter
+ * and the admin's sub-category <select>. Both now read the admin-defined
+ * `product_types` table (migration 021) instead, so a new type is created in
+ * the admin and appears on Shop with no code change.
  *
- * Adding a new subcategory for future products means adding one string
- * here — not touching any component logic.
+ * WHY THE ORIGINAL RESTRICTION EXISTED, AND WHY IT NO LONGER APPLIES.
+ *
+ * This file used to carry a warning that deriving Shop's filter from
+ * admin-editable data made products silently vanish when a category was
+ * renamed or a value drifted ("Eyes " with a trailing space). That diagnosis
+ * was correct, but the cause was keying on the NAME. Product types are keyed
+ * by an immutable id: a product references `ptype-lips`, so renaming that type
+ * to "Lip Colour" changes a label and orphans nothing. Legacy products with no
+ * typeId are matched on a case- and whitespace-normalised name, which absorbs
+ * exactly the drift that used to hide them.
+ *
+ * KEPT, NOT DELETED. `Product.category` is still the closed
+ * 'Makeup' | 'Skin' | 'Nails' enum and PRODUCT_CATEGORIES still names it.
+ * Removing the subcategory map outright would break any consumer still
+ * importing it, and it remains the seed list a fresh install's types are
+ * backfilled from.
  */
 export const PRODUCT_TAXONOMY: Record<'Makeup' | 'Skin' | 'Nails', string[]> = {
   Makeup: ['Lips', 'Eyes', 'Face'],

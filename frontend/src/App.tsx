@@ -1146,6 +1146,7 @@ function AppContent() {
           <ShopPage
             initialCategory={currentRoute.category}
             initialSubCategory={currentRoute.subCategory}
+            initialTag={currentRoute.tag}
             wishlist={wishlist}
             cartItems={cartItems}
             recentlyViewedIds={recentlyViewedIds}
@@ -1156,8 +1157,8 @@ function AppContent() {
             onGoToCart={navigateToCart}
             onBuyNow={handleBuyNow}
             onOpenShadeFinder={navigateToFindMyShade}
-            onCategoryNavigate={(cat, subCat) => {
-              setCurrentRoute({ page: 'shop', category: cat, subCategory: subCat });
+            onCategoryNavigate={(cat, subCat, tag) => {
+              setCurrentRoute({ page: 'shop', category: cat, subCategory: subCat, tag });
             }}
           />
         )}

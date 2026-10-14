@@ -10,6 +10,7 @@ import { Layers, Plus, Trash2, Edit2, Save, Check, ArrowLeft } from 'lucide-reac
 import { ImageCropUploadModal } from './ImageCropUploadModal';
 import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 import { ProductTypeManager } from './ProductTypeManager';
+import { ProductSectionManager } from './ProductSectionManager';
 
 export const AdminCategories: React.FC = () => {
   const { categories, saveCategory, deleteCategory } = useCMS();
@@ -193,6 +194,7 @@ export const AdminCategories: React.FC = () => {
           that actually drives Shop's filter — the cards below are the
           homepage's presentation grid. Two taxonomies on one screen, in the
           order of how much they affect what a shopper can do. */}
+      <ProductSectionManager />
       <ProductTypeManager />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">

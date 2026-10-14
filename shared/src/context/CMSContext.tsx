@@ -9,6 +9,7 @@ import {
   Product,
   CMSCategory,
   ProductType,
+  ProductSection,
   CMSNavigationItem,
   CMSFooterConfig,
   CMSOffer,
@@ -115,6 +116,17 @@ export interface CMSContextType {
     toId: string,
     deleteAfter?: boolean
   ) => Promise<{ ok: boolean; error?: string; moved?: number; deleted?: boolean }>;
+  /** Admin-defined sections — the level above types. Active AND inactive. */
+  productSections: ProductSection[];
+  saveProductSection: (
+    section: Partial<ProductSection>
+  ) => Promise<{ ok: boolean; error?: string; section?: ProductSection }>;
+  deleteProductSection: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  reassignProductSection: (
+    fromId: string,
+    toId: string,
+    deleteAfter?: boolean
+  ) => Promise<{ ok: boolean; error?: string; moved?: number; typesMoved?: number; deleted?: boolean }>;
   saveOffer: (offer: Partial<CMSOffer>) => Promise<boolean>;
   deleteOffer: (id: string) => Promise<boolean>;
   saveNavigation: (nav: CMSNavigationItem[]) => Promise<boolean>;
@@ -173,6 +185,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [pages, setPages] = useState<CMSPage[]>([]);
   const [products, setProducts] = useState<Product[]>(GLAMIRK_PRODUCTS);
   const [productTypes, setProductTypes] = useState<ProductType[]>([]);
+  const [productSections, setProductSections] = useState<ProductSection[]>([]);
   const [categories, setCategories] = useState<CMSCategory[]>([
     {
       id: 'cat-makeup',
@@ -293,6 +306,7 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // Absent on a server that predates migration 021 — default to [] so the
         // filter falls back to legacy subCategory matching instead of crashing.
         setProductTypes(Array.isArray(res.data.productTypes) ? res.data.productTypes : []);
+        setProductSections(Array.isArray(res.data.productSections) ? res.data.productSections : []);
         if (res.data.navigation) setNavigation(res.data.navigation);
         if (res.data.footer) setFooter(res.data.footer);
         if (res.data.heroContent) setHeroContent(res.data.heroContent);
@@ -532,6 +546,41 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (res.status >= 400) return { ok: false, error: res.error || 'Could not delete this product type.' };
     await loadPublicContent();
     return { ok: true };
+  };
+
+  const saveProductSection = async (
+    section: Partial<ProductSection>
+  ): Promise<{ ok: boolean; error?: string; section?: ProductSection }> => {
+    const isUpdate = !!section.id && productSections.some((s) => s.id === section.id);
+    const res = await apiFetch(
+      isUpdate ? `/api/admin/product-sections/${section.id}` : '/api/admin/product-sections',
+      { method: isUpdate ? 'PUT' : 'POST', body: JSON.stringify(section) }
+    );
+    if (res.status >= 400) return { ok: false, error: res.error || 'Could not save this section.' };
+    await loadPublicContent();
+    return { ok: true, section: res.data as ProductSection };
+  };
+
+  const deleteProductSectionById = async (id: string): Promise<{ ok: boolean; error?: string }> => {
+    const res = await apiFetch(`/api/admin/product-sections/${id}`, { method: 'DELETE' });
+    if (res.status >= 400) return { ok: false, error: res.error || 'Could not delete this section.' };
+    await loadPublicContent();
+    return { ok: true };
+  };
+
+  const reassignProductSection = async (
+    fromId: string,
+    toId: string,
+    deleteAfter = false
+  ): Promise<{ ok: boolean; error?: string; moved?: number; typesMoved?: number; deleted?: boolean }> => {
+    const res = await apiFetch(`/api/admin/product-sections/${fromId}/reassign`, {
+      method: 'POST',
+      body: JSON.stringify({ targetSectionId: toId, deleteAfter }),
+    });
+    if (res.status >= 400) return { ok: false, error: res.error || 'Could not reassign.' };
+    await loadPublicContent();
+    const body = res.data as { moved?: number; typesMoved?: number; deleted?: boolean } | undefined;
+    return { ok: true, moved: body?.moved, typesMoved: body?.typesMoved, deleted: body?.deleted };
   };
 
   const reassignProductType = async (
@@ -915,6 +964,10 @@ export const CMSProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     products,
     categories,
     productTypes,
+    productSections,
+    saveProductSection,
+    deleteProductSection: deleteProductSectionById,
+    reassignProductSection,
     saveProductType,
     deleteProductType: deleteProductTypeById,
     reassignProductType,

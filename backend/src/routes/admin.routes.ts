@@ -51,7 +51,17 @@ import {
   updateProductType,
   deleteProductType,
   resolveTypeForProductSave,
+  invalidateProductTypeCache,
 } from '../services/productType.service';
+import {
+  listProductSections,
+  listProductSectionsWithUsage,
+  getProductSection,
+  createProductSection,
+  updateProductSection,
+  deleteProductSection,
+  resolveSectionForProductSave,
+} from '../services/productSection.service';
 import {
   listNotificationDeliveries,
   getNotificationDelivery,
@@ -290,6 +300,9 @@ router.get('/cms/content', async (req: Request, res: Response) => {
     // and could disappear from the catalog entirely. selectableTypes() on the
     // client is what decides which of these a shopper is actually offered.
     productTypes: await listProductTypes(),
+    // Sections ride the same payload for the same reason — one fetch, cached
+    // in process, invalidated by every admin mutation.
+    productSections: await listProductSections(),
     navigation: db.navigation.filter((n) => n.isVisible),
     footer: db.footer,
     offers: evaluatedOffers.filter((o) => o.status === 'active'),
@@ -1241,6 +1254,100 @@ router.delete('/admin/product-types/:id', requireAdmin, async (req: Authenticate
 });
 
 // ==========================================
+// PRODUCT SECTIONS
+//
+// The level above product types. Identical shape to the type routes above,
+// because they manage the same kind of object — the only difference is that a
+// section's delete guard counts types as well as products.
+// ==========================================
+
+router.get('/admin/product-sections', requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  res.json({ sections: await listProductSectionsWithUsage(db.products) });
+});
+
+router.post('/admin/product-sections', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const result = await createProductSection(req.body || {});
+  if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+
+  await logAudit(req, 'CREATE_PRODUCT_SECTION', 'PRODUCT_SECTION', result.section!.id, result.section!.name);
+  broadcastEvent('CMS_UPDATE', 'productSections', result.section);
+  res.json(result.section);
+});
+
+router.put('/admin/product-sections/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  // The catalog goes in so a rename can pin the products that would otherwise
+  // be stranded; the service also rewrites product_types.category itself,
+  // since types reference a section by name and nothing else records it.
+  const result = await updateProductSection(req.params.id, req.body || {}, db.products);
+  if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+  if ((result.productsTouched || 0) > 0) await saveDatabase(db);
+
+  await logAudit(req, 'UPDATE_PRODUCT_SECTION', 'PRODUCT_SECTION', result.section!.id, result.section!.name);
+  broadcastEvent('CMS_UPDATE', 'productSections', result.section);
+  res.json(result.section);
+});
+
+/** Moves every product AND every type off one section onto another. */
+router.post('/admin/product-sections/:id/reassign', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const from = await getProductSection(req.params.id);
+  if (!from) return res.status(404).json({ error: 'Section not found.' });
+
+  const { targetSectionId, deleteAfter } = req.body || {};
+  const to = await getProductSection(targetSectionId);
+  if (!to) return res.status(400).json({ error: 'Choose an existing section to reassign to.' });
+  if (to.id === from.id) return res.status(400).json({ error: 'Choose a different section to reassign to.' });
+
+  const db = await loadDatabase();
+  const fromName = from.name.trim().toLowerCase();
+  let moved = 0;
+  for (const product of db.products) {
+    const matchesById = product.sectionId === from.id;
+    const matchesByName = !product.sectionId && (product.category || '').trim().toLowerCase() === fromName;
+    if (matchesById || matchesByName) {
+      product.sectionId = to.id;
+      product.category = to.name;
+      moved++;
+    }
+  }
+  if (moved > 0) await saveDatabase(db);
+
+  const typeUpdate = await pool.query(
+    `UPDATE product_types SET category = $1, updated_at = NOW() WHERE LOWER(TRIM(category)) = $2`,
+    [to.name, fromName]
+  );
+  const typesMoved = typeUpdate.rowCount ?? 0;
+  if (typesMoved > 0) invalidateProductTypeCache();
+
+  let deleted = false;
+  if (deleteAfter) {
+    const removal = await deleteProductSection(from.id, db.products);
+    deleted = removal.ok;
+  }
+
+  await logAudit(req, 'REASSIGN_PRODUCT_SECTION', 'PRODUCT_SECTION', from.id, `${from.name} → ${to.name} (${moved}p/${typesMoved}t)`);
+  broadcastEvent('CMS_UPDATE', 'productSections', { from: from.id, to: to.id });
+  res.json({ moved, typesMoved, deleted, from: from.id, to: to.id });
+});
+
+router.delete('/admin/product-sections/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const db = await loadDatabase();
+  const result = await deleteProductSection(req.params.id, db.products);
+  if (!result.ok) {
+    return res.status(result.status || 400).json({
+      error: result.error,
+      productCount: result.productCount,
+      typeCount: result.typeCount,
+    });
+  }
+
+  await logAudit(req, 'DELETE_PRODUCT_SECTION', 'PRODUCT_SECTION', req.params.id, result.section!.name);
+  broadcastEvent('CMS_UPDATE', 'productSections', { deleted: req.params.id });
+  res.json({ success: true });
+});
+
+// ==========================================
 // INVENTORY
 //
 // Every route here is behind requireAdmin — the same gate as the rest of this
@@ -1508,18 +1615,35 @@ async function applyProductType(
   return { ok: true, product: { ...payload, typeId: resolved.type.id, subCategory: resolved.type.name } };
 }
 
+/**
+ * Applies a client-supplied sectionId, writing BOTH `sectionId` and the
+ * section's current name into `category` — the same keep-in-step rule
+ * applyProductType uses for typeId/subCategory.
+ */
+async function applyProductSection(
+  payload: Partial<Product>
+): Promise<{ ok: boolean; error?: string; product?: Partial<Product> }> {
+  if (payload.sectionId === undefined) return { ok: true, product: payload };
+  const resolved = await resolveSectionForProductSave(payload.sectionId);
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+  if (!resolved.section) return { ok: true, product: { ...payload, sectionId: undefined } };
+  return { ok: true, product: { ...payload, sectionId: resolved.section.id, category: resolved.section.name } };
+}
+
 router.post('/admin/products', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
   const typed = await applyProductType(req.body);
   if (!typed.ok) return res.status(400).json({ error: typed.error });
+  const sectioned = await applyProductSection(typed.product!);
+  if (!sectioned.ok) return res.status(400).json({ error: sectioned.error });
 
-  const validationError = validateProduct(typed.product);
+  const validationError = validateProduct(sectioned.product);
   if (validationError) {
     return res.status(400).json({ error: validationError });
   }
 
   const db = await loadDatabase();
   const newProduct: Product = {
-    ...(typed.product as Product),
+    ...(sectioned.product as Product),
     id: req.body.id || 'prod-' + Date.now(),
   };
 
@@ -1544,8 +1668,10 @@ router.put('/admin/products/:id', requireAdmin, async (req: AuthenticatedRequest
 
   const typed = await applyProductType({ ...db.products[idx], ...req.body });
   if (!typed.ok) return res.status(400).json({ error: typed.error });
+  const sectioned = await applyProductSection(typed.product!);
+  if (!sectioned.ok) return res.status(400).json({ error: sectioned.error });
 
-  const merged = typed.product as Product;
+  const merged = sectioned.product as Product;
   const validationError = validateProduct(merged);
   if (validationError) {
     return res.status(400).json({ error: validationError });

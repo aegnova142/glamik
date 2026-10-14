@@ -21,6 +21,21 @@ import { listProductTypes, invalidateProductTypeCache } from './productType.serv
 // ==========================================================================
 
 const UNIQUE_VIOLATION = '23505';
+/** Postgres: relation does not exist. */
+const UNDEFINED_TABLE = '42P01';
+
+/**
+ * True when the failure is "this table has not been created yet".
+ *
+ * Which happens for one window in a normal deploy: the code ships before
+ * migration 022 has run. The storefront's content endpoint reads sections on
+ * every page load, so without this the whole catalog payload would fail for
+ * that window rather than simply listing no sections — turning an ordering
+ * detail into an outage.
+ */
+function isMissingTable(err: any): boolean {
+  return err?.code === UNDEFINED_TABLE;
+}
 
 function mapRow(row: any): ProductSection {
   return {
@@ -43,13 +58,25 @@ export function invalidateProductSectionCache(): void {
 
 export async function listProductSections(): Promise<ProductSection[]> {
   if (cachedSections) return cachedSections;
-  const result = await pool.query(
-    `SELECT id, name, slug, description, is_active, sort_order, created_at, updated_at
-       FROM product_sections
-      ORDER BY sort_order, name`
-  );
-  cachedSections = result.rows.map(mapRow);
-  return cachedSections;
+  try {
+    const result = await pool.query(
+      `SELECT id, name, slug, description, is_active, sort_order, created_at, updated_at
+         FROM product_sections
+        ORDER BY sort_order, name`
+    );
+    cachedSections = result.rows.map(mapRow);
+    return cachedSections;
+  } catch (err) {
+    if (!isMissingTable(err)) throw err;
+    // Deliberately NOT cached.
+    //
+    // Caching the empty fallback would make the gap permanent: the migration
+    // could run a minute later and this process would still serve no sections
+    // until someone restarted it. Returning uncached means the first call
+    // after the table appears picks it up, and the cost until then is one
+    // cheap failed query per content fetch.
+    return [];
+  }
 }
 
 export async function listProductSectionsWithUsage(
@@ -105,13 +132,20 @@ export async function ensureSectionsForCatalog(products: Product[]): Promise<num
   if (missing.size === 0) return 0;
 
   let order = (await listProductSections()).reduce((max, s) => Math.max(max, s.sortOrder), 0);
-  for (const name of missing.values()) {
-    order++;
-    await pool.query(
-      `INSERT INTO product_sections (id, name, slug, is_active, sort_order)
-       VALUES ($1, $2, $3, TRUE, $4) ON CONFLICT DO NOTHING`,
-      [`psec-${slugifyTypeName(name)}`, name, slugifyTypeName(name), order]
-    );
+  try {
+    for (const name of missing.values()) {
+      order++;
+      await pool.query(
+        `INSERT INTO product_sections (id, name, slug, is_active, sort_order)
+         VALUES ($1, $2, $3, TRUE, $4) ON CONFLICT DO NOTHING`,
+        [`psec-${slugifyTypeName(name)}`, name, slugifyTypeName(name), order]
+      );
+    }
+  } catch (err) {
+    // Booting before migration 022 has run is an ordering detail, not a fault
+    // worth a stack trace on every start. Nothing to reconcile INTO yet.
+    if (isMissingTable(err)) return 0;
+    throw err;
   }
   invalidateProductSectionCache();
   return missing.size;

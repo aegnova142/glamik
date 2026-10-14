@@ -29,6 +29,8 @@ type Section = string;
 
 /** Postgres error code for a unique-violation. */
 const UNIQUE_VIOLATION = '23505';
+/** Postgres: relation does not exist. */
+const UNDEFINED_TABLE = '42P01';
 
 function mapRow(row: any): ProductType {
   return {
@@ -73,13 +75,25 @@ export function invalidateProductTypeCache(): void {
  */
 export async function listProductTypes(): Promise<ProductType[]> {
   if (cachedTypes) return cachedTypes;
-  const result = await pool.query(
-    `SELECT id, name, slug, description, category, is_active, sort_order, created_at, updated_at
-       FROM product_types
-      ORDER BY sort_order, name`
-  );
-  cachedTypes = result.rows.map(mapRow);
-  return cachedTypes;
+  try {
+    const result = await pool.query(
+      `SELECT id, name, slug, description, category, is_active, sort_order, created_at, updated_at
+         FROM product_types
+        ORDER BY sort_order, name`
+    );
+    cachedTypes = result.rows.map(mapRow);
+    return cachedTypes;
+  } catch (err: any) {
+    // The storefront reads this on every page load. A database that has not
+    // run migration 021 — or has had it rolled back — should list no types,
+    // not fail the whole catalog payload. Shop falls back to the legacy
+    // category/subCategory filter path, which is exactly what it did before
+    // types existed.
+    //
+    // NOT cached: see the matching note in productSection.service.
+    if (err?.code === UNDEFINED_TABLE) return [];
+    throw err;
+  }
 }
 
 /**

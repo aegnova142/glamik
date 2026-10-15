@@ -54,7 +54,9 @@ import { SocialCommerceHub } from './components/social/SocialCommerceHub';
 import { CampaignLandingPage } from './components/marketing/CampaignLandingPage';
 import { PromoBannerPopup } from './components/marketing/PromoBannerPopup';
 import { BeautyQuizModal } from './components/discovery/BeautyQuizModal';
-import { PersonalizedHomeBanner } from './components/home/PersonalizedHomeBanner';
+import { VideoReels } from './components/home/VideoReels';
+// PERSONALIZED-BEAUTY-PAUSED: section switched off for now; restore this import with the home section below.
+// import { PersonalizedHomeBanner } from './components/home/PersonalizedHomeBanner';
 import { TrendingDiscovery } from './components/home/TrendingDiscovery';
 
 // Phase 6 Production, Legal & Resilience Components
@@ -1094,6 +1096,24 @@ function AppContent() {
               onExploreShop={() => navigateToShop()}
             />
 
+            {/* Watch It. Love It. — admin-managed shoppable videos; renders nothing until enabled with reels */}
+            <VideoReels
+              cartItems={cartItems}
+              onQuickAdd={(product, shade, size) => handleAddToCart(product, shade, size, 1)}
+              onGoToCart={navigateToCart}
+              onSelectProduct={(product) => navigateToProduct(product)}
+              onNavigate={(href) => {
+                // external links open in a new tab; site paths route in-app
+                if (/^https:\/\//i.test(href)) {
+                  window.open(href, '_blank', 'noopener,noreferrer');
+                  return;
+                }
+                const url = new URL(href, window.location.origin);
+                setCurrentRoute(pathToRoute(url.pathname, url.search));
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+
             {/* 3rd: Shop The Look (Curated Beauty Pairings) */}
             <ShopTheLook
               onSelectLook={(look) => navigateToShopTheLook()}
@@ -1115,7 +1135,7 @@ function AppContent() {
             {/* 6th: Frequently Asked Questions */}
             <FaqHomeSection onOpenSupport={navigateToSupport} />
 
-            {/* 7th: Personalize Beauty */}
+            {/* PERSONALIZED-BEAUTY-PAUSED: "Personalized Beauty" home section switched off for now — uncomment to restore.
             <PersonalizedHomeBanner
               beautyProfile={beautyProfile}
               onOpenShadeFinder={navigateToFindMyShade}
@@ -1128,6 +1148,7 @@ function AppContent() {
               onOpenArticle={navigateToArticle}
               onOpenQuiz={() => setIsQuizOpen(true)}
             />
+            */}
 
             {/* 7th: Match Your Shade CTA Banner (just before Footer) */}
             {/* FIND-MY-SHADE-PAUSED: CTA for the paused Find My Shade page — uncomment to restore.

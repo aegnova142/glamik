@@ -24,6 +24,7 @@ import {
   ChevronRight,
   Truck,
   Camera,
+  Film,
   Bell,
   MailWarning,
   Heart,
@@ -48,6 +49,7 @@ import { AdminOffers } from './AdminOffers';
 import { AdminPromoBanners } from './AdminPromoBanners';
 import { AdminHomeBanners } from './AdminHomeBanners';
 import { AdminWishlistBanner } from './AdminWishlistBanner';
+import { AdminVideoReels } from './AdminVideoReels';
 import { AdminLivePrivileges } from './AdminLivePrivileges';
 import { AdminNavigation } from './AdminNavigation';
 import { AdminFooter } from './AdminFooter';
@@ -84,6 +86,7 @@ type AdminTab =
   | 'homeBanners'
   | 'promoBanners'
   | 'wishlistBanner'
+  | 'videoReels'
   | 'navigation'
   | 'footer'
   | 'blog'
@@ -112,26 +115,46 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
       label: 'Orders',
       items: [{ id: 'orders', label: 'Order Management', icon: Truck }],
     },
+    // Content editors are grouped by the storefront page they change, and within
+    // the Home Page group listed in the order the sections appear on the page.
     {
-      label: 'Homepage & Content',
+      label: 'Home Page',
       items: [
-        { id: 'homeBanners', label: 'Homepage Banner Carousel', icon: ImageIcon },
+        { id: 'homeBanners', label: 'Banner Carousel', icon: ImageIcon },
         { id: 'hero', label: 'Hero Section', icon: Sparkles },
-        { id: 'about', label: 'About Page', icon: FileText },
+        { id: 'videoReels', label: 'Watch It. Love It. (Videos)', icon: Film },
+        { id: 'shadeIntelligence', label: 'Shade Intelligence', icon: Sparkles },
+        { id: 'faqs', label: 'Client FAQs', icon: HelpCircle },
+        { id: 'personalizedBeauty', label: 'Personalized Beauty', icon: Sparkles },
         { id: 'benefits', label: 'Benefits & Optimization', icon: ShieldCheck },
-        { id: 'shadeFinder', label: 'Find My Shade Journey', icon: Sparkles },
-        { id: 'shadeIntelligence', label: 'Shade Intelligence (Home)', icon: Sparkles },
-        { id: 'personalizedBeauty', label: 'Personalized Beauty (Home)', icon: Sparkles },
-        { id: 'shopMegaMenu', label: 'Shop Mega-Menu', icon: Layers },
+      ],
+    },
+    {
+      label: 'About Page',
+      items: [{ id: 'about', label: 'About Page Content', icon: FileText }],
+    },
+    {
+      label: 'Other Pages',
+      items: [
         { id: 'looks', label: 'Shop The Look', icon: Sparkles },
-        { id: 'livePrivileges', label: 'Live Privileges Popup', icon: Tag },
+        { id: 'shadeFinder', label: 'Find My Shade Journey', icon: Sparkles },
         { id: 'wishlistBanner', label: 'Wishlist Banner', icon: Heart },
         { id: 'blog', label: 'Journal & Guides', icon: BookOpen },
         { id: 'pages', label: 'Pages & Sections Builder', icon: FileText },
       ],
     },
     {
-      label: 'Catalog',
+      label: 'Every Page — Header, Footer & Popups',
+      items: [
+        { id: 'navigation', label: 'Header Navigation', icon: MenuIcon },
+        { id: 'shopMegaMenu', label: 'Shop Mega-Menu', icon: Layers },
+        { id: 'footer', label: 'Footer Settings', icon: Layers },
+        { id: 'livePrivileges', label: 'Live Privileges Popup', icon: Tag },
+        { id: 'promoBanners', label: 'Promo Banner Popup', icon: ImageIcon },
+      ],
+    },
+    {
+      label: 'Catalog — Shop & Product Pages',
       items: [
         { id: 'products', label: 'Product Catalogue', icon: Package },
         { id: 'categories', label: 'Categories & Taxonomy', icon: Layers },
@@ -140,18 +163,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
     },
     {
       label: 'Marketing',
-      items: [
-        { id: 'offers', label: 'Offers & Campaigns', icon: Tag },
-        { id: 'promoBanners', label: 'Promo Banner Popup', icon: ImageIcon },
-      ],
-    },
-    {
-      label: 'Site Structure',
-      items: [
-        { id: 'navigation', label: 'Header Navigation', icon: MenuIcon },
-        { id: 'footer', label: 'Footer Settings', icon: Layers },
-        { id: 'faqs', label: 'Client FAQs', icon: HelpCircle },
-      ],
+      items: [{ id: 'offers', label: 'Offers & Campaigns', icon: Tag }],
     },
     {
       label: 'Assets',
@@ -366,6 +378,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
             {activeTab === 'promoBanners' && <AdminPromoBanners />}
             {activeTab === 'homeBanners' && <AdminHomeBanners />}
             {activeTab === 'wishlistBanner' && <AdminWishlistBanner />}
+            {activeTab === 'videoReels' && <AdminVideoReels />}
             {activeTab === 'livePrivileges' && <AdminLivePrivileges onOpenOffers={() => setActiveTab('offers')} />}
             {activeTab === 'navigation' && <AdminNavigation />}
             {activeTab === 'footer' && <AdminFooter />}

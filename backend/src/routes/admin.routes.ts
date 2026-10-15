@@ -2730,6 +2730,43 @@ router.put('/admin/settings', requireAdmin, async (req: AuthenticatedRequest, re
     };
   }
 
+  // Video reels are rendered on the public home page as <video>/<img> sources,
+  // so they get the same URL rule as the banner and a whitelist of fields.
+  const reels = req.body?.videoReels;
+  if (reels !== undefined) {
+    const isSafeMediaUrl = (u: unknown) =>
+      typeof u === 'string' && u.length > 0 && u.length <= 2048 && /^(https:\/\/|\/(?!\/))/i.test(u);
+    const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+    if (typeof reels !== 'object' || reels === null || !Array.isArray(reels.items) || reels.items.length > 30) {
+      return res.status(400).json({ error: 'Video reels must be a list of at most 30 videos.' });
+    }
+    const items = [];
+    for (const it of reels.items) {
+      const isLink = it?.kind === 'link';
+      if (typeof it !== 'object' || it === null || !isSafeMediaUrl(it.videoUrl) ||
+          (it.posterUrl && !isSafeMediaUrl(it.posterUrl)) ||
+          (isLink ? !str(it.customTitle, 120) || !isSafeMediaUrl(it.linkUrl) : !str(it.productId, 100))) {
+        return res.status(400).json({
+          error: 'Each reel needs an uploaded video (https://) and either a product or a title with a link (https:// or /path).',
+        });
+      }
+      items.push({
+        id: str(it.id, 100) || `reel-${Date.now()}-${items.length}`,
+        videoUrl: it.videoUrl,
+        posterUrl: it.posterUrl || '',
+        ...(isLink
+          ? { kind: 'link', productId: '', customTitle: str(it.customTitle, 120), priceLabel: str(it.priceLabel, 40), linkUrl: it.linkUrl }
+          : { kind: 'product', productId: str(it.productId, 100) }),
+      });
+    }
+    req.body.videoReels = {
+      enabled: reels.enabled === true,
+      title: str(reels.title, 120) || 'Watch It. Love It.',
+      subtitle: str(reels.subtitle, 200),
+      items,
+    };
+  }
+
   const db = await loadDatabase();
   // A replaced logo is left alone — see the "Rollback & Cleanup Timing"
   // policy at the top of this file.

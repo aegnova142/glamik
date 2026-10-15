@@ -1859,6 +1859,33 @@ export interface CMSGlobalSettings {
   /** Image behind the "Your Beauty Edit" hero on /wishlist. The heading stays
    * real HTML on top; an empty or disabled banner leaves a plain black hero. */
   wishlistBanner?: CMSWishlistBanner;
+  /** "Watch It. Love It." shoppable video row on the home page. */
+  videoReels?: CMSVideoReels;
+}
+
+export interface CMSVideoReelItem {
+  id: string;
+  /** Uploaded video (https:// or same-site path). */
+  videoUrl: string;
+  /** Optional still shown before the video plays; the video's first frame otherwise. */
+  posterUrl?: string;
+  /** Catalogue product the reel sells — price and Add to Cart come from it.
+   * Empty for a custom-link reel. */
+  productId: string;
+  /** 'link' = custom reel: own title, optional price text and a link instead of a product. */
+  kind?: 'product' | 'link';
+  customTitle?: string;
+  /** Free text shown as the price, e.g. "From ₹499". */
+  priceLabel?: string;
+  /** https:// URL or a same-site path such as /shop?category=lips. */
+  linkUrl?: string;
+}
+
+export interface CMSVideoReels {
+  enabled: boolean;
+  title: string;
+  subtitle?: string;
+  items: CMSVideoReelItem[];
 }
 
 export interface CMSWishlistBanner {

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Heart, Sparkles, ShoppingBag, Star, Check, ShieldCheck } from 'lucide-react';
+import { Heart, Sparkles, ShoppingBag, ShoppingCart, Star, Check, Gem } from 'lucide-react';
 import { Product, Shade, CartItem } from '@glamirk/shared/types';
 import { ProductImage } from './ProductImage';
 import {
@@ -170,7 +170,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const isLowStock = sellable && typeof product.stock === 'number' && product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD;
 
   const ImageArea = (
-    <div className={`relative shrink-0 overflow-hidden rounded-lg bg-[#FCE8ED] ${viewMode === 'list' ? 'aspect-square w-28 sm:w-40' : 'aspect-[4/3] w-full'}`}>
+    <div className={`relative shrink-0 overflow-hidden rounded-xl bg-gradient-to-b from-[#FCE8ED] to-[#F9DDE4] ${viewMode === 'list' ? 'aspect-square w-28 sm:w-40' : 'aspect-[10/11] w-full'}`}>
       <ProductImage
         src={displayImage?.url}
         // Names the shade when the picture is of a shade, so a screen reader
@@ -188,7 +188,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             ? '(max-width: 640px) 112px, 160px'
             : '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw'
         }
-        className="h-full w-full object-contain object-center transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+        className="h-full w-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-[1.04]"
       />
 
       {!sellable && (
@@ -200,8 +200,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       )}
 
       {product.tag && (
-        <div className="absolute left-2 top-2 z-10">
-          <span className="rounded-full border border-[#E8D5A8] bg-white/95 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-[#F05A7E] shadow-sm">
+        <div className="absolute left-2.5 top-2.5 z-10 sm:left-3 sm:top-3">
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.1em] text-[#F05A7E] shadow-[0_2px_8px_rgba(240,90,126,0.12)] sm:text-[10px]">
+            {/new/i.test(product.tag) ? <Sparkles className="h-3 w-3" /> : <Gem className="h-3 w-3" />}
             {product.tag}
           </span>
         </div>
@@ -213,12 +214,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           e.stopPropagation();
           onToggleWishlist(product.id);
         }}
-        className="absolute right-2 top-2 z-10 rounded-full border border-[#E8D5A8] bg-white/90 p-1.5 shadow-sm backdrop-blur-xs transition-all hover:scale-110 hover:bg-white sm:p-2"
+        className="absolute right-2.5 top-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 shadow-[0_2px_10px_rgba(18,18,18,0.08)] transition-all hover:scale-110 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F05A7E] sm:right-3 sm:top-3 sm:h-9 sm:w-9"
         aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
       >
         <Heart
           className={`h-3.5 w-3.5 transition-colors sm:h-4 sm:w-4 ${
-            isWishlisted ? 'fill-[#F05A7E] text-[#F05A7E]' : 'text-[#6B6B6B] hover:text-[#F05A7E]'
+            isWishlisted ? 'fill-[#F05A7E] text-[#F05A7E]' : 'text-[#121212] hover:text-[#F05A7E]'
           }`}
         />
       </button>
@@ -283,7 +284,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const totalSelectableShades = useMemo(() => selectableShades(product).length, [product]);
 
   const ShadeRow = visibleShades.length > 0 && (
-    <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+    <div className="flex flex-wrap items-center gap-2 pt-3 @[250px]:gap-2.5">
       {visibleShades.slice(0, 6).map(({ shade, soldOut }) => {
         return (
           <button
@@ -292,10 +293,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               e.stopPropagation();
               setSelectedShade(shade);
             }}
-            className={`h-3.5 w-3.5 rounded-full border transition-all duration-150 ${
+            className={`h-6 w-6 rounded-full border border-[#0B0B0B]/10 transition-all duration-150 focus-visible:outline-none @[250px]:h-7 @[250px]:w-7 ${
               selectedShade?.id === shade.id
-                ? 'border-[#F05A7E] scale-125 ring-2 ring-[#F05A7E]/25'
-                : 'border-[#0B0B0B]/15 hover:scale-110'
+                ? 'ring-2 ring-[#F05A7E] ring-offset-2'
+                : 'hover:scale-110 focus-visible:ring-2 focus-visible:ring-[#F05A7E]/50 focus-visible:ring-offset-2'
             } ${soldOut ? 'opacity-40' : ''}`}
             style={{ backgroundColor: shade.hex }}
             title={`${shade.name} (${shade.undertone} undertone)${soldOut ? ' — out of stock' : ''}`}
@@ -306,22 +307,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         );
       })}
       {totalSelectableShades > 6 && (
-        <span className="text-[10px] font-medium text-[#6B6B6B]">+{totalSelectableShades - 6}</span>
+        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FCE8ED] px-1.5 text-[10.5px] font-semibold text-[#121212] @[250px]:h-7 @[250px]:min-w-7">+{totalSelectableShades - 6}</span>
       )}
     </div>
   );
 
   const PriceRow = (
     <div className={`flex items-center gap-2.5 ${viewMode === 'list' ? '' : 'flex-wrap'}`}>
-      <span className="text-base font-bold text-[#121212] sm:text-lg">
+      <span className="text-xl font-bold tracking-tight text-[#121212] sm:text-2xl">
         {product.currency}{displayPrice}
       </span>
       {discountPercent > 0 && (
         <>
-          <span className="text-xs text-[#6B6B6B] line-through">
+          <span className="text-[13px] text-[#6B6B6B] line-through">
             {product.currency}{displayCompareAtPrice}
           </span>
-          <span className="text-[10.5px] font-bold text-[#F05A7E]">{discountPercent}% OFF</span>
+          <span className="text-[11px] font-semibold tracking-wide text-[#F05A7E]">{discountPercent}% OFF</span>
         </>
       )}
     </div>
@@ -330,6 +331,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // isInCart is checked BEFORE stock: a line already in the bag stays
   // reachable even if that shade has since sold out — "Go to Cart" navigates
   // rather than adding, so there is nothing for stock to refuse.
+  // One base so both CTAs share height, type and never wrap — "Add to Cart"
+  // used to break onto two lines in narrow grid cards.
+  const CTA_BASE =
+    'inline-flex h-11 min-w-0 items-center justify-center gap-2 whitespace-nowrap rounded-full px-3 text-[12.5px] font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F05A7E] focus-visible:ring-offset-2 active:scale-[0.97] sm:text-[13px]';
+
   const AddToCartButton = (
     <button
       id={`quickadd-btn-${product.id}`}
@@ -344,27 +350,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           ? handleAddToCartClick
           : undefined
       }
-      className={`flex items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold shadow-sm transition-all active:scale-95 ${
+      className={`${CTA_BASE} ${
         isInCart
-          ? 'cursor-pointer border border-[#0B0B0B] bg-white text-[#121212] hover:bg-[#FAF9F6]'
+          ? 'cursor-pointer border border-[#121212] bg-[#121212] text-white hover:bg-[#2a2a2a]'
           : !canAddSelectedUnit
-          ? 'cursor-not-allowed bg-[#E8D5A8]/50 text-[#6B6B6B]'
-          : 'cursor-pointer bg-[#F05A7E] text-white hover:bg-[#e0496c]'
-      } ${viewMode === 'list' ? 'w-full sm:w-auto sm:flex-1' : 'flex-1'}`}
+          ? 'cursor-not-allowed border border-[#E8D5A8] bg-[#FAF6EC] text-[#9A9A9A]'
+          : 'cursor-pointer border border-transparent bg-[#F05A7E] text-white shadow-[0_8px_18px_-8px_rgba(240,90,126,0.6)] hover:bg-[#E54D72] hover:shadow-[0_12px_24px_-10px_rgba(240,90,126,0.7)]'
+      } ${viewMode === 'list' ? 'flex-1 sm:min-w-[132px]' : 'flex-auto'}`}
     >
       {isInCart ? (
         <>
-          <Check className="h-3.5 w-3.5" />
+          <Check className="h-3.5 w-3.5 shrink-0" />
           <span>Go to Cart</span>
         </>
       ) : !canAddSelectedUnit ? (
         <>
-          <ShoppingBag className="h-3.5 w-3.5" />
+          <ShoppingBag className="h-3.5 w-3.5 shrink-0" />
           <span>Out of Stock</span>
         </>
       ) : (
         <>
-          <ShoppingBag className="h-3.5 w-3.5" />
+          <ShoppingCart className="h-4 w-4 shrink-0" />
           <span>Add to Cart</span>
         </>
       )}
@@ -379,9 +385,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       // let a sold-out shade reach the server and fail there instead.
       disabled={!canAddSelectedUnit}
       onClick={handleBuyNowClick}
-      className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-[#E8D5A8] bg-white px-3.5 py-2 text-xs font-bold uppercase tracking-wide text-[#121212] shadow-sm transition-all hover:border-[#F05A7E] hover:bg-[#FCE8ED] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#E8D5A8] disabled:hover:bg-white"
+      className={`${CTA_BASE} ${viewMode === 'list' ? 'flex-1' : 'flex-auto'} border border-[#E3C98F] bg-white uppercase tracking-[0.04em] text-[#121212] hover:border-[#C9972B] hover:bg-[#FFFBF3] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#E3C98F] disabled:hover:bg-white ${viewMode === 'list' ? 'sm:min-w-[112px]' : ''}`}
     >
-      <ShieldCheck className="h-3.5 w-3.5 text-[#F05A7E]" />
+      <ShoppingBag className="h-4 w-4 shrink-0 text-[#F05A7E]" />
       <span>Buy Now</span>
     </button>
   );
@@ -431,46 +437,49 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     <div
       id={`product-card-${product.id}`}
       onClick={() => onSelectProduct(product)}
-      className="group relative flex h-full cursor-pointer flex-col rounded-xl border border-[#E8D5A8] bg-white p-4 shadow-[0_1px_6px_rgba(11,11,11,0.03)] transition-all duration-300 hover:-translate-y-0.5 hover:border-[#FCE8ED] hover:shadow-[0_10px_24px_rgba(240,90,126,0.10)] sm:p-5"
+      className="@container group relative flex h-full cursor-pointer flex-col rounded-2xl border border-[#EBD9B4] bg-[#FFFDFB] p-3 shadow-[0_2px_14px_rgba(201,151,43,0.06)] transition-all duration-300 hover:-translate-y-1 hover:border-[#E3C98F] hover:shadow-[0_16px_34px_-12px_rgba(240,90,126,0.18)] sm:p-3.5"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       {ImageArea}
 
-      <div className="flex flex-1 flex-col justify-between pt-3.5">
+      <div className="flex flex-1 flex-col justify-between px-1.5 pt-4 sm:px-2">
         <div>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[10.5px] font-medium text-[#6B6B6B]">{product.subCategory}</span>
+            <span className="text-[10.5px] font-semibold uppercase tracking-[0.18em] text-[#F05A7E] sm:text-[11px]">{product.subCategory}</span>
             {RatingRow}
           </div>
 
-          <h3 className="mt-0.5 line-clamp-2 min-h-[2.5em] text-sm font-bold leading-snug text-[#121212] transition-colors group-hover:text-[#F05A7E] sm:text-base">
+          {/* Playfair is already loaded in index.html; the base layer maps
+              .font-serif to the sans stack, so it is named directly here. */}
+          <h3 className="mt-1.5 line-clamp-2 font-['Playfair_Display',Georgia,serif] text-[19px] [font-variant-numeric:lining-nums] font-medium leading-[1.2] text-[#121212] transition-colors group-hover:text-[#F05A7E] @[250px]:text-[21px]">
             {product.name}
           </h3>
 
-          <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-[#6B6B6B]">
+          <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-[#6B6B6B] sm:text-sm">
             {product.subtitle}
           </p>
 
           {ShadeRow}
 
           {product.sizes && !product.shades && (
-            <div className="flex items-center gap-1.5 pt-1.5 text-[11px] text-[#6B6B6B]">
-              <span className="rounded-full border border-[#E8D5A8] bg-[#FCE8ED] px-2 py-0.5 text-[10px] font-bold text-[#F05A7E]">
+            <div className="flex items-center gap-2.5 pt-3 text-[12.5px] text-[#6B6B6B] sm:text-[13px]">
+              <span className="rounded-full border border-[#F05A7E]/60 bg-[#FCE8ED] px-3 py-1 text-[12px] font-semibold text-[#F05A7E]">
                 {product.selectedSize || '30g & 50g'}
               </span>
+              <span className="h-4 w-px bg-[#E8D5A8]" aria-hidden="true" />
               <span>Solid Balm To Water</span>
             </div>
           )}
 
           {isLowStock && (
-            <p className="pt-1.5 text-[10.5px] font-semibold text-[#F05A7E]">Only {product.stock} left</p>
+            <p className="pt-2 text-[11px] font-semibold text-[#F05A7E]">Only {product.stock} left</p>
           )}
         </div>
 
-        <div className="mt-3 flex flex-col gap-2.5 border-t border-[#E8D5A8]/60 pt-3">
+        <div className="mt-4 flex flex-col gap-3 border-t border-[#E8D5A8]/80 pb-1 pt-4">
           {PriceRow}
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 @[250px]:flex-row">
             {BuyNowButton}
             {AddToCartButton}
           </div>

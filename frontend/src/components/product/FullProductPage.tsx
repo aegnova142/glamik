@@ -373,10 +373,10 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                   id="pdp-add-to-bag-btn"
                   onClick={() => onAddToBag(product, selectedShade, selectedSize, quantity)}
                   disabled={!canAddToBag}
-                  className={`flex-1 py-3.5 px-6 text-white text-[12px] font-bold tracking-wider uppercase rounded-full transition-all flex items-center justify-center gap-2 ${
+                  className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full uppercase tracking-[0.12em] font-semibold transition-all duration-200 active:scale-[0.97] h-12 min-w-0 flex-1 px-5 text-[11px] sm:text-[12px] ${
                     canAddToBag
-                      ? 'bg-[#F05A7E] hover:bg-[#F05A7E] shadow-[0_4px_14px_rgba(240, 90, 126,0.25)] hover:scale-102 active:scale-95 cursor-pointer'
-                      : 'bg-[#6B6B6B] cursor-not-allowed'
+                      ? 'cursor-pointer bg-gradient-to-r from-[#F05A7E] to-[#E0456B] text-white shadow-[0_8px_20px_-8px_rgba(240,90,126,0.6)] hover:shadow-[0_12px_26px_-10px_rgba(240,90,126,0.7)] hover:brightness-105'
+                      : 'cursor-not-allowed bg-[#6B6B6B] text-white'
                   }`}
                 >
                   <ShoppingBag className="w-4 h-4 text-white" />
@@ -389,13 +389,14 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                 <button
                   onClick={() => onBuyNow(product, selectedShade, selectedSize)}
                   disabled={!canAddToBag}
-                  className={`py-3 px-4 bg-white text-[#121212] border border-[#E8D5A8] text-[11px] font-bold tracking-wider uppercase rounded-full transition-all flex items-center justify-center ${
+                  className={`inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full uppercase tracking-[0.12em] font-semibold transition-all duration-200 active:scale-[0.97] h-11 px-4 text-[11px] ${
                     canAddToBag
-                      ? 'hover:border-[#F05A7E] hover:bg-[#FCE8ED] cursor-pointer'
-                      : 'opacity-50 cursor-not-allowed'
+                      ? 'cursor-pointer border border-[#121212]/80 bg-white text-[#121212] hover:bg-[#121212] hover:text-white'
+                      : 'opacity-50 cursor-not-allowed border border-[#121212]/40 text-[#121212]'
                   }`}
                 >
-                  BUY NOW
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span>Buy Now</span>
                 </button>
 
                 {product.shades ? (
@@ -662,7 +663,7 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
       />
 
       {/* Sticky Mobile Purchase Bar (Fixed above MobileBottomNav on small screens) */}
-      <div className="md:hidden fixed bottom-16 inset-x-0 bg-white/95 backdrop-blur-md border-t border-[#E8D5A8] px-4 py-2.5 z-30 shadow-[0_-4px_20px_rgba(240, 90, 126,0.1)] flex items-center justify-between gap-3">
+      <div className="md:hidden fixed bottom-16 inset-x-0 bg-white/95 backdrop-blur-md border-t border-[#E8D5A8] pl-4 pr-16 py-2.5 z-30 shadow-[0_-4px_20px_rgba(240,90,126,0.1)] flex items-center justify-between gap-3">
         <div className="flex-1 min-w-0">
           <span className="text-xs font-bold text-[#121212] block truncate">
             {product.name}
@@ -675,9 +676,9 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
         <button
           onClick={() => onAddToBag(product, selectedShade, selectedSize, quantity)}
           disabled={!canAddToBag}
-          className={`py-2.5 px-5 text-white text-xs font-bold tracking-wider uppercase rounded-full flex items-center gap-1.5 flex-shrink-0 transition-all ${
+          className={`h-10 px-4 text-white text-[11px] font-semibold tracking-[0.12em] uppercase whitespace-nowrap rounded-full flex items-center gap-1.5 flex-shrink-0 transition-all ${
             canAddToBag
-              ? 'bg-[#F05A7E] hover:bg-[#F05A7E] shadow-[0_4px_12px_rgba(240, 90, 126,0.25)] cursor-pointer active:scale-95'
+              ? 'bg-gradient-to-r from-[#F05A7E] to-[#E0456B] shadow-[0_6px_16px_-6px_rgba(240,90,126,0.55)] cursor-pointer active:scale-[0.97]'
               : 'bg-[#6B6B6B] cursor-not-allowed'
           }`}
         >

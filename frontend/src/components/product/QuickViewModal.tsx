@@ -365,7 +365,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       onAddToBag(product, selectedShade, selectedSize, quantity);
                       onClose();
                     }}
-                    className="flex-grow py-3.5 px-6 bg-white border border-[#0B0B0B] hover:bg-[#FCE8ED] text-[#121212] text-xs font-bold rounded-full transition-all flex items-center justify-center gap-2 hover:scale-102 active:scale-95 cursor-pointer"
+                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full uppercase tracking-[0.12em] font-semibold transition-all duration-200 active:scale-[0.97] h-12 flex-grow px-6 text-[11px] cursor-pointer border border-[#121212]/80 bg-white text-[#121212] hover:bg-[#121212] hover:text-white"
                   >
                     <ShoppingBag className="w-4 h-4" />
                     <span>Add To Bag</span>
@@ -378,7 +378,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     onClick={() => {
                       onBuyNow(product, selectedShade, selectedSize);
                     }}
-                    className="w-full py-3.5 px-6 bg-[#F05A7E] hover:bg-[#F05A7E] text-white text-xs font-bold rounded-full transition-all flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(240, 90, 126,0.3)] hover:scale-102 active:scale-95 cursor-pointer"
+                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full uppercase tracking-[0.12em] font-semibold transition-all duration-200 active:scale-[0.97] h-12 w-full px-6 text-[11px] cursor-pointer bg-gradient-to-r from-[#F05A7E] to-[#E0456B] text-white shadow-[0_8px_20px_-8px_rgba(240,90,126,0.6)] hover:shadow-[0_12px_26px_-10px_rgba(240,90,126,0.7)] hover:brightness-105"
                   >
                     <ShieldCheck className="w-4 h-4" />
                     <span>Buy Now • ₹{currentPrice! * quantity}</span>

@@ -50,7 +50,7 @@ export const GlamirkEdit: React.FC<GlamirkEditProps> = ({
   const hasMore = filteredProducts.length > MAX_CARDS;
 
   return (
-    <section id="the-glamirk-edit" className="home-section bg-[#FCE8ED]/40 border-b border-[#E8D5A8]">
+    <section id="the-glamirk-edit" className="home-section bg-[#FBF8F4] border-b border-[#E8D5A8]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Section Header */}

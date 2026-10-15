@@ -8,3 +8,11 @@ logs/
 .env*
 !.env.example
 backups/
+
+# Local throwaway-database artefacts, kept in the repo root rather than
+# backups/ so they sit next to the container they came from. The .dump files
+# carry real rows from glamirk_test and the inspect JSON carries container
+# configuration, so none of it belongs in version control.
+glamirk-test-inspect-backup.json
+glamirk_test_backup.dump
+glamirk_test_pre_restart.dump

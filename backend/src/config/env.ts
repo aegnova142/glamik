@@ -2,7 +2,12 @@ import dotenv from 'dotenv';
 import { PATHS } from './paths';
 // Safe to import here: messaging.service reads process.env directly and
 // imports nothing from this module, so there is no cycle.
-import { describeOtpChannels } from '../services/messaging.service';
+import {
+  describeOtpChannels,
+  devOtpEnabled,
+  devOtpRequestedButRefused,
+  otpDeliveryEnabled,
+} from '../services/messaging.service';
 // Pure URL classification — no database connection, no import cycle.
 import { classifyDatabaseTarget } from './databaseTarget';
 
@@ -496,10 +501,44 @@ export function warnOnWeakConfig(): void {
     console.log('[config] Shipping is in MOCK mode — no real shipment. Set DELHIVERY_LIVE_MODE=true with credentials to go live.');
   }
 
+  // The OTP console bypass is an authentication shortcut, so it is announced
+  // as loudly as the production-database warning above rather than as one
+  // line among forty. A developer who left it on and then tested something
+  // security-sensitive needs to know which server they are looking at.
+  if (devOtpEnabled()) {
+    console.warn(
+      '\n' +
+        '  ====================================================================\n' +
+        '   DEVELOPMENT OTP MODE IS ON\n' +
+        '\n' +
+        '   Sign-in codes are PRINTED TO THIS CONSOLE and no SMS is sent.\n' +
+        '   Anyone who can read this output can sign in as any phone number.\n' +
+        '\n' +
+        '   Requires NODE_ENV=development AND OTP_DEV_MODE; production\n' +
+        '   ignores the flag entirely. Unset OTP_DEV_MODE to send real SMS.\n' +
+        '  ====================================================================\n'
+    );
+  } else if (devOtpRequestedButRefused()) {
+    // Says so out loud rather than leaving someone to wonder why no code
+    // appears — and confirms the production guard did its job.
+    console.warn(
+      `[config] OTP_DEV_MODE is set but NODE_ENV is "${env.nodeEnv}", not "development" — ` +
+        'the console OTP bypass is DISABLED and real SMS will be sent. This is the intended production behaviour.'
+    );
+  }
+
   // Mobile + OTP is the primary customer sign-in, so an unconfigured channel
   // is a customer-facing outage rather than a degraded extra.
   const channels = describeOtpChannels();
-  if (!channels.sms && !channels.whatsapp) {
+  if (!otpDeliveryEnabled() && !devOtpEnabled()) {
+    // Distinguished from "nobody configured it" because the cause and the fix
+    // are different: this one is a switch somebody threw on purpose.
+    console.warn(
+      '[config] OTP delivery is SWITCHED OFF (OTP_DELIVERY_ENABLED is not set) — no SMS or WhatsApp will be sent ' +
+        'to any provider, and mobile sign-in reports itself unavailable. Set OTP_DELIVERY_ENABLED=true to resume ' +
+        'real delivery, or OTP_DEV_MODE=1 with NODE_ENV=development to test locally via the console.'
+    );
+  } else if (!channels.sms && !channels.whatsapp) {
     console.warn(
       '[config] No OTP delivery channel is configured — customers cannot sign in with a mobile number. ' +
         'Set SMS_PROVIDER (+ its credentials) and/or WHATSAPP_PROVIDER; see .env.example.'

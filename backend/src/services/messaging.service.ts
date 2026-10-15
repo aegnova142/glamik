@@ -104,6 +104,36 @@ function briefly(text: string): string {
   return collapsed.length > 300 ? `${collapsed.slice(0, 300)}…` : collapsed;
 }
 
+/**
+ * Provider-supplied text, made safe to keep and log.
+ *
+ * Error messages come from a third party and end up in our logs, so they are
+ * treated as untrusted input rather than as our own words: anything matching
+ * a credential this process holds — or the code we just sent — is replaced
+ * before the string goes anywhere. Providers do quote what you sent them back
+ * at you in validation errors, and a 401 reading "authkey <key> is invalid"
+ * would otherwise write that key to disk, where log shipping and support
+ * screenshots take it from there.
+ *
+ * Length is bounded first so a single huge page can't make this slow.
+ */
+function safeDetail(text: string, otp?: string): string {
+  let out = briefly(text);
+  const secrets = [
+    process.env.MSG91_AUTH_KEY,
+    process.env.TWILIO_AUTH_TOKEN,
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.WHATSAPP_ACCESS_TOKEN,
+    otp,
+  ];
+  for (const secret of secrets) {
+    // Short values would redact ordinary words out of the message and make it
+    // useless; a real credential is never this short.
+    if (secret && secret.length >= 4) out = out.split(secret).join('[redacted]');
+  }
+  return out;
+}
+
 // ------------------------------------------
 // SMS — Twilio
 // ------------------------------------------
@@ -138,24 +168,108 @@ async function sendSmsViaTwilio(msg: OtpMessage): Promise<DeliveryResult> {
     });
     const payload: any = await res.json().catch(() => ({}));
     if (!res.ok) {
-      return { status: 'error', provider: 'twilio', detail: briefly(payload?.message || `HTTP ${res.status}`) };
+      return { status: 'error', provider: 'twilio', detail: safeDetail(payload?.message || `HTTP ${res.status}`, msg.otp) };
     }
     return { status: 'sent', provider: 'twilio', providerMessageId: payload?.sid };
   } catch (err) {
-    return { status: 'error', provider: 'twilio', detail: briefly((err as Error).message) };
+    return { status: 'error', provider: 'twilio', detail: safeDetail((err as Error).message, msg.otp) };
   }
 }
 
 // ------------------------------------------
 // SMS — MSG91
 //
-// Uses the Flow API rather than MSG91's own OTP endpoint on purpose: the OTP
-// endpoint generates and verifies the code itself, which would move
-// authentication out of this application and into a vendor. We generate and
-// verify our own code and use MSG91 purely as a transport.
+// MSG91 is a TRANSPORT here and nothing more. Both routes below hand it a
+// code this application generated, and neither one ever calls MSG91's
+// /verify endpoint: expiry, single-use, the attempt cap and the hash all stay
+// in otp.service.ts, decided against our own table. That is also why the
+// account's OTP Widget is deliberately unused — the widget flow has MSG91
+// generate the code, hold it, and hand back a JWT, which would move customer
+// authentication into a vendor and silently replace our 6-digit / 60-second
+// policy with the widget's own.
+//
+// Two routes exist because MSG91 has two kinds of template and an account
+// generally has only one of them approved:
+//
+//   'flow' — POST /api/v5/flow/, a DLT-approved SMS template with named
+//            ##variables##. The default, and what this integration shipped
+//            with.
+//   'otp'  — POST /api/v5/otp, an OTP-category template built around a single
+//            ##OTP## placeholder. This is the kind an MSG91 "OTP Widget" is
+//            built on, so an account set up for the widget usually has one of
+//            these and no flow template. It accepts a caller-supplied `otp`,
+//            which is what makes it usable without surrendering the code.
+//
+// Selected by MSG91_SMS_ROUTE. Defaults to 'flow' so existing deployments are
+// unaffected.
 // ------------------------------------------
 
-async function sendSmsViaMsg91(msg: OtpMessage): Promise<DeliveryResult> {
+type Msg91Route = 'flow' | 'otp';
+
+function msg91Route(): Msg91Route {
+  return (process.env.MSG91_SMS_ROUTE || '').trim().toLowerCase() === 'otp' ? 'otp' : 'flow';
+}
+
+/**
+ * MSG91's Send OTP API, used purely to deliver a code we already generated.
+ *
+ * Parameters go in the QUERY STRING for this endpoint — the JSON body is
+ * reserved for extra template variables — which is the one place this differs
+ * meaningfully from the flow route.
+ */
+async function sendSmsViaMsg91OtpApi(msg: OtpMessage): Promise<DeliveryResult> {
+  const authKey = process.env.MSG91_AUTH_KEY;
+  const templateId = process.env.MSG91_OTP_TEMPLATE_ID;
+
+  if (!authKey || !templateId) {
+    return { status: 'unconfigured', provider: 'msg91' };
+  }
+
+  // MSG91 wants the number without a leading '+'.
+  const recipient = msg.phone.replace(/^\+/, '');
+
+  // otp_expiry is in MINUTES and MSG91's floor is 1, while our window is 60
+  // seconds and configurable below that. Rounding UP is safe precisely
+  // because this value only governs MSG91's own verify endpoint, which we
+  // never call — our `expires_at` is still the only thing that decides
+  // whether a code is live, so a longer vendor-side window grants nothing.
+  const otpExpiryMinutes = Math.max(1, Math.ceil(msg.expiresInSeconds / 60));
+
+  const query = new URLSearchParams({
+    template_id: templateId,
+    mobile: recipient,
+    // Our code, not theirs. Omitting this is what makes MSG91 generate one.
+    otp: msg.otp,
+    otp_length: String(msg.otp.length),
+    otp_expiry: String(otpExpiryMinutes),
+    // Without this MSG91 acknowledges the queue rather than the send, and a
+    // rejected message would be reported to the customer as delivered.
+    realTimeResponse: '1',
+  });
+  if (process.env.MSG91_SENDER_ID) query.set('sender', process.env.MSG91_SENDER_ID);
+
+  try {
+    const res = await fetch(`${apiBase('MSG91_API_BASE_URL', 'https://control.msg91.com')}/api/v5/otp?${query}`, {
+      method: 'POST',
+      headers: { authkey: authKey, 'Content-Type': 'application/json' },
+      // Any additional ##variables## the template carries would go here; the
+      // code itself travels as the `otp` query parameter above.
+      body: '{}',
+      signal: timeoutSignal(),
+    });
+    const payload: any = await res.json().catch(() => ({}));
+    // Same trap as the flow route: MSG91 answers 200 with {type:'error'} for
+    // template, DLT and auth-key problems.
+    if (!res.ok || payload?.type === 'error') {
+      return { status: 'error', provider: 'msg91', detail: safeDetail(payload?.message || `HTTP ${res.status}`, msg.otp) };
+    }
+    return { status: 'sent', provider: 'msg91', providerMessageId: payload?.request_id || payload?.message };
+  } catch (err) {
+    return { status: 'error', provider: 'msg91', detail: safeDetail((err as Error).message, msg.otp) };
+  }
+}
+
+async function sendSmsViaMsg91FlowApi(msg: OtpMessage): Promise<DeliveryResult> {
   const authKey = process.env.MSG91_AUTH_KEY;
   const templateId = process.env.MSG91_OTP_TEMPLATE_ID;
 
@@ -187,12 +301,18 @@ async function sendSmsViaMsg91(msg: OtpMessage): Promise<DeliveryResult> {
     // MSG91 answers 200 with {type:'error'} for template and DLT problems, so
     // the status code alone is not enough to call this a success.
     if (!res.ok || payload?.type === 'error') {
-      return { status: 'error', provider: 'msg91', detail: briefly(payload?.message || `HTTP ${res.status}`) };
+      return { status: 'error', provider: 'msg91', detail: safeDetail(payload?.message || `HTTP ${res.status}`, msg.otp) };
     }
     return { status: 'sent', provider: 'msg91', providerMessageId: payload?.request_id };
   } catch (err) {
-    return { status: 'error', provider: 'msg91', detail: briefly((err as Error).message) };
+    return { status: 'error', provider: 'msg91', detail: safeDetail((err as Error).message, msg.otp) };
   }
+}
+
+/** Both MSG91 routes need the same two credentials, so the choice between
+ * them is purely about which template the account has approved. */
+async function sendSmsViaMsg91(msg: OtpMessage): Promise<DeliveryResult> {
+  return msg91Route() === 'otp' ? sendSmsViaMsg91OtpApi(msg) : sendSmsViaMsg91FlowApi(msg);
 }
 
 // ------------------------------------------
@@ -247,11 +367,11 @@ async function sendWhatsAppViaMeta(msg: OtpMessage): Promise<DeliveryResult> {
     });
     const payload: any = await res.json().catch(() => ({}));
     if (!res.ok || payload?.error) {
-      return { status: 'error', provider: 'meta', detail: briefly(payload?.error?.message || `HTTP ${res.status}`) };
+      return { status: 'error', provider: 'meta', detail: safeDetail(payload?.error?.message || `HTTP ${res.status}`, msg.otp) };
     }
     return { status: 'sent', provider: 'meta', providerMessageId: payload?.messages?.[0]?.id };
   } catch (err) {
-    return { status: 'error', provider: 'meta', detail: briefly((err as Error).message) };
+    return { status: 'error', provider: 'meta', detail: safeDetail((err as Error).message, msg.otp) };
   }
 }
 
@@ -297,12 +417,110 @@ async function sendWhatsAppViaTwilio(msg: OtpMessage): Promise<DeliveryResult> {
     });
     const payload: any = await res.json().catch(() => ({}));
     if (!res.ok) {
-      return { status: 'error', provider: 'twilio', detail: briefly(payload?.message || `HTTP ${res.status}`) };
+      return { status: 'error', provider: 'twilio', detail: safeDetail(payload?.message || `HTTP ${res.status}`, msg.otp) };
     }
     return { status: 'sent', provider: 'twilio', providerMessageId: payload?.sid };
   } catch (err) {
-    return { status: 'error', provider: 'twilio', detail: briefly((err as Error).message) };
+    return { status: 'error', provider: 'twilio', detail: safeDetail((err as Error).message, msg.otp) };
   }
+}
+
+// ------------------------------------------
+// Development-only delivery — prints the code instead of sending it
+//
+// A local sign-in needs a code, and without this it needs a real SMS: real
+// credentials, a DLT-approved template, a real handset, and one of the five
+// daily sends per number burned on every attempt. This prints the code to the
+// server console instead, so the whole flow can be exercised offline.
+//
+// Nothing else changes. The code is still generated by otp.service, still
+// stored only as a keyed hash, still expires on the same schedule, still
+// single-use, still counted against the attempt cap, the resend cooldown and
+// both quotas. The ONLY thing replaced is the transport.
+//
+// Two independent conditions, both required:
+//
+//   NODE_ENV === 'development'   exactly — not merely "not production"
+//   OTP_DEV_MODE                 set to a truthy value, explicitly
+//
+// The first is deliberately stricter than the !isProduction test used by
+// PAYMENTS_MOCK_CHECKOUT. A server with NODE_ENV unset — the normal result of
+// a systemd unit or a Docker image that forgets it — is not production by
+// that looser test, and would silently print live customers' codes into the
+// journal. Requiring the string 'development' means an unset NODE_ENV fails
+// closed, which is the behaviour an auth bypass has to have.
+// ------------------------------------------
+
+/**
+ * Master switch for REAL outbound OTP delivery — MSG91, Twilio, Meta, all of
+ * it. Defaults to OFF.
+ *
+ * Off-by-default is deliberate and is the only arrangement that actually
+ * holds. The alternative — leaving delivery on and relying on SMS_PROVIDER /
+ * WHATSAPP_PROVIDER being blank — means a vendor starts sending the moment
+ * somebody pastes credentials back into an .env, which is exactly how a
+ * "disabled" integration quietly turns itself back on. It also means the
+ * production VPS stays disabled without anyone editing a file there.
+ *
+ * This does NOT weaken anything: codes are still generated, hashed, expired,
+ * rate-limited and verified exactly as before. The only question it answers
+ * is whether a message is handed to a third party.
+ *
+ * Set OTP_DELIVERY_ENABLED=true (deliberately, per environment) to switch
+ * real sending back on. OTP_DEV_MODE is unaffected — the console transport
+ * contacts nobody, so it is governed by its own gate below.
+ */
+export function otpDeliveryEnabled(): boolean {
+  const flag = (process.env.OTP_DELIVERY_ENABLED || '').trim().toLowerCase();
+  return flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
+}
+
+/** Whether the console transport is active. Checked per call, never cached,
+ * so a test can exercise both sides of the gate in one process. */
+export function devOtpEnabled(): boolean {
+  if (process.env.NODE_ENV !== 'development') return false;
+  const flag = (process.env.OTP_DEV_MODE || '').trim().toLowerCase();
+  return flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
+}
+
+/**
+ * Whether OTP_DEV_MODE is asking for something this environment refuses.
+ *
+ * Reported at boot so the refusal is visible. Someone who set the flag in a
+ * production .env and saw sign-in keep working would otherwise have no way to
+ * know the bypass was inert — and might go looking for the code in the logs.
+ */
+export function devOtpRequestedButRefused(): boolean {
+  const flag = (process.env.OTP_DEV_MODE || '').trim().toLowerCase();
+  const asked = flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
+  return asked && !devOtpEnabled();
+}
+
+/**
+ * "Delivers" the code by printing it.
+ *
+ * Boxed and loud because it is a security bypass; nobody should be able to
+ * see this scroll past and mistake the server for a normal one. The phone
+ * number is printed in full here — unlike every other log line in this file —
+ * because locally it is the developer's own test number and matching code to
+ * number is the entire point.
+ */
+function deliverOtpToConsole(msg: OtpMessage): DeliveryResult {
+  console.log(
+    '\n' +
+      '  ====================================================================\n' +
+      '   DEVELOPMENT OTP — no SMS was sent\n' +
+      '\n' +
+      `   channel : ${msg.method}\n` +
+      `   to      : ${msg.phone}\n` +
+      `   code    : ${msg.otp}\n` +
+      `   expires : in ${describeValidity(msg.expiresInSeconds)}\n` +
+      '\n' +
+      '   OTP_DEV_MODE is on and NODE_ENV is development. This cannot\n' +
+      '   happen in production.\n' +
+      '  ====================================================================\n'
+  );
+  return { status: 'sent', provider: 'dev-console' };
 }
 
 // ------------------------------------------
@@ -323,6 +541,17 @@ const WHATSAPP_PROVIDERS: Record<string, (msg: OtpMessage) => Promise<DeliveryRe
  * a dead option on the sign-in screen rather than letting the customer pick
  * it and hit an error. */
 export function channelConfigured(method: OtpChannel): boolean {
+  // In dev mode every channel can deliver, because the transport is a
+  // console.log that cannot fail. Without this the sign-in screen would hide
+  // SMS — the very thing being tested — whenever credentials are absent,
+  // which locally is the normal state.
+  if (devOtpEnabled()) return true;
+
+  // With real delivery switched off, no channel is offered — however complete
+  // the credentials happen to be. The sign-in screen then shows its
+  // "unavailable" state instead of taking a number it cannot send to.
+  if (!otpDeliveryEnabled()) return false;
+
   const names = providerNames();
   if (method === 'sms') {
     const send = SMS_PROVIDERS[names.smsProvider];
@@ -347,6 +576,19 @@ export function channelConfigured(method: OtpChannel): boolean {
  * if WhatsApp fails the customer is told, and chooses.
  */
 export async function sendOtpMessage(msg: OtpMessage): Promise<DeliveryResult> {
+  // Checked before any provider is selected, so dev mode works with
+  // SMS_PROVIDER unset entirely and never reaches a vendor's network.
+  if (devOtpEnabled()) return deliverOtpToConsole(msg);
+
+  // The kill switch sits in front of provider selection, so with delivery off
+  // no vendor is contacted on any code path — not even one with complete
+  // credentials. Reported as 'unconfigured' rather than 'error' because this
+  // is a deliberate state, not a failure, and the route tells the customer
+  // the channel is unavailable rather than asking them to retry.
+  if (!otpDeliveryEnabled()) {
+    return { status: 'unconfigured', provider: null };
+  }
+
   const names = providerNames();
   const providerName = msg.method === 'sms' ? names.smsProvider : names.whatsappProvider;
   const table = msg.method === 'sms' ? SMS_PROVIDERS : WHATSAPP_PROVIDERS;

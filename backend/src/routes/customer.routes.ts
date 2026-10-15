@@ -509,16 +509,35 @@ router.post('/auth/otp/request', otpRequestLimiter, async (req: Request, res: Re
           retryAfterSeconds: result.retryAfterSeconds,
         });
       case 'channel_unconfigured':
+        // Deliberately switched off or never credentialled — not a blip. The
+        // wording must not invite a retry that is guaranteed to fail the same
+        // way; "try again" belongs to delivery_failed below, and telling a
+        // customer to keep retrying something permanently unavailable is how
+        // a support queue fills up with tickets nobody can action.
+        //
+        // Says nothing about the phone number, so it cannot be used to probe
+        // which numbers are registered.
+        return res.status(503).json({
+          error:
+            deliveryMethod === 'whatsapp'
+              ? 'WhatsApp OTP sign-in is currently unavailable.'
+              : 'OTP sign-in is currently unavailable. Please try again later or contact support.',
+          method: deliveryMethod,
+          channelAvailable: false,
+        });
       case 'delivery_failed':
-        // Never reported as a success, and never silently re-routed to the
-        // other channel — the customer is told which one failed and chooses.
+        // Credentials exist and the provider was reached but refused or timed
+        // out. Transient as far as the customer is concerned, so this one DOES
+        // ask them to try again. Never reported as a success, and never
+        // silently re-routed to the other channel — the customer is told which
+        // one failed and chooses.
         return res.status(503).json({
           error:
             deliveryMethod === 'whatsapp'
               ? "We couldn't send the OTP on WhatsApp. Please try again or choose SMS."
               : "We couldn't send the OTP right now. Please try again.",
           method: deliveryMethod,
-          channelAvailable: result.status !== 'channel_unconfigured',
+          channelAvailable: true,
         });
     }
   }

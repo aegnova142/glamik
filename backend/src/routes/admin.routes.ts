@@ -280,110 +280,147 @@ router.post('/auth/change-password', requireAdmin, async (req: AuthenticatedRequ
 // PUBLIC CMS CONTENT ROUTES
 // ==========================================
 
-router.get('/cms/content', async (req: Request, res: Response) => {
-  const db = await loadDatabase();
-  const evaluatedOffers = evaluateOffers(db.offers);
+router.get('/cms/content', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+  // A stored CMS document can legitimately lack these collections — an admin
+  // who removes every offer, page, category, nav item or FAQ leaves an empty
+  // one, and loadDatabase()'s normalisation does not restore them the way it
+  // does products and globalSettings. Absent is therefore 'none configured',
+  // not a failed read: loadDatabase re-throws on a query error, so a database
+  // failure arrives as an exception and is caught below rather than as
+  // undefined. Seed content is deliberately NOT substituted — that would
+  // publish demo offers to a live storefront.
+    const db = await loadDatabase();
+    const evaluatedOffers = evaluateOffers(db.offers || []);
 
-  // Return public safe dataset
-  const publicData = {
-    pages: db.pages.filter((p) => p.status === 'published'),
-    products: db.products.filter((p) => p.inStock !== undefined),
-    categories: db.categories.filter((c) => c.isVisible),
-    // Shop's filter list is derived from these. Shipped inside the single
-    // content payload the storefront already fetches rather than as a second
-    // endpoint, so adding dynamic types costs zero extra round trips — and
-    // served from an in-process cache, so it costs no extra query either
-    // except on the first call after an admin edit.
-    //
-    // INACTIVE TYPES ARE INCLUDED. A product assigned to a deactivated type
-    // must still resolve to it, or it would fall back to the legacy name match
-    // and could disappear from the catalog entirely. selectableTypes() on the
-    // client is what decides which of these a shopper is actually offered.
-    productTypes: await listProductTypes(),
-    // Sections ride the same payload for the same reason — one fetch, cached
-    // in process, invalidated by every admin mutation.
-    productSections: await listProductSections(),
-    navigation: db.navigation.filter((n) => n.isVisible),
-    footer: db.footer,
-    offers: evaluatedOffers.filter((o) => o.status === 'active'),
-    journalArticles: db.journalArticles,
-    faqs: db.faqs.filter((f) => f.isVisible !== false),
-    globalSettings: db.globalSettings,
-    heroContent: db.heroContent,
-    aboutContent: db.aboutContent,
-    benefits: (db.benefits || [])
-      .filter((b) => b.isActive)
-      .sort((a, b) => a.displayOrder - b.displayOrder),
-    looks: db.looks || [],
-    shadeJourney: db.shadeJourney,
-    benefitsSection: db.benefitsSection,
-    promoBanners: db.promoBanners || { enabled: false, banners: [], intervalMs: 4000 },
-    // Only live banners leave the server: inactive, unscheduled and
-    // image-less ones are admin business. Shoppers pick up schedule changes
-    // on the storefront's 30s content refresh.
-    homeBanners: {
-      intervalMs: db.homeBanners?.intervalMs,
-      banners: (db.homeBanners?.banners || []).filter((b) => isHomeBannerLive(b)),
-    },
-    shadeFinderTeaser: db.shadeFinderTeaser,
-    // [Glamik CMS] 2026-10-03 — expose Personalized Beauty + Shop mega-menu to
-    // the storefront (active-only, sorted) alongside the existing sections.
-    personalizedBeauty: db.personalizedBeauty
-      ? {
-          ...db.personalizedBeauty,
-          // Only ship active undertones to the storefront, in display order.
-          undertones: (db.personalizedBeauty.undertones || [])
-            .filter((u) => u.isActive !== false)
-            .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
-        }
-      : undefined,
-    shopMegaMenu: db.shopMegaMenu
-      ? {
-          ...db.shopMegaMenu,
-          // Ship only active columns/items to the storefront, in order.
-          columns: (db.shopMegaMenu.columns || [])
-            .filter((c) => c.isActive !== false)
-            .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-            .map((c) => ({
-              ...c,
-              items: (c.items || [])
-                .filter((i) => i.isActive !== false)
-                .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
-            })),
-        }
-      : undefined,
-    journalSectionCopy: db.journalSectionCopy,
-    findMyShadeResultsCopy: db.findMyShadeResultsCopy,
-    findMyShadeHero: db.findMyShadeHero,
-    tryOnModels: (db.tryOnModels || [])
-      .filter((m) => m.isActive !== false)
-      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
-    serverTime: new Date().toISOString(),
-  };
+    // Return public safe dataset
+    const publicData = {
+      pages: (db.pages || []).filter((p) => p.status === 'published'),
+      products: db.products.filter((p) => p.inStock !== undefined),
+      categories: (db.categories || []).filter((c) => c.isVisible),
+      // Shop's filter list is derived from these. Shipped inside the single
+      // content payload the storefront already fetches rather than as a second
+      // endpoint, so adding dynamic types costs zero extra round trips — and
+      // served from an in-process cache, so it costs no extra query either
+      // except on the first call after an admin edit.
+      //
+      // INACTIVE TYPES ARE INCLUDED. A product assigned to a deactivated type
+      // must still resolve to it, or it would fall back to the legacy name match
+      // and could disappear from the catalog entirely. selectableTypes() on the
+      // client is what decides which of these a shopper is actually offered.
+      productTypes: await listProductTypes(),
+      // Sections ride the same payload for the same reason — one fetch, cached
+      // in process, invalidated by every admin mutation.
+      productSections: await listProductSections(),
+      navigation: (db.navigation || []).filter((n) => n.isVisible),
+      footer: db.footer,
+      offers: evaluatedOffers.filter((o) => o.status === 'active'),
+      journalArticles: db.journalArticles,
+      faqs: (db.faqs || []).filter((f) => f.isVisible !== false),
+      globalSettings: db.globalSettings,
+      heroContent: db.heroContent,
+      aboutContent: db.aboutContent,
+      benefits: (db.benefits || [])
+        .filter((b) => b.isActive)
+        .sort((a, b) => a.displayOrder - b.displayOrder),
+      looks: db.looks || [],
+      shadeJourney: db.shadeJourney,
+      benefitsSection: db.benefitsSection,
+      promoBanners: db.promoBanners || { enabled: false, banners: [], intervalMs: 4000 },
+      // Only live banners leave the server: inactive, unscheduled and
+      // image-less ones are admin business. Shoppers pick up schedule changes
+      // on the storefront's 30s content refresh.
+      homeBanners: {
+        intervalMs: db.homeBanners?.intervalMs,
+        banners: (db.homeBanners?.banners || []).filter((b) => isHomeBannerLive(b)),
+      },
+      shadeFinderTeaser: db.shadeFinderTeaser,
+      // [Glamik CMS] 2026-10-03 — expose Personalized Beauty + Shop mega-menu to
+      // the storefront (active-only, sorted) alongside the existing sections.
+      personalizedBeauty: db.personalizedBeauty
+        ? {
+            ...db.personalizedBeauty,
+            // Only ship active undertones to the storefront, in display order.
+            undertones: (db.personalizedBeauty.undertones || [])
+              .filter((u) => u.isActive !== false)
+              .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+          }
+        : undefined,
+      shopMegaMenu: db.shopMegaMenu
+        ? {
+            ...db.shopMegaMenu,
+            // Ship only active columns/items to the storefront, in order.
+            columns: (db.shopMegaMenu.columns || [])
+              .filter((c) => c.isActive !== false)
+              .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+              .map((c) => ({
+                ...c,
+                items: (c.items || [])
+                  .filter((i) => i.isActive !== false)
+                  .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+              })),
+          }
+        : undefined,
+      journalSectionCopy: db.journalSectionCopy,
+      findMyShadeResultsCopy: db.findMyShadeResultsCopy,
+      findMyShadeHero: db.findMyShadeHero,
+      tryOnModels: (db.tryOnModels || [])
+        .filter((m) => m.isActive !== false)
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+      serverTime: new Date().toISOString(),
+    };
 
-  res.json(publicData);
-});
-
-router.get('/cms/page/:slug', async (req: Request, res: Response) => {
-  const db = await loadDatabase();
-  const slug = req.params.slug === 'home' || req.params.slug === '_' ? '' : req.params.slug;
-  const page = db.pages.find((p) => p.slug === slug && p.status === 'published');
-
-  if (!page) {
-    return res.status(404).json({ error: 'Page not found or not published' });
+    res.json(publicData);
+  } catch (err) {
+    // Express 4 does not forward a rejected async handler, so without this the
+    // request hangs with no response at all. Handing it to next() routes it to
+    // the /api error middleware in server.ts, which logs it and answers 500 —
+    // an error the caller can see rather than a pending socket.
+    next(err);
   }
-
-  res.json(page);
 });
 
-router.get('/cms/offers/active', async (req: Request, res: Response) => {
-  const db = await loadDatabase();
-  const evaluatedOffers = evaluateOffers(db.offers);
-  const activeOffers = evaluatedOffers.filter((o) => o.status === 'active');
-  res.json({
-    offers: activeOffers,
-    serverTime: new Date().toISOString(),
-  });
+router.get('/cms/page/:slug', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+  // Absent `pages` means none are configured, so nothing can match and the
+  // not-found branch below is already the right answer — the same 404 an
+  // unknown slug gets. loadDatabase re-throws on a read failure, so a database
+  // error arrives as an exception and is caught below, not as undefined.
+    const db = await loadDatabase();
+    const slug = req.params.slug === 'home' || req.params.slug === '_' ? '' : req.params.slug;
+    const page = (db.pages || []).find((p) => p.slug === slug && p.status === 'published');
+
+    if (!page) {
+      return res.status(404).json({ error: 'Page not found or not published' });
+    }
+
+    res.json(page);
+  } catch (err) {
+    // Express 4 does not forward a rejected async handler; without this the
+    // request hangs with no response at all. next() hands it to the /api error
+    // middleware in server.ts, which logs it and answers 500.
+    next(err);
+  }
+});
+
+router.get('/cms/offers/active', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+  // Absent `offers` means none are configured, so an empty list is the honest
+  // answer. Seed offers are deliberately NOT substituted — that would publish
+  // a demo discount code to a live storefront.
+    const db = await loadDatabase();
+    const evaluatedOffers = evaluateOffers(db.offers || []);
+    const activeOffers = evaluatedOffers.filter((o) => o.status === 'active');
+    res.json({
+      offers: activeOffers,
+      serverTime: new Date().toISOString(),
+    });
+  } catch (err) {
+    // Express 4 does not forward a rejected async handler; without this the
+    // request hangs with no response at all. next() hands it to the /api error
+    // middleware in server.ts, which logs it and answers 500.
+    next(err);
+  }
 });
 
 // --- Benefits & Optimization (public) ---

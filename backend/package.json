@@ -34,6 +34,10 @@
     "inventory:repair-flags": "tsx src/db/cli-inventory.ts repair-flags",
     "images:cleanup": "tsx src/db/cli-cleanup-seed-images.ts",
     "delhivery:check": "tsx src/db/cli-delhivery.ts",
+    "test:msg91": "tsx src/test/msg91.e2e.ts",
+    "test:otpdev": "tsx src/test/otpdev.db.e2e.ts",
+    "test:otproutes": "tsx src/test/otproutes.db.e2e.ts",
+    "test:otpflow": "tsx src/test/otpflow.db.e2e.ts",
     "test:producttypes": "tsx src/test/producttypes.e2e.ts",
     "test:producttypesdb": "tsx src/test/producttypes.db.e2e.ts",
     "test:productsections": "tsx src/test/productsections.e2e.ts"

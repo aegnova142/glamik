@@ -5,6 +5,7 @@
   "description": "Glamirk storefront — the customer-facing Vite/React app.",
   "type": "module",
   "scripts": {
+    "test": "vitest run",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
@@ -20,11 +21,16 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.14",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
+    "jsdom": "^26.1.0",
     "tailwindcss": "^4.1.14",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "vitest": "^3.2.7"
   }
 }

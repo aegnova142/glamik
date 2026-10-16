@@ -267,7 +267,8 @@ async function reviewReminderNotNeeded(eventType: NotificationEventType, orderNu
   const res = await pool.query(
     `SELECT 1 FROM orders o JOIN order_items oi ON oi.order_id = o.id
      WHERE o.order_number = $1 AND o.status = 'DELIVERED'
-       AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r.product_id = oi.product_id AND r.customer_id = o.user_id)
+       AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r.product_id = oi.product_id
+                       AND (r.customer_id = o.user_id OR r.order_id = o.id))
      LIMIT 1`,
     [orderNumber]
   );

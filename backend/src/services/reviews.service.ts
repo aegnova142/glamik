@@ -1,7 +1,7 @@
 import { v2 as cloudinary } from 'cloudinary';
 import { pool, loadDatabase, saveDatabase, broadcastEvent } from '../db/db';
 import { mapNotificationRow } from './notifications.service';
-import { Review, ReviewMedia } from '@glamirk/shared/types';
+import { Review, ReviewMedia, REVIEW_SKIN_TONES, REVIEW_UNDERTONES } from '@glamirk/shared/types';
 
 // Reads CLOUDINARY_URL from the environment, same as the account router.
 cloudinary.config();
@@ -88,6 +88,22 @@ function buildReviewMedia(row: any): ReviewMedia[] {
   // into media by hand.
   if (stored.some((m) => m.url === row.photo_url)) return stored;
   return [{ type: 'image', url: row.photo_url }, ...stored];
+}
+
+/** Beauty details are picked from fixed lists (and the product's own shades),
+ * so anything else is dropped rather than stored as free text. Shared by the
+ * customer and admin review routes. */
+export function pickReviewDetails(
+  product: { shades?: { name: string }[] },
+  body: any
+): { shadeName: string | null; skinTone: string | null; undertone: string | null } {
+  const pick = (value: unknown, allowed: readonly string[]) =>
+    typeof value === 'string' && allowed.includes(value) ? value : null;
+  return {
+    shadeName: pick(body?.shadeName, (product.shades || []).map((s) => s.name)),
+    skinTone: pick(body?.skinTone, REVIEW_SKIN_TONES),
+    undertone: pick(body?.undertone, REVIEW_UNDERTONES),
+  };
 }
 
 /** "Priya Sharma" -> "Priya S." for public listings, so storefront visitors

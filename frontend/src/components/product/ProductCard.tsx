@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Heart, Sparkles, ShoppingBag, ShoppingCart, Star, Check, Gem } from 'lucide-react';
 import { Product, Shade, CartItem } from '@glamirk/shared/types';
 import { ProductImage } from './ProductImage';
+import { TRY_ON_ENABLED } from '../../utils/features';
 import {
   isProductSellable,
   LOW_STOCK_THRESHOLD,
@@ -244,7 +245,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           hover on desktop — with focus-visible added to both, because the
           previous `sm:opacity-0` made the button invisible to a keyboard user
           who had tabbed onto it. */}
-      {viewMode === 'grid' && product.shades && product.enableTryOn !== false && (
+      {/* TRY-ON-PAUSED: hidden until TRY_ON_ENABLED is switched back on. */}
+      {TRY_ON_ENABLED && viewMode === 'grid' && product.shades && product.enableTryOn !== false && (
         <button
           id={`tryon-btn-${product.id}`}
           onClick={(e) => {

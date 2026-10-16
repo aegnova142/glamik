@@ -6,6 +6,7 @@ import { GLAMIRK_PRODUCTS } from '@glamirk/shared/data/products';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { selectableShades } from '@glamirk/shared/utils/productVariant';
 import { ProductImage } from '../product/ProductImage';
+import { TRY_ON_ENABLED } from '../../utils/features';
 
 interface BeautyAssistantDrawerProps {
   isOpen: boolean;
@@ -35,6 +36,9 @@ const PROMPT_META: Record<string, { icon: React.FC<{ className?: string }>; hint
   'Compare these shades': { icon: Scale, hint: 'Side by side, by undertone' },
   'Try shades on virtually': { icon: Eye, hint: 'Preview on camera or a model' },
 };
+
+/** TRY-ON-PAUSED: drops try-on suggestions while the feature is switched off. */
+const withoutTryOn = (prompts?: string[]) => (TRY_ON_ENABLED ? prompts : prompts?.filter((p) => !/\btry\b/i.test(p)));
 
 const formatPrice = (p: Product) => `₹${p.price.toLocaleString('en-IN')}`;
 const listNames = (names: string[]) =>
@@ -79,8 +83,9 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
     if (currentProductContext) {
       return {
         ...base,
-        text: `Welcome to your private Glamirk consultation. I see you are exploring ${currentProductContext.name}. Shall we look at its shades by undertone, or try one on?`,
-        suggestedPrompts: ['Find my lipstick shade', 'Compare these shades', 'Try shades on virtually', 'Show me everyday looks'],
+        text: `Welcome to your private Glamirk consultation. I see you are exploring ${currentProductContext.name}. Shall we look at its shades by undertone${TRY_ON_ENABLED ? ', or try one on' : ''}?`,
+        // TRY-ON-PAUSED
+        suggestedPrompts: withoutTryOn(['Find my lipstick shade', 'Compare these shades', 'Try shades on virtually', 'Show me everyday looks']),
       };
     }
     if (hasCartItems) {
@@ -137,6 +142,8 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
       sender: 'assistant',
       timestamp: 'Just now',
       ...rest,
+      // TRY-ON-PAUSED: no try-on button or try-on follow-ups while it's off.
+      ...(TRY_ON_ENABLED ? {} : { actionPrompt: undefined, suggestedPrompts: withoutTryOn(rest.suggestedPrompts) }),
     });
     const shadeRec = (shade: Shade) => ({
       product: lipstick,
@@ -146,13 +153,13 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
 
     if (query.includes('compare') && lipShades.length) {
       return reply({
-        text: `Here are the ${lipShades.length} shades of ${lipstick.name} side by side, each labelled with its undertone. Try any of them on before you choose.`,
+        text: `Here are the ${lipShades.length} shades of ${lipstick.name} side by side, each labelled with its undertone.${TRY_ON_ENABLED ? ' Try any of them on before you choose.' : ''}`,
         recommendedProducts: lipShades.slice(0, 6).map(shadeRec),
         suggestedPrompts: ['Try shades on virtually', 'Show me everyday looks', 'What should I wear for a wedding?'],
       });
     }
 
-    if (query.includes('try on') || query.includes('try shades') || query.includes('camera') || query.includes('virtual')) {
+    if (TRY_ON_ENABLED && (query.includes('try on') || query.includes('try shades') || query.includes('camera') || query.includes('virtual'))) {
       return reply({
         text: `You can preview ${tryOnProduct.name} on your live camera, an uploaded photo, or one of our model presets.`,
         actionPrompt: { label: 'OPEN VIRTUAL TRY-ON', action: 'try-on', productId: tryOnProduct.id },
@@ -165,7 +172,7 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
       const cool = lipShades.find((s) => /cool/i.test(s.undertone));
       const picks = [warm, cool].filter((s): s is Shade => !!s);
       return reply({
-        text: `${lipstick.name} comes in ${listNames(lipShades.map((s) => s.name))}. Each shade is labelled with its undertone — choose the one closest to yours, or try them on first.`,
+        text: `${lipstick.name} comes in ${listNames(lipShades.map((s) => s.name))}. Each shade is labelled with its undertone — choose the one closest to yours${TRY_ON_ENABLED ? ', or try them on first' : ''}.`,
         recommendedProducts: (picks.length ? picks : lipShades.slice(0, 2)).map(shadeRec),
         actionPrompt: { label: 'TRY SHADES ON', action: 'try-on', productId: lipstick.id },
         suggestedPrompts: ['Compare these shades', 'Show me everyday looks', 'What should I wear for a wedding?'],
@@ -326,7 +333,8 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
                               </span>
                             </button>
                             <span className="flex items-center gap-1.5 shrink-0">
-                              {rec.suggestedShade && rec.product.enableTryOn !== false && (
+                              {/* TRY-ON-PAUSED */}
+                              {TRY_ON_ENABLED && rec.suggestedShade && rec.product.enableTryOn !== false && (
                                 <button
                                   type="button"
                                   onClick={() => {

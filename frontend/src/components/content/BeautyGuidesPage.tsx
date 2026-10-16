@@ -1,3 +1,4 @@
+import { TRY_ON_ENABLED } from '../../utils/features';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -137,6 +138,8 @@ export const BeautyGuidesPage: React.FC<BeautyGuidesPageProps> = ({
                     <Sparkles className="w-4 h-4 text-[#C9972B]" />
                     <span>AI SHADE DIAGNOSTIC</span>
                   </button>
+                  {/* TRY-ON-PAUSED */}
+                  {TRY_ON_ENABLED && (
                   <button
                     onClick={() => onOpenTryOn('matte-liquid-lipstick-collection')}
                     className="px-6 py-3.5 bg-[#0B0B0B] border border-[#171717] text-[#FAF9F6] text-xs font-semibold tracking-[0.2em] uppercase hover:bg-[#0B0B0B] transition-colors cursor-pointer flex items-center gap-2"
@@ -144,6 +147,7 @@ export const BeautyGuidesPage: React.FC<BeautyGuidesPageProps> = ({
                     <Camera className="w-4 h-4 text-[#C9972B]" />
                     <span>LIVE VIRTUAL TRY-ON</span>
                   </button>
+                  )}
                 </div>
               </div>
 
@@ -239,12 +243,15 @@ export const BeautyGuidesPage: React.FC<BeautyGuidesPageProps> = ({
                               <ShoppingBag className="w-3 h-3 text-[#C9972B]" />
                               <span>ADD STEP</span>
                             </button>
+                            {/* TRY-ON-PAUSED */}
+                            {TRY_ON_ENABLED && (
                             <button
                               onClick={() => onOpenTryOn(stepProduct.id, stepShade?.id)}
                               className="px-3 py-2 bg-[#FAF9F6] border border-[#0B0B0B] text-[#121212] text-[10px] font-semibold uppercase hover:bg-[#0B0B0B] hover:text-[#FAF9F6] transition-colors cursor-pointer"
                             >
                               TRY ON
                             </button>
+                            )}
                           </div>
                         </div>
                       )}

@@ -114,6 +114,7 @@ import {
 import { updatePageSeo } from './utils/seo';
 import { trackEvent } from './utils/analytics';
 import { routeToPath, pathToRoute } from './utils/routing';
+import { TRY_ON_ENABLED } from './utils/features';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, Sparkles } from 'lucide-react';
 
@@ -700,6 +701,8 @@ function AppContent() {
   };
 
   const openVirtualTryOn = (product?: Product, shade?: Shade) => {
+    // TRY-ON-PAUSED: safety net for any caller that slipped past the UI gates.
+    if (!TRY_ON_ENABLED) return;
     const prod = product || allProducts[0];
     setTryOnProductId(prod.id);
     if (shade) {

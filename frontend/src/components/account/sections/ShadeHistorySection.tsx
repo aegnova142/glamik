@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { TRY_ON_ENABLED } from '../../../utils/features';
 import React, { useEffect, useState } from 'react';
 import { Bot, Sparkles, Trash2, Camera, ShoppingBag } from 'lucide-react';
 import { Product, Shade } from '@glamirk/shared/types';
@@ -202,7 +203,8 @@ export const ShadeHistorySection: React.FC<ShadeHistorySectionProps> = ({
                           </AccountButton>
                           {/* Try-On is admin-controlled per product; only
                               offered where it's actually been enabled. */}
-                          {product.enableTryOn !== false && (
+                          {/* TRY-ON-PAUSED */}
+                          {TRY_ON_ENABLED && product.enableTryOn !== false && (
                             <AccountButton variant="ghost" onClick={() => onOpenTryOn(product, shade)}>
                               <Camera className="w-3.5 h-3.5" />
                               Try On

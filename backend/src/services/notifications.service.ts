@@ -89,6 +89,19 @@ export async function notifyAdminNewOrder(orderId: string, orderNumber: string, 
   );
 }
 
+/** A review is waiting in Admin → Reviews; nothing is public until approved. */
+export async function notifyAdminReviewSubmitted(productName: string, rating: number, isEdit: boolean): Promise<void> {
+  try {
+    await insertAdminNotification(
+      'REVIEW_SUBMITTED',
+      isEdit ? 'Review Edited — Needs Approval' : 'New Review — Needs Approval',
+      `${rating}★ review of ${productName} is waiting in Admin → Reviews.`
+    );
+  } catch (err) {
+    console.error('[notifications] could not record review alert:', err);
+  }
+}
+
 export async function notifyAdminOrderDelivered(orderId: string, orderNumber: string): Promise<void> {
   await insertAdminNotification('ORDER_DELIVERED', 'Order Delivered', `Order #${orderNumber} has been delivered.`, orderId);
 }

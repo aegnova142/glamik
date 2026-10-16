@@ -17,6 +17,8 @@ import { GlamirkEdit } from './components/home/GlamirkEdit';
 import { CleanserShowcase } from './components/home/CleanserShowcase';
 import { ShadeFinderTeaser } from './components/home/ShadeFinderTeaser';
 import { FaqHomeSection } from './components/home/FaqHomeSection';
+import { HomeReviewsSection } from './components/home/HomeReviewsSection';
+import { ReviewsPage } from './components/content/ReviewsPage';
 import { ShopTheLook } from './components/home/ShopTheLook';
 import { GlamirkOnYou } from './components/social/GlamirkOnYou';
 import { JournalSection } from './components/home/JournalSection';
@@ -96,7 +98,7 @@ import {
   Order,
   Address,
   Review,
-  ReviewMedia,
+  SubmitReviewFn,
   ReturnRequest,
   DEFAULT_PROMO_NOTIFICATION_MESSAGES,
   applyPromoMessageTemplate,
@@ -441,6 +443,7 @@ function AppContent() {
       'social-commerce': 'Glamirk On You | Community & Creator Showcase',
       campaign: 'The Sovereign Velvet Festive Edit | Glamirk',
       'new-launch': 'New Launches | Glamirk Beauty',
+      reviews: 'Customer Reviews | Glamirk Beauty',
       legal: 'Legal & Client Governance Policies | Glamirk Beauty',
       '404': 'Page Not Found (404) | Glamirk Beauty',
     };
@@ -641,6 +644,16 @@ function AppContent() {
 
   const navigateToOrderDetail = (orderId: string) => {
     setCurrentRoute({ page: 'order-detail', orderId });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToProductById = (productId: string) => {
+    const product = allProducts.find((p) => p.id === productId);
+    if (product) navigateToProduct(product);
+  };
+
+  const navigateToReviews = () => {
+    setCurrentRoute({ page: 'reviews' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -922,17 +935,11 @@ function AppContent() {
     return { success: false, error: res.error };
   };
 
-  const handleSubmitReview = async (
-    productId: string,
-    rating: number,
-    title: string,
-    comment: string,
-    media?: ReviewMedia[]
-  ) => {
-    const res = await commerceRef.current.submitReview(productId, rating, title, comment, media);
+  const handleSubmitReview: SubmitReviewFn = async (productId, rating, title, comment, media, details) => {
+    const res = await commerceRef.current.submitReview(productId, rating, title, comment, media, details);
     if (res.success && res.review) {
       setMyReviews((prev) => [res.review!, ...prev.filter((r) => r.productId !== productId)]);
-      showToast('Thank you — your review has been posted.');
+      showToast('Thank you! Your review will appear once our team approves it.');
       return { success: true };
     }
     return { success: false, error: res.error };
@@ -1133,7 +1140,13 @@ function AppContent() {
             */}
 
             {/* 6th: Frequently Asked Questions */}
-            <FaqHomeSection onOpenSupport={navigateToSupport} />
+            <FaqHomeSection />
+
+            {/* Customer reviews (replaced the "Still have questions?" bar); hidden until there are 4★+ reviews */}
+            <HomeReviewsSection
+              onSelectProduct={navigateToProductById}
+              onReadAll={navigateToReviews}
+            />
 
             {/* PERSONALIZED-BEAUTY-PAUSED: "Personalized Beauty" home section switched off for now — uncomment to restore.
             <PersonalizedHomeBanner
@@ -1177,6 +1190,18 @@ function AppContent() {
           </div>
         )}
 
+        {/* VIEW 1C: CUSTOMER REVIEWS PAGE */}
+        {currentRoute.page === 'reviews' && (
+          <ReviewsPage
+            onNavigateHome={navigateToHome}
+            onSelectProduct={navigateToProductById}
+            // Writing reuses the account Reviews flow: it lists only delivered
+            // products and the server sets the verified flag itself.
+            onWriteReview={() => requireLogin(() => navigateToAccount('reviews'))}
+            onRequireLogin={() => openAuth('login')}
+          />
+        )}
+
         {/* VIEW 1B: ABOUT US PAGE */}
         {currentRoute.page === 'about' && (
           <AboutPage
@@ -1211,6 +1236,7 @@ function AppContent() {
         {currentRoute.page === 'product' && activeProduct && (
           <FullProductPage
             product={activeProduct}
+            onRequireLogin={() => openAuth('login')}
             wishlist={wishlist}
             cartItems={cartItems}
             recentlyViewedIds={recentlyViewedIds}

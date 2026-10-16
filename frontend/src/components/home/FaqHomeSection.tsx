@@ -1,14 +1,10 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Search, MessageCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { useCMS } from '@glamirk/shared/context/CMSContext';
-
-interface FaqHomeSectionProps {
-  onOpenSupport: () => void;
-}
 
 const VISIBLE_LIMIT = 6;
 
-export const FaqHomeSection: React.FC<FaqHomeSectionProps> = ({ onOpenSupport }) => {
+export const FaqHomeSection: React.FC = () => {
   const { faqs } = useCMS();
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -52,7 +48,8 @@ export const FaqHomeSection: React.FC<FaqHomeSectionProps> = ({ onOpenSupport })
   };
 
   return (
-    <section className="home-section bg-[#FCE8ED]/30 border-b border-[#E8D5A8]">
+    // No bottom border: HomeReviewsSection continues this blush band and carries it.
+    <section className="home-section bg-[#FCE8ED]/30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="home-section-header text-center max-w-xl mx-auto space-y-3">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-[#121212]">
@@ -90,24 +87,6 @@ export const FaqHomeSection: React.FC<FaqHomeSectionProps> = ({ onOpenSupport })
             </button>
           </div>
         )}
-
-        <div className="mt-8 bg-[#F05A7E] rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-5">
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center shrink-0">
-              <MessageCircle className="w-5 h-5 text-[#F05A7E]" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-white">Still have questions?</h3>
-              <p className="text-xs text-white/80">Our beauty experts are here to help you glow with confidence.</p>
-            </div>
-          </div>
-          <button
-            onClick={onOpenSupport}
-            className="px-6 py-3 bg-white text-[#F05A7E] text-xs font-bold uppercase tracking-wider rounded-full hover:bg-[#FCE8ED] transition-colors cursor-pointer shrink-0"
-          >
-            Chat With Us
-          </button>
-        </div>
       </div>
     </section>
   );

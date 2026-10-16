@@ -9,8 +9,9 @@ import { Review } from '@glamirk/shared/types';
 import { apiFetch } from '@glamirk/shared/utils/cmsClient';
 import { formatDate } from '@glamirk/shared/utils/dateFormat';
 import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
+import { HelpfulButton } from './HelpfulButton';
 
-type SortOption = 'newest' | 'highest' | 'lowest';
+type SortOption = 'newest' | 'helpful' | 'highest' | 'lowest';
 
 interface ReviewsResponse {
   reviews: Review[];
@@ -23,12 +24,14 @@ interface ProductReviewsProps {
   productId: string;
   fallbackRating?: number;
   fallbackReviewCount?: number;
+  onRequireLogin?: () => void;
 }
 
 export const ProductReviews: React.FC<ProductReviewsProps> = ({
   productId,
   fallbackRating,
   fallbackReviewCount,
+  onRequireLogin,
 }) => {
   const [data, setData] = useState<ReviewsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,6 +52,7 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({
   const reviews = [...(data?.reviews || [])].sort((a, b) => {
     if (sort === 'highest') return b.rating - a.rating;
     if (sort === 'lowest') return a.rating - b.rating;
+    if (sort === 'helpful') return (b.helpfulCount || 0) - (a.helpfulCount || 0);
     return new Date(b.date).getTime() - new Date(a.date).getTime();
   });
 
@@ -72,6 +76,7 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({
             className="text-xs border border-[#E8D5A8] rounded-full px-3 py-1.5 bg-white text-[#121212] focus:outline-hidden cursor-pointer"
           >
             <option value="newest">Newest First</option>
+            <option value="helpful">Most Helpful</option>
             <option value="highest">Highest Rated</option>
             <option value="lowest">Lowest Rated</option>
           </select>
@@ -139,7 +144,14 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({
                   )}
                 </div>
                 {rev.title && <h4 className="text-sm font-bold text-[#121212]">{rev.title}</h4>}
-                <p className="text-xs text-[#6B6B6B] leading-relaxed">{rev.comment}</p>
+                {rev.comment && <p className="text-xs text-[#6B6B6B] leading-relaxed">{rev.comment}</p>}
+                {(rev.shadeName || rev.skinTone || rev.undertone) && (
+                  <p className="text-[10.5px] text-[#C9972B]">
+                    {[rev.shadeName && `Shade: ${rev.shadeName}`, rev.skinTone && `${rev.skinTone} skin`, rev.undertone && `${rev.undertone} undertone`]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                )}
                 {rev.photoUrl && (
                   <img src={cloudinaryImageUrl(rev.photoUrl, 'thumb')} alt="Customer upload" loading="lazy" decoding="async" className="w-16 h-16 object-cover rounded-lg border border-[#E8D5A8]" />
                 )}
@@ -147,6 +159,7 @@ export const ProductReviews: React.FC<ProductReviewsProps> = ({
                   <span>{rev.customerName}</span>
                   <span>{formatDate(rev.date)}</span>
                 </div>
+                <HelpfulButton reviewId={rev.id} count={rev.helpfulCount || 0} onRequireLogin={onRequireLogin} />
               </div>
             ))}
           </div>

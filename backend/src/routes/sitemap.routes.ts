@@ -37,6 +37,7 @@ const STATIC_PATHS = [
   '/shop',
   '/about',
   '/new-launch',
+  '/reviews',
   '/journal',
   '/beauty-guides',
   '/social-commerce',

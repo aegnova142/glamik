@@ -57,7 +57,7 @@ const AddReviewForm: React.FC<{ onDone: (message: string) => void; onCancel: () 
     if (!form.consent) return setError("Tick the box to confirm the customer agreed to publishing.");
     setSaving(true);
     setError('');
-    const res = await apiFetch<{ review: Review }>('/api/admin/reviews', {
+    const res = await apiFetch<{ review: Review; verificationNote?: string }>('/api/admin/reviews', {
       method: 'POST',
       body: JSON.stringify({
         ...form,
@@ -68,7 +68,10 @@ const AddReviewForm: React.FC<{ onDone: (message: string) => void; onCancel: () 
     });
     setSaving(false);
     if (!res.data) return setError(res.error || 'Could not publish the review.');
-    onDone(`Published ${form.customerName.trim()}'s review${res.data.review.isVerifiedPurchase ? ' (Verified Purchase)' : ''}.`);
+    onDone(
+      `Published ${form.customerName.trim()}'s review${res.data.review.isVerifiedPurchase ? ' with Verified Purchase' : ''}.` +
+        (res.data.verificationNote ? ` Note: ${res.data.verificationNote}` : '')
+    );
   };
 
   return (
@@ -142,7 +145,8 @@ const AddReviewForm: React.FC<{ onDone: (message: string) => void; onCancel: () 
         <span className={labelClass}>Order number (optional)</span>
         <input value={form.orderNumber} onChange={(e) => set({ orderNumber: e.target.value })} placeholder="e.g. GLM-10234" className={fieldClass} />
         <span className="block mt-1 text-[10.5px] text-[#6B6B6B]">
-          Shows "Verified Purchase" only if this is a delivered order that contains the product. Leave empty otherwise.
+          The review is published either way. "Verified Purchase" is added only if this is a real order (not cancelled or
+          unpaid) that contains the product.
         </span>
       </label>
 

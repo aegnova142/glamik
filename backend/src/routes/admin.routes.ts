@@ -658,7 +658,7 @@ router.patch('/admin/reviews/:id', requireAdmin, async (req: AuthenticatedReques
 // phone, in store). It is published immediately and looks like any other
 // review on the storefront; where it came from and who entered it stay
 // admin-only. "Verified Purchase" is never asserted by hand — only by linking
-// a real DELIVERED order that contains the product.
+// a real (non-cancelled, paid or COD) order that contains the product.
 const ADMIN_REVIEW_CHANNELS = ['whatsapp', 'instagram', 'email', 'phone', 'store', 'other'];
 
 router.post('/admin/reviews', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
@@ -681,25 +681,36 @@ router.post('/admin/reviews', requireAdmin, async (req: AuthenticatedRequest, re
   const product = db.products.find((p) => p.id === body.productId);
   if (!product) return res.status(404).json({ error: 'Product not found.' });
 
-  // Verified only through a real delivered order that contains this product.
+  // The order number never blocks publishing. It only decides the "Verified
+  // Purchase" badge, which is asserted solely for a real, non-cancelled order
+  // that contains this product — otherwise the review goes out without the
+  // badge and the admin is told why.
   let orderId: string | null = null;
-  const orderNumber = String(body.orderNumber || '').trim();
+  let verificationNote: string | undefined;
+  const orderNumber = String(body.orderNumber || '').trim().replace(/^#/, '');
   if (orderNumber) {
     const order = await pool.query(
-      `SELECT o.id, o.user_id FROM orders o JOIN order_items oi ON oi.order_id = o.id
-       WHERE o.order_number = $1 AND o.status = 'DELIVERED' AND oi.product_id = $2 LIMIT 1`,
+      `SELECT o.id, o.user_id, o.status,
+              EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id AND oi.product_id = $2) AS has_product
+       FROM orders o WHERE upper(o.order_number) = upper($1) LIMIT 1`,
       [orderNumber, product.id]
     );
-    if (!order.rows[0]) {
-      return res.status(400).json({ error: `Order ${orderNumber} isn't a delivered order containing ${product.name}.` });
+    const o = order.rows[0];
+    if (!o) {
+      verificationNote = `Order ${orderNumber} was not found`;
+    } else if (!o.has_product) {
+      verificationNote = `Order ${orderNumber} does not contain ${product.name}`;
+    } else if (['PENDING_PAYMENT', 'CANCELLED', 'RETURNED', 'RTO'].includes(o.status)) {
+      verificationNote = `Order ${orderNumber} is ${String(o.status).toLowerCase().replace(/_/g, ' ')}`;
+    } else {
+      // The same purchase is only verified once — by the customer or by us.
+      const dup = await pool.query(
+        `SELECT 1 FROM reviews WHERE product_id = $1 AND (order_id = $2 OR customer_id = $3) LIMIT 1`,
+        [product.id, o.id, o.user_id]
+      );
+      if (dup.rows[0]) verificationNote = `This purchase (order ${orderNumber}) already has a review`;
+      else orderId = o.id;
     }
-    // The same purchase must not be reviewed twice — by the customer or by us.
-    const dup = await pool.query(
-      `SELECT 1 FROM reviews WHERE product_id = $1 AND (order_id = $2 OR customer_id = $3) LIMIT 1`,
-      [product.id, order.rows[0].id, order.rows[0].user_id]
-    );
-    if (dup.rows[0]) return res.status(409).json({ error: 'This customer already has a review for this product.' });
-    orderId = order.rows[0].id;
   }
 
   const { shadeName, skinTone, undertone } = pickReviewDetails(product, body);
@@ -727,7 +738,10 @@ router.post('/admin/reviews', requireAdmin, async (req: AuthenticatedRequest, re
   );
   await recomputeProductRating(product.id);
   await logAudit(req, 'CREATE_REVIEW', 'REVIEW', id, product.name, `On behalf of ${customerName} via ${body.sourceChannel}`);
-  res.status(201).json({ review: mapReviewRow(inserted.rows[0], product.name) });
+  res.status(201).json({
+    review: mapReviewRow(inserted.rows[0], product.name),
+    ...(verificationNote && { verificationNote: `${verificationNote}, so it was published without "Verified Purchase".` }),
+  });
 });
 
 router.get('/admin/audit-logs', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {

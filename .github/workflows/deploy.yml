@@ -65,6 +65,16 @@ jobs:
             # serves them as static assets.
             npm run build
 
+            # Apply pending database migrations BEFORE the new code starts.
+            # Production deliberately refuses to auto-migrate at boot (see
+            # backend/src/config/databaseTarget.ts) and instead fails startup
+            # when a migration is pending — so without this step, any release
+            # that adds a migration would reload pm2 into a crash. Running it
+            # here, under `set -e`, means a failed migration stops the deploy
+            # with the old code still serving. Migrations are additive and run
+            # while the old code is live, so each must stay compatible with it.
+            npm run migrate
+
             # ecosystem.config.cjs is versioned in the repo now and points at
             # backend/dist/server.cjs. startOrReload picks up the updated file.
             pm2 startOrReload ecosystem.config.cjs

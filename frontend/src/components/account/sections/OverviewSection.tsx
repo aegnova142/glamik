@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { TRY_ON_ENABLED } from '../../../utils/features';
 import React, { useEffect } from 'react';
 import {
   Package,
@@ -81,7 +82,8 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
     { id: 'notifications' as AccountSection, label: 'Notification Preferences', icon: Bell },
     { id: 'glam-profile' as AccountSection, label: 'My Beauty Profile', icon: Sparkles },
     { id: 'shade-history' as AccountSection, label: 'Shade AI History', icon: Bot },
-    { id: 'try-on-history' as AccountSection, label: 'Virtual Try-On History', icon: Camera },
+    // TRY-ON-PAUSED
+    ...(TRY_ON_ENABLED ? [{ id: 'try-on-history' as AccountSection, label: 'Virtual Try-On History', icon: Camera }] : []),
     { id: 'reviews' as AccountSection, label: 'My Reviews', icon: Star },
     { id: 'recently-viewed' as AccountSection, label: 'Recently Viewed', icon: Eye },
     { id: 'settings' as AccountSection, label: 'Security & Settings', icon: Settings },

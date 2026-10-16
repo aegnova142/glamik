@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { TRY_ON_ENABLED } from '../../utils/features';
 import React from 'react';
 import { motion } from 'motion/react';
 import {
@@ -65,7 +66,8 @@ export const ACCOUNT_NAV: AccountNavEntry[] = [
     children: [
       { id: 'glam-profile', label: 'My Shade', icon: Sparkles },
       { id: 'shade-history', label: 'Shade History', icon: Bot },
-      { id: 'try-on-history', label: 'Virtual Try-On', icon: Camera },
+      // TRY-ON-PAUSED: the menu entry returns with the feature.
+      ...(TRY_ON_ENABLED ? [{ id: 'try-on-history' as const, label: 'Virtual Try-On', icon: Camera }] : []),
     ],
   },
   { id: 'reviews', label: 'My Reviews', icon: Star },

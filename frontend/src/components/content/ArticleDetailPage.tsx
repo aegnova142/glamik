@@ -1,3 +1,4 @@
+import { TRY_ON_ENABLED } from '../../utils/features';
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
@@ -358,6 +359,8 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
                           <ShoppingBag className="w-3.5 h-3.5 text-[#C9972B]" />
                           <span>ADD TO BAG</span>
                         </button>
+                        {/* TRY-ON-PAUSED */}
+                        {TRY_ON_ENABLED && (
                         <button
                           onClick={() => onOpenTryOn(matchingProduct.id, matchingShade?.id)}
                           className="px-4 py-1.5 bg-[#FAF9F6] border border-[#0B0B0B] text-[#121212] text-[10px] font-semibold tracking-wider uppercase hover:bg-[#0B0B0B] hover:text-[#FAF9F6] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
@@ -365,6 +368,7 @@ export const ArticleDetailPage: React.FC<ArticleDetailPageProps> = ({
                           <Camera className="w-3 h-3 text-[#C9972B]" />
                           <span>TRY ON SHADE</span>
                         </button>
+                        )}
                       </div>
                     </div>
                   )}

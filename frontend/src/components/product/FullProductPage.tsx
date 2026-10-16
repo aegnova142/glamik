@@ -1,3 +1,4 @@
+import { TRY_ON_ENABLED } from '../../utils/features';
 import React, { useState, useEffect } from 'react';
 import { ProductGallery } from './ProductGallery';
 import { ShadeSelector } from './ShadeSelector';
@@ -402,7 +403,8 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
                   <span>Buy Now</span>
                 </button>
 
-                {product.shades ? (
+                {/* TRY-ON-PAUSED: the "Try it on" slot shows Save to Wishlist instead. */}
+                {TRY_ON_ENABLED && product.shades ? (
                   <button
                     onClick={onOpenShadeFinder}
                     className="py-3 px-4 bg-[#FCE8ED] text-[#F05A7E] border border-[#E8D5A8] text-[11px] font-bold tracking-wider uppercase rounded-full hover:bg-[#FCE8ED] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"

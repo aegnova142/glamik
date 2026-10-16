@@ -1,3 +1,4 @@
+import { TRY_ON_ENABLED } from '../../utils/features';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
@@ -871,6 +872,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </span>
                     </button>
                     */}
+                    {/* TRY-ON-PAUSED */}
+                    {TRY_ON_ENABLED && (
                     <button
                       onClick={() => {
                         setMobileMenuOpen(false);
@@ -884,6 +887,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </div>
                       <span className="text-[10px] text-[#6B6B6B]">Live AR</span>
                     </button>
+                    )}
                     <button
                       onClick={() => {
                         setMobileMenuOpen(false);
@@ -1047,6 +1051,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span>FIND MY SHADE</span>
                 </button>
                 */}
+                {/* TRY-ON-PAUSED */}
+                {TRY_ON_ENABLED && (
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);
@@ -1057,6 +1063,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <Sparkles className="w-4 h-4 text-[#F05A7E]" />
                   <span>VIRTUAL TRY-ON</span>
                 </button>
+                )}
               </div>
             </motion.div>
           </>

@@ -1,3 +1,4 @@
+import { TRY_ON_ENABLED } from '../../utils/features';
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -491,13 +492,16 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#FAF9F6]">
+                        <div className={`grid ${TRY_ON_ENABLED ? 'grid-cols-2' : 'grid-cols-1'} gap-2 pt-2 border-t border-[#FAF9F6]`}>
+                          {/* TRY-ON-PAUSED */}
+                          {TRY_ON_ENABLED && (
                           <button
                             onClick={() => onOpenTryOn(prod)}
                             className="py-2 text-[10.5px] font-semibold tracking-wider uppercase border border-[#E8D5A8] text-[#121212] hover:bg-[#FAF9F6]"
                           >
                             TRY ON
                           </button>
+                          )}
                           <button
                             onClick={() => onAddToBag(prod, prod.shades?.[0])}
                             className="py-2 text-[10.5px] font-semibold tracking-wider uppercase bg-[#0B0B0B] text-white hover:bg-[#0B0B0B]"
@@ -778,13 +782,16 @@ export const MyGlamDashboard: React.FC<MyGlamDashboardProps> = ({
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 pt-3 border-t border-[#FAF9F6]">
+                  <div className={`grid ${TRY_ON_ENABLED ? 'grid-cols-2' : 'grid-cols-1'} gap-2 pt-3 border-t border-[#FAF9F6]`}>
+                    {/* TRY-ON-PAUSED */}
+                    {TRY_ON_ENABLED && (
                     <button
                       onClick={() => onOpenTryOn(lipstick, shade)}
                       className="py-2 text-xs font-semibold tracking-wider uppercase border border-[#E8D5A8] text-[#121212] hover:bg-[#FAF9F6]"
                     >
                       TRY ON
                     </button>
+                    )}
                     <button
                       onClick={() => onAddToBag(lipstick, shade)}
                       className="py-2 text-xs font-semibold tracking-wider uppercase bg-[#0B0B0B] text-white hover:bg-[#0B0B0B]"

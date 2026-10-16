@@ -114,8 +114,9 @@ import {
 import { updatePageSeo } from './utils/seo';
 import { trackEvent } from './utils/analytics';
 import { routeToPath, pathToRoute } from './utils/routing';
+import { TRY_ON_ENABLED } from './utils/features';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles } from 'lucide-react';
+import { ChevronDown, Sparkles } from 'lucide-react';
 
 function AppContent() {
   const { products: cmsProducts, pages: cmsPages, activeOffers, globalSettings } = useCMS();
@@ -700,6 +701,8 @@ function AppContent() {
   };
 
   const openVirtualTryOn = (product?: Product, shade?: Shade) => {
+    // TRY-ON-PAUSED: safety net for any caller that slipped past the UI gates.
+    if (!TRY_ON_ENABLED) return;
     const prod = product || allProducts[0];
     setTryOnProductId(prod.id);
     if (shade) {
@@ -1664,20 +1667,21 @@ function AppContent() {
       </main>
 
       {/* Floating AI Beauty Assistant Trigger Button (Optimized for Mobile and Desktop) */}
-      <div className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-40">
+      {/* Stays above the open concierge on wider screens (as its toggle);
+          the full-screen phone panel has its own close button instead. */}
+      <div className={`fixed bottom-20 right-4 sm:bottom-5 sm:right-5 ${isAssistantOpen ? 'z-[60] hidden sm:block' : 'z-40'}`}>
         <button
           id="glamirk-beauty-assistant-trigger"
-          onClick={() => setIsAssistantOpen(true)}
-          className="group relative flex items-center gap-2 px-3.5 py-3 sm:px-4 sm:py-3.5 bg-white/95 text-[#121212] border border-[#E8D5A8] rounded-full shadow-[0_8px_25px_rgba(240,90,126,0.18)] hover:border-[#F05A7E] hover:bg-[#FCE8ED] transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md"
-          title="Open Glamirk Beauty Assistant"
+          onClick={() => setIsAssistantOpen((open) => !open)}
+          aria-expanded={isAssistantOpen}
+          aria-label={isAssistantOpen ? 'Close AI Beauty Concierge' : 'Open AI Beauty Concierge'}
+          className="group flex items-center gap-2.5 h-12 sm:h-[56px] px-3.5 sm:pl-5 sm:pr-5 bg-[#FFFDF9] text-[#211E1C] border border-[#F3C9D4] rounded-full shadow-[0_10px_28px_-10px_rgba(244,81,125,0.45)] hover:shadow-[0_14px_34px_-10px_rgba(244,81,125,0.6)] hover:border-[#F4517D] transition-[box-shadow,border-color] duration-200 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F4517D]"
         >
-          <div className="relative">
-            <Sparkles className="w-4 h-4 text-[#F05A7E]" />
-            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#F05A7E] animate-ping" />
-          </div>
-          <span className="text-[11px] font-bold tracking-wider uppercase hidden sm:inline text-[#121212] group-hover:text-[#F05A7E] transition-colors">
-            AI ASSISTANT
+          <Sparkles className="w-5 h-5 text-[#F4517D] motion-safe:transition-transform motion-safe:group-hover:rotate-12" strokeWidth={1.75} aria-hidden="true" />
+          <span className="text-[12px] sm:text-[13px] font-bold tracking-[0.06em] uppercase hidden sm:inline">
+            AI Beauty Concierge
           </span>
+          {isAssistantOpen && <ChevronDown className="hidden sm:block w-4 h-4 text-[#F4517D]" aria-hidden="true" />}
         </button>
       </div>
 

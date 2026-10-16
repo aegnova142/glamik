@@ -1,3 +1,4 @@
+import { TRY_ON_ENABLED } from '../../utils/features';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Heart, ShoppingBag, Sparkles, Check, ChevronRight, ShieldCheck } from 'lucide-react';
@@ -153,6 +154,8 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       Explore curated tones for Indian skin.
                     </p>
                   </div>
+                  {/* TRY-ON-PAUSED */}
+                  {TRY_ON_ENABLED && (
                   <button
                     onClick={() => {
                       onClose();
@@ -163,6 +166,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>Try On</span>
                   </button>
+                  )}
                 </div>
               )}
             </div>

@@ -41,8 +41,11 @@ const PROMPT_META: Record<string, { icon: React.FC<{ className?: string }>; hint
 const withoutTryOn = (prompts?: string[]) => (TRY_ON_ENABLED ? prompts : prompts?.filter((p) => !/\btry\b/i.test(p)));
 
 const formatPrice = (p: Product) => `₹${p.price.toLocaleString('en-IN')}`;
-const listNames = (names: string[]) =>
-  names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+/** "A, B and C" — long lists stop at six names and say how many more. */
+const listNames = (names: string[]) => {
+  if (names.length > 6) return `${names.slice(0, 6).join(', ')} and ${names.length - 6} more`;
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+};
 /** First shade whose name matches, else the one at `fallback`. */
 const pickShade = (shades: Shade[], pattern: RegExp, fallback = 0) =>
   shades.find((s) => pattern.test(s.name)) || shades[fallback] || shades[0];
@@ -63,7 +66,14 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
   const lipstick = catalogProducts.find((p) => /lipstick/i.test(p.name)) || catalogProducts[0];
   const sindoor = catalogProducts.find((p) => /sindoor/i.test(p.name));
   const cleansers = catalogProducts.filter((p) => /cleanser/i.test(p.name));
-  const lipShades = lipstick ? selectableShades(lipstick) : [];
+  // Only shades with a real name, once each: the catalogue can hold
+  // half-set-up entries ("New Shade", "6", "7"…) that shouldn't be quoted.
+  const lipShades = (lipstick ? selectableShades(lipstick) : []).filter(
+    (s, i, all) =>
+      !!s.name?.trim() &&
+      !/^(new\s*shade|shade)?\s*\d*$/i.test(s.name.trim()) &&
+      all.findIndex((x) => x.name.trim().toLowerCase() === s.name.trim().toLowerCase()) === i
+  );
   const tryOnProduct =
     currentProductContext?.shades?.length && currentProductContext.enableTryOn !== false ? currentProductContext : lipstick;
 

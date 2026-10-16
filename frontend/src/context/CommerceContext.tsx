@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { customerApiFetch, getCustomerToken } from '@glamirk/shared/utils/cmsClient';
-import { CartItem, Product, Shade, ServerCartItem, Order, Address, Review, ReviewMedia, ReturnRequest, Coupon, PaymentMethodType, AppNotification } from '@glamirk/shared/types';
+import { CartItem, Product, Shade, ServerCartItem, Order, Address, Review, ReviewMedia, ReviewDetails, ReturnRequest, Coupon, PaymentMethodType, AppNotification } from '@glamirk/shared/types';
 import { useCustomerAuth } from './CustomerAuthContext';
 import type { GatewayHandoff } from '../utils/razorpayCheckout';
 import { getSocket } from '@glamirk/shared/utils/socket';
@@ -115,7 +115,8 @@ interface CommerceContextType {
     rating: number,
     title: string,
     comment: string,
-    media?: ReviewMedia[]
+    media?: ReviewMedia[],
+    details?: ReviewDetails
   ) => Promise<SubmitReviewResult>;
   submitReturnRequest: (orderId: string, productId: string, reason: string, comment?: string) => Promise<SubmitReturnResult>;
   validateCoupon: (couponCode: string, subtotal: number) => Promise<ValidateCouponResult>;
@@ -575,12 +576,13 @@ export const CommerceProvider: React.FC<{ children: ReactNode }> = ({ children }
     rating: number,
     title: string,
     comment: string,
-    media: ReviewMedia[] = []
+    media: ReviewMedia[] = [],
+    details: ReviewDetails = {}
   ): Promise<SubmitReviewResult> => {
     if (!isCustomerLoggedIn) return { success: false, loginRequired: true };
     const res = await customerApiFetch<{ review: Review }>('/api/customer/reviews', {
       method: 'POST',
-      body: JSON.stringify({ productId, rating, title, comment, media }),
+      body: JSON.stringify({ productId, rating, title, comment, media, ...details }),
     });
     if (res.data?.review) {
       return { success: true, review: res.data.review };

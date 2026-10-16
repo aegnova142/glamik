@@ -75,6 +75,8 @@ export function routeToPath(route: PageRoute): string {
       return `/campaign/${encodeURIComponent(route.campaignId)}`;
     case 'new-launch':
       return '/new-launch';
+    case 'reviews':
+      return '/reviews';
     case 'legal':
       return route.policy ? `/legal/${route.policy}` : '/legal';
     case 'dynamic-page':
@@ -176,6 +178,8 @@ export function pathToRoute(pathname: string, search: string): PageRoute {
       break;
     case 'new-launch':
       return { page: 'new-launch' };
+    case 'reviews':
+      return { page: 'reviews' };
     case 'legal': {
       const policy = (LEGAL_POLICIES as readonly string[]).includes(second || '') ? (second as (typeof LEGAL_POLICIES)[number]) : undefined;
       return { page: 'legal', policy };

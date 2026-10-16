@@ -23,7 +23,14 @@ import {
   mapReturnRequestRow,
   restockOrderItems,
 } from '../services/orders.service';
-import { mapReviewRow } from '../services/reviews.service';
+import {
+  mapReviewRow,
+  notifyReviewModerated,
+  publicReviewerName,
+  recomputeProductRating,
+  REVIEW_WITH_HELPFUL_SQL,
+} from '../services/reviews.service';
+import { grantReviewPoints } from '../services/rewards.service';
 // mapNotificationRow stays: the admin notification LIST endpoints read rows
 // the engine writes, and the mapper is shared by both notification tables.
 import { mapNotificationRow } from '../services/notifications.service';
@@ -428,6 +435,121 @@ router.get('/looks/:id', async (req: Request, res: Response) => {
   res.json({ look });
 });
 
+// --- Store-wide reviews (public: homepage section + /reviews page) ---
+// Only status = 'approved' is ever public; pending and rejected reviews exist
+// only in the admin queue and their author's account. Names are shortened
+// server-side.
+function toPublicReview(row: any, products: { id: string; name: string; images?: { primary?: string } }[]) {
+  const product = products.find((p) => p.id === row.product_id);
+  return {
+    ...mapReviewRow(row, product?.name),
+    customerName: publicReviewerName(row.customer_name),
+    productImage: product?.images?.primary,
+  };
+}
+
+const REVIEW_HAS_PHOTO_SQL = `(photo_url IS NOT NULL OR EXISTS (
+  SELECT 1 FROM jsonb_array_elements(COALESCE(media, '[]'::jsonb)) m WHERE m->>'type' = 'image'))`;
+
+// "Customers also mention" — counted from the actual review text, so a tag
+// only appears once real reviews say it. Case-insensitive POSIX regexes, and
+// only over 4★+ reviews: the labels are praise, and "it irritated my skin"
+// must not count toward "Gentle on Skin".
+// ponytail: keyword match, not sentiment; a negated phrase in a 4★ review still counts.
+const REVIEW_MENTIONS = [
+  { id: 'smooth-texture', label: 'Smooth Texture', pattern: 'smooth|silky|creamy|lightweight' },
+  { id: 'visible-results', label: 'Visible Results', pattern: 'result|difference|brighter|glow' },
+  { id: 'good-packaging', label: 'Good Packaging', pattern: 'packag' },
+  { id: 'value-for-money', label: 'Value for Money', pattern: 'value|worth|affordable|price' },
+  { id: 'gentle-on-skin', label: 'Gentle on Skin', pattern: 'gentle|sensitive|irritat|sooth' },
+  { id: 'fast-delivery', label: 'Fast Delivery', pattern: '(fast|quick|early|speedy|on.time) (deliver|shipping|dispatch)|deliver(y|ed) (was )?(fast|quick|early|on time)|arrived (early|quickly|fast)' },
+];
+
+const REVIEWS_PAGE_SIZE = 6;
+
+router.get('/reviews/featured', async (req: Request, res: Response) => {
+  const db = await loadDatabase();
+  const [stats, rows] = await Promise.all([
+    pool.query("SELECT COUNT(*)::int AS count, COALESCE(AVG(rating), 0)::float AS average FROM reviews WHERE status = 'approved'"),
+    // A rating-only review has nothing to quote, so the homepage carousel skips it.
+    pool.query(
+      `${REVIEW_WITH_HELPFUL_SQL} WHERE status = 'approved' AND rating >= 4 AND comment <> '' ORDER BY created_at DESC LIMIT 15`
+    ),
+  ]);
+  const { count, average } = stats.rows[0];
+  res.json({
+    reviews: rows.rows.map((row) => toPublicReview(row, db.products)),
+    count,
+    average: Math.round(average * 10) / 10,
+  });
+});
+
+// GET /api/reviews?rating=1-5&photos=1&mention=<id>&sort=recent|highest|lowest|helpful&page=N
+// Filters/sort/paging run in SQL; `stats` and `mentions` always describe the
+// whole store so the summary and filter counts don't shift as you filter.
+router.get('/reviews', async (req: Request, res: Response) => {
+  const where: string[] = ["status = 'approved'"];
+  const params: unknown[] = [];
+  const rating = Number(req.query.rating);
+  if (Number.isInteger(rating) && rating >= 1 && rating <= 5) {
+    params.push(rating);
+    where.push(`rating = $${params.length}`);
+  }
+  if (req.query.photos === '1') where.push(REVIEW_HAS_PHOTO_SQL);
+  const mention = REVIEW_MENTIONS.find((m) => m.id === req.query.mention);
+  if (mention) {
+    params.push(mention.pattern);
+    where.push(`rating >= 4 AND (COALESCE(title, '') || ' ' || comment) ~* $${params.length}`);
+  }
+  const whereSql = `WHERE ${where.join(' AND ')}`;
+  const orderSql =
+    req.query.sort === 'highest' ? 'rating DESC, created_at DESC'
+    : req.query.sort === 'lowest' ? 'rating ASC, created_at DESC'
+    : req.query.sort === 'helpful' ? 'helpful_count DESC, created_at DESC'
+    : 'created_at DESC';
+  const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
+
+  const db = await loadDatabase();
+  const [total, rows, stats, mentions] = await Promise.all([
+    pool.query(`SELECT COUNT(*)::int AS n FROM reviews ${whereSql}`, params),
+    pool.query(
+      `${REVIEW_WITH_HELPFUL_SQL} ${whereSql} ORDER BY ${orderSql} LIMIT ${REVIEWS_PAGE_SIZE} OFFSET ${(page - 1) * REVIEWS_PAGE_SIZE}`,
+      params
+    ),
+    pool.query(`SELECT
+        COUNT(*)::int AS count,
+        COALESCE(AVG(rating), 0)::float AS average,
+        COUNT(DISTINCT customer_id) FILTER (WHERE is_verified_purchase)::int AS "verifiedBuyers",
+        COUNT(*) FILTER (WHERE ${REVIEW_HAS_PHOTO_SQL})::int AS "withPhotos",
+        COUNT(*) FILTER (WHERE rating >= 4)::int AS positive,
+        ${[5, 4, 3, 2, 1].map((s) => `COUNT(*) FILTER (WHERE rating = ${s})::int AS s${s}`).join(', ')}
+      FROM reviews WHERE status = 'approved'`),
+    pool.query(
+      `SELECT ${REVIEW_MENTIONS.map((m, i) => `COUNT(*) FILTER (WHERE (COALESCE(title, '') || ' ' || comment) ~* $${i + 1})::int AS "${m.id}"`).join(', ')} FROM reviews WHERE status = 'approved' AND rating >= 4`,
+      REVIEW_MENTIONS.map((m) => m.pattern)
+    ),
+  ]);
+
+  const s = stats.rows[0];
+  res.json({
+    reviews: rows.rows.map((row) => toPublicReview(row, db.products)),
+    total: total.rows[0].n,
+    page,
+    pageSize: REVIEWS_PAGE_SIZE,
+    stats: {
+      count: s.count,
+      average: Math.round(s.average * 10) / 10,
+      verifiedBuyers: s.verifiedBuyers,
+      withPhotos: s.withPhotos,
+      positivePercent: s.count > 0 ? Math.round((s.positive / s.count) * 100) : 0,
+      breakdown: [5, 4, 3, 2, 1].map((star) => ({ star, count: s[`s${star}`] })),
+    },
+    mentions: REVIEW_MENTIONS.map((m) => ({ id: m.id, label: m.label, count: mentions.rows[0][m.id] }))
+      .filter((m) => m.count > 0)
+      .sort((a, b) => b.count - a.count),
+  });
+});
+
 // ==========================================
 // PROTECTED ADMIN CMS ROUTES
 // ==========================================
@@ -437,8 +559,11 @@ router.get('/products/:id/reviews', async (req: Request, res: Response) => {
   const product = db.products.find((p) => p.id === req.params.id);
   if (!product) return res.status(404).json({ error: 'Product not found.' });
 
-  const result = await pool.query('SELECT * FROM reviews WHERE product_id = $1 ORDER BY created_at DESC', [req.params.id]);
-  const reviews = result.rows.map((row) => mapReviewRow(row, product.name));
+  const result = await pool.query(
+    `${REVIEW_WITH_HELPFUL_SQL} WHERE product_id = $1 AND status = 'approved' ORDER BY created_at DESC`,
+    [req.params.id]
+  );
+  const reviews = result.rows.map((row) => ({ ...mapReviewRow(row, product.name), customerName: publicReviewerName(row.customer_name) }));
   const count = reviews.length;
   const average = count > 0 ? Math.round((reviews.reduce((sum, r) => sum + r.rating, 0) / count) * 10) / 10 : 0;
   const breakdown = [5, 4, 3, 2, 1].map((star) => ({
@@ -447,6 +572,75 @@ router.get('/products/:id/reviews', async (req: Request, res: Response) => {
   }));
 
   res.json({ reviews, average, count, breakdown });
+});
+
+// --- Review moderation (admin) ---
+// Every review starts 'pending'; nothing reaches the storefront until it is
+// approved here. Admins see the full customer name and the private fields.
+const ADMIN_REVIEWS_PAGE_SIZE = 20;
+
+router.get('/admin/reviews', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const status = ['pending', 'approved', 'rejected'].includes(String(req.query.status)) ? String(req.query.status) : 'pending';
+  const page = Math.max(1, Math.floor(Number(req.query.page)) || 1);
+  const db = await loadDatabase();
+  const [rows, counts] = await Promise.all([
+    pool.query(
+      `${REVIEW_WITH_HELPFUL_SQL} WHERE status = $1 ORDER BY created_at ${status === 'pending' ? 'ASC' : 'DESC'}
+       LIMIT ${ADMIN_REVIEWS_PAGE_SIZE} OFFSET ${(page - 1) * ADMIN_REVIEWS_PAGE_SIZE}`,
+      [status]
+    ),
+    pool.query(`SELECT status, COUNT(*)::int AS n FROM reviews GROUP BY status`),
+  ]);
+  const countBy = Object.fromEntries(counts.rows.map((r) => [r.status, r.n]));
+  res.json({
+    reviews: rows.rows.map((row) => {
+      const product = db.products.find((p) => p.id === row.product_id);
+      return { ...mapReviewRow(row, product?.name), productImage: product?.images?.primary };
+    }),
+    counts: { pending: countBy.pending || 0, approved: countBy.approved || 0, rejected: countBy.rejected || 0 },
+    page,
+    pageSize: ADMIN_REVIEWS_PAGE_SIZE,
+  });
+});
+
+router.patch('/admin/reviews/:id', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const status = req.body?.status;
+  if (status !== 'approved' && status !== 'rejected') {
+    return res.status(400).json({ error: 'Status must be approved or rejected.' });
+  }
+  const note = status === 'rejected' ? String(req.body?.note || '').trim().slice(0, 300) || null : null;
+  // The version the admin was looking at (the review's `date`). A customer
+  // edit resets created_at, so a stale Approve can't publish text nobody saw.
+  const seenVersion = typeof req.body?.reviewedVersion === 'string' ? req.body.reviewedVersion : null;
+  const updated = await pool.query(
+    `UPDATE reviews SET status = $2, moderation_note = $3, moderated_at = now()
+     WHERE id = $1 AND status <> $2
+       AND ($4::timestamptz IS NULL OR date_trunc('milliseconds', created_at) = $4::timestamptz)
+     RETURNING *`,
+    [req.params.id, status, note, seenVersion]
+  );
+  const row = updated.rows[0];
+  if (!row) {
+    const current = await pool.query('SELECT * FROM reviews WHERE id = $1', [req.params.id]);
+    if (!current.rows[0]) return res.status(404).json({ error: 'Review not found.' });
+    // Already in the requested state: nothing to redo (no repeat notification or audit row).
+    if (current.rows[0].status === status) return res.json({ review: mapReviewRow(current.rows[0]) });
+    return res.status(409).json({ error: 'The customer edited this review after you loaded it. Reload to see the new version.' });
+  }
+
+  const db = await loadDatabase();
+  const productName = db.products.find((p) => p.id === row.product_id)?.name || 'your product';
+  // Approving or un-approving changes which ratings count.
+  await recomputeProductRating(row.product_id);
+  // Points wait for approval so a rejected review earns nothing. The ledger's
+  // unique (user, type, product) key keeps a re-approval from paying twice.
+  if (status === 'approved' && row.is_verified_purchase) {
+    await grantReviewPoints(row.customer_id, row.product_id, productName);
+  }
+  await notifyReviewModerated(row.customer_id, productName, status, note);
+  await logAudit(req, status === 'approved' ? 'APPROVE_REVIEW' : 'REJECT_REVIEW', 'REVIEW', row.id, productName, note || undefined);
+
+  res.json({ review: mapReviewRow(row, productName) });
 });
 
 router.get('/admin/audit-logs', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
@@ -2713,17 +2907,18 @@ router.delete('/admin/faqs/:id', requireAdmin, async (req: AuthenticatedRequest,
 
 // --- Global Settings ---
 router.put('/admin/settings', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
-  // The wishlist banner URL is rendered straight into a public page, so only
-  // https:// or same-site paths get through — never javascript:, data: or http.
-  const banner = req.body?.wishlistBanner;
-  if (banner !== undefined) {
+  // Banner URLs are rendered straight into public pages, so only https:// or
+  // same-site paths get through — never javascript:, data: or http.
+  for (const key of ['wishlistBanner', 'reviewsBanner'] as const) {
+    const banner = req.body?.[key];
+    if (banner === undefined) continue;
     const isSafeImageUrl = (u: unknown) =>
       u === '' || (typeof u === 'string' && u.length <= 2048 && /^(https:\/\/|\/(?!\/))/i.test(u));
     if (typeof banner !== 'object' || banner === null || !isSafeImageUrl(banner.imageUrl) ||
         (banner.mobileImageUrl !== undefined && !isSafeImageUrl(banner.mobileImageUrl))) {
       return res.status(400).json({ error: 'Banner image must be an https:// URL or an uploaded image.' });
     }
-    req.body.wishlistBanner = {
+    req.body[key] = {
       enabled: banner.enabled === true,
       imageUrl: banner.imageUrl,
       mobileImageUrl: banner.mobileImageUrl || '',

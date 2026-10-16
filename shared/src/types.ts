@@ -615,6 +615,7 @@ export type PageRoute =
   | { page: 'social-commerce'; postId?: string }
   | { page: 'campaign'; campaignId: string }
   | { page: 'new-launch' }
+  | { page: 'reviews' }
   | { page: 'legal'; policy?: 'privacy' | 'terms' | 'shipping' | 'returns' | 'cookies' }
   | { page: 'dynamic-page'; slug: string }
   // '/admin' is intentionally NOT a storefront route. The admin is its own
@@ -1207,7 +1208,35 @@ export interface Review {
    * renderers only ever need to read `media`. */
   photoUrl?: string;
   media?: ReviewMedia[];
+  /** Only 'approved' reviews are ever shown on the storefront. */
+  status?: ReviewStatus;
+  /** Admin's reason for a rejection, shown to the review's author only. */
+  moderationNote?: string;
+  helpfulCount?: number;
 }
+
+export type ReviewStatus = 'pending' | 'approved' | 'rejected';
+
+/** Optional beauty context a reviewer can add. Validated server-side against
+ * these lists (and the product's own shades), never trusted as free text. */
+export const REVIEW_SKIN_TONES = ['Fair', 'Light', 'Medium', 'Tan', 'Deep'] as const;
+export const REVIEW_UNDERTONES = ['Warm', 'Cool', 'Neutral'] as const;
+
+export interface ReviewDetails {
+  shadeName?: string;
+  skinTone?: string;
+  undertone?: string;
+}
+
+/** The one submit signature every review form and its parents pass along. */
+export type SubmitReviewFn = (
+  productId: string,
+  rating: number,
+  title: string,
+  comment: string,
+  media?: ReviewMedia[],
+  details?: ReviewDetails
+) => Promise<{ success: boolean; error?: string }>;
 
 export type ReviewMediaType = 'image' | 'video';
 
@@ -1859,6 +1888,9 @@ export interface CMSGlobalSettings {
   /** Image behind the "Your Beauty Edit" hero on /wishlist. The heading stays
    * real HTML on top; an empty or disabled banner leaves a plain black hero. */
   wishlistBanner?: CMSWishlistBanner;
+  /** Product image on the right of the /reviews hero, same shape as the
+   * wishlist banner. Empty or disabled leaves a plain blush hero. */
+  reviewsBanner?: CMSWishlistBanner;
   /** "Watch It. Love It." shoppable video row on the home page. */
   videoReels?: CMSVideoReels;
 }

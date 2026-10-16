@@ -34,13 +34,17 @@ interface ProductCardProps {
    * skips the Add-to-Cart confirm dialog entirely, same as the PDP's own
    * Buy Now button (see handleBuyNow in App.tsx). */
   onBuyNow: (product: Product, shade?: Shade, size?: string) => void;
+  /** The button beside Add to Cart. 'viewDetails' opens the product page
+   * instead of Buy Now — used by the "You May Also Like" carousel. */
+  secondaryAction?: 'buyNow' | 'viewDetails';
 }
 
 
 // Rating display is on hold for a future release — hidden rather than
 // deleted so it's a one-line flip to bring back. Matching flag in
-// FilterPanel.tsx controls the "Customer Rating" filter section.
-const RATINGS_ENABLED = false;
+// FilterPanel.tsx controls the "Customer Rating" filter section. Exported so
+// every product listing (Recently Viewed, You May Also Like) obeys it too.
+export const RATINGS_ENABLED = false;
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
@@ -53,6 +57,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onQuickAdd,
   onGoToCart,
   onBuyNow,
+  secondaryAction = 'buyNow',
 }) => {
   // getDefaultShade, not shades[0] — the first shade may be paused, and
   // preselecting one the server will refuse to sell is how this card ended up
@@ -377,7 +382,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     </button>
   );
 
-  const BuyNowButton = (
+  const BuyNowButton = secondaryAction === 'viewDetails' ? (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelectProduct(product);
+      }}
+      aria-label={`View details of ${product.name}`}
+      className={`${CTA_BASE} flex-auto border border-[#E3C98F] bg-white uppercase tracking-[0.04em] text-[#121212] hover:border-[#C9972B] hover:bg-[#FFFBF3] cursor-pointer`}
+    >
+      <ShoppingBag className="h-4 w-4 shrink-0 text-[#F05A7E]" />
+      <span>View Details</span>
+    </button>
+  ) : (
     <button
       id={`buynow-btn-${product.id}`}
       // Buy Now adds the same unit as Add to Cart and then jumps to checkout,

@@ -48,6 +48,9 @@ export type NotificationEventType =
   | 'RETURN_APPROVED'
   | 'RETURN_PICKUP_SCHEDULED'
   | 'RETURN_REFUNDED'
+  // Sent a couple of days after delivery (see notifyOrderStatus), skipped if
+  // everything in the order has been reviewed by then.
+  | 'REVIEW_REMINDER'
   // Store-facing. Fires the moment an order is persisted, for BOTH payment
   // methods — a prepaid order awaiting payment is still an order the store
   // should know exists, provided the message says so plainly.
@@ -115,6 +118,9 @@ export interface EnqueueInput {
   payload: NotificationPayload;
   /** Defaults to every channel the event type targets. */
   channels?: NotificationChannel[];
+  /** Earliest send time. Defaults to now; the worker picks the delivery up
+   * once next_attempt_at has passed, so a delay needs no separate scheduler. */
+  sendAt?: Date;
 }
 
 /** Which channels each event goes to. In-app is always included: it is the one
@@ -141,6 +147,7 @@ const EVENT_CHANNELS: Record<NotificationEventType, NotificationChannel[]> = {
   RETURN_APPROVED: ['inapp', 'email'],
   RETURN_PICKUP_SCHEDULED: ['inapp', 'email'],
   RETURN_REFUNDED: ['inapp', 'email'],
+  REVIEW_REMINDER: ['inapp', 'email'],
   ADMIN_NEW_ORDER: ['admin_inapp', 'admin_whatsapp'],
   // Admin in-app only. These three fired to the notification bell before the
   // outbox existed and still do; adding WhatsApp to them would multiply store
@@ -207,13 +214,13 @@ export async function enqueueNotification(input: EnqueueInput): Promise<{ enqueu
     if (channels.length > 0) {
       // One VALUES list rather than one statement per channel.
       const values = channels
-        .map((_, i) => `($${i * 2 + 1}, $${channels.length * 2 + 1}, $${i * 2 + 2}, 'PENDING', now())`)
+        .map((_, i) => `($${i * 2 + 1}, $${channels.length * 2 + 1}, $${i * 2 + 2}, 'PENDING', $${channels.length * 2 + 2})`)
         .join(', ');
       const params: any[] = [];
       channels.forEach((channel, i) => {
         params.push('nd-' + Date.now() + '-' + i + '-' + Math.random().toString(36).slice(2, 8), channel);
       });
-      params.push(eventId);
+      params.push(eventId, input.sendAt || new Date());
 
       await client.query(
         `INSERT INTO notification_deliveries (id, event_id, channel, status, next_attempt_at)

@@ -43,6 +43,8 @@ import {
 
 interface FullProductPageProps {
   product: Product;
+  /** Opens sign-in, for actions like voting a review helpful. */
+  onRequireLogin?: () => void;
   wishlist: string[];
   cartItems: CartItem[];
   recentlyViewedIds: string[];
@@ -59,6 +61,7 @@ interface FullProductPageProps {
 
 export const FullProductPage: React.FC<FullProductPageProps> = ({
   product,
+  onRequireLogin,
   wishlist,
   cartItems,
   recentlyViewedIds,
@@ -577,6 +580,7 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
           productId={product.id}
           fallbackRating={product.rating}
           fallbackReviewCount={product.reviewCount}
+          onRequireLogin={onRequireLogin}
         />
 
         {/* Complete The Look Cross-Selling */}
@@ -652,6 +656,8 @@ export const FullProductPage: React.FC<FullProductPageProps> = ({
       <RecentlyViewed
         recentlyViewedIds={recentlyViewedIds}
         onSelectProduct={onSelectProduct}
+        wishlist={wishlist}
+        onToggleWishlist={onToggleWishlist}
       />
 
       {/* Watch The Glam Video Modal */}

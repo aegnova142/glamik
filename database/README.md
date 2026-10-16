@@ -45,9 +45,15 @@ database is a safe no-op that simply records them as applied. Migrations from
 
 ## Applying them
 
-Nothing has to be run by hand — the server applies pending migrations at boot
-(`ensureSchema()` in `backend/src/db/db.ts` now delegates to the runner). The
-CLI exists for CI, a fresh database, or migrating before switching traffic:
+Against a **local** database the server applies pending migrations at boot
+(`ensureSchema()` in `backend/src/db/db.ts`). Against **production** it never
+does: it refuses to start while a migration is pending (see
+`backend/src/config/databaseTarget.ts`). The deploy workflow therefore runs
+`npm run migrate` right after `npm ci` — before building and before reloading
+pm2 — so a release that adds a migration applies it first, and a failed
+migration stops the deploy with the old build still on disk and running. Because migrations run while the old code is
+live, every migration must stay compatible with the release before it
+(additive changes only). The CLI is also what you use for a fresh database:
 
 ```bash
 npm run migrate                 # apply anything pending

@@ -28,6 +28,7 @@ import {
   Bell,
   MailWarning,
   Heart,
+  Star,
 } from 'lucide-react';
 import { AdminDashboard } from './AdminDashboard';
 import { AdminHero } from './AdminHero';
@@ -49,6 +50,7 @@ import { AdminOffers } from './AdminOffers';
 import { AdminPromoBanners } from './AdminPromoBanners';
 import { AdminHomeBanners } from './AdminHomeBanners';
 import { AdminWishlistBanner } from './AdminWishlistBanner';
+import { AdminReviews } from './AdminReviews';
 import { AdminVideoReels } from './AdminVideoReels';
 import { AdminLivePrivileges } from './AdminLivePrivileges';
 import { AdminNavigation } from './AdminNavigation';
@@ -79,6 +81,7 @@ type AdminTab =
   | 'pages'
   | 'products'
   | 'orders'
+  | 'reviews'
   | 'categories'
   | 'tryOnModels'
   | 'offers'
@@ -86,6 +89,7 @@ type AdminTab =
   | 'homeBanners'
   | 'promoBanners'
   | 'wishlistBanner'
+  | 'reviewsBanner'
   | 'videoReels'
   | 'navigation'
   | 'footer'
@@ -113,7 +117,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
     },
     {
       label: 'Orders',
-      items: [{ id: 'orders', label: 'Order Management', icon: Truck }],
+      items: [
+        { id: 'orders', label: 'Order Management', icon: Truck },
+        { id: 'reviews', label: 'Customer Reviews', icon: Star },
+      ],
     },
     // Content editors are grouped by the storefront page they change, and within
     // the Home Page group listed in the order the sections appear on the page.
@@ -139,6 +146,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
         { id: 'looks', label: 'Shop The Look', icon: Sparkles },
         { id: 'shadeFinder', label: 'Find My Shade Journey', icon: Sparkles },
         { id: 'wishlistBanner', label: 'Wishlist Banner', icon: Heart },
+        { id: 'reviewsBanner', label: 'Customer Reviews Hero', icon: Star },
         { id: 'blog', label: 'Journal & Guides', icon: BookOpen },
         { id: 'pages', label: 'Pages & Sections Builder', icon: FileText },
       ],
@@ -373,11 +381,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ onExitAdmin }) => {
             {activeTab === 'pages' && <AdminPages />}
             {activeTab === 'products' && <AdminProducts />}
             {activeTab === 'orders' && <AdminOrders />}
+            {activeTab === 'reviews' && <AdminReviews />}
             {activeTab === 'categories' && <AdminCategories />}
             {activeTab === 'offers' && <AdminOffers />}
             {activeTab === 'promoBanners' && <AdminPromoBanners />}
             {activeTab === 'homeBanners' && <AdminHomeBanners />}
             {activeTab === 'wishlistBanner' && <AdminWishlistBanner />}
+            {activeTab === 'reviewsBanner' && <AdminWishlistBanner settingsKey="reviewsBanner" />}
             {activeTab === 'videoReels' && <AdminVideoReels />}
             {activeTab === 'livePrivileges' && <AdminLivePrivileges onOpenOffers={() => setActiveTab('offers')} />}
             {activeTab === 'navigation' && <AdminNavigation />}

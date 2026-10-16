@@ -170,10 +170,26 @@ export async function notifyOrderStatus(
         ...(options.includeItems ? { items: await orderItems(order.id) } : {}),
       },
     });
+
+    // Ask for a rating once they've had time to try it. Same dedupe rule, so a
+    // repeated DELIVERED transition never schedules a second reminder.
+    if (status === 'DELIVERED' && order.userId) {
+      await enqueueNotification({
+        orderId: order.id,
+        userId: order.userId,
+        eventType: 'REVIEW_REMINDER',
+        dedupeKey: `${order.id}:REVIEW_REMINDER`,
+        sendAt: new Date(Date.now() + REVIEW_REMINDER_DELAY_HOURS * 3_600_000),
+        payload: { orderNumber: order.orderNumber, customerName: order.customerName, toEmail: order.customerEmail },
+      });
+    }
   } catch (err) {
     console.error(`[notifications] could not enqueue ${status} for order:`, err);
   }
 }
+
+/** How long after delivery the "rate your order" reminder goes out. */
+const REVIEW_REMINDER_DELAY_HOURS = 48;
 
 /**
  * Tells the customer a payment did not go through.

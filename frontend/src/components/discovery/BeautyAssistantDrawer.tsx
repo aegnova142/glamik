@@ -163,7 +163,10 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
 
     if (query.includes('compare') && lipShades.length) {
       return reply({
-        text: `Here are the ${lipShades.length} shades of ${lipstick.name} side by side, each labelled with its undertone.${TRY_ON_ENABLED ? ' Try any of them on before you choose.' : ''}`,
+        text:
+          lipShades.length === 1
+            ? `${lipstick.name} currently has one shade to compare: ${lipShades[0].name}, with a ${lipShades[0].undertone.toLowerCase()} undertone.`
+            : `Here are the ${lipShades.length} shades of ${lipstick.name} side by side, each labelled with its undertone.${TRY_ON_ENABLED ? ' Try any of them on before you choose.' : ''}`,
         recommendedProducts: lipShades.slice(0, 6).map(shadeRec),
         suggestedPrompts: ['Try shades on virtually', 'Show me everyday looks', 'What should I wear for a wedding?'],
       });
@@ -182,7 +185,10 @@ export const BeautyAssistantDrawer: React.FC<BeautyAssistantDrawerProps> = ({
       const cool = lipShades.find((s) => /cool/i.test(s.undertone));
       const picks = [warm, cool].filter((s): s is Shade => !!s);
       return reply({
-        text: `${lipstick.name} comes in ${listNames(lipShades.map((s) => s.name))}. Each shade is labelled with its undertone — choose the one closest to yours${TRY_ON_ENABLED ? ', or try them on first' : ''}.`,
+        text:
+          lipShades.length === 1
+            ? `${lipstick.name} currently comes in ${lipShades[0].name}, a shade with a ${lipShades[0].undertone.toLowerCase()} undertone.`
+            : `${lipstick.name} comes in ${listNames(lipShades.map((s) => s.name))}. Each shade is labelled with its undertone — choose the one closest to yours${TRY_ON_ENABLED ? ', or try them on first' : ''}.`,
         recommendedProducts: (picks.length ? picks : lipShades.slice(0, 2)).map(shadeRec),
         actionPrompt: { label: 'TRY SHADES ON', action: 'try-on', productId: lipstick.id },
         suggestedPrompts: ['Compare these shades', 'Show me everyday looks', 'What should I wear for a wedding?'],

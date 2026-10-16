@@ -10,9 +10,12 @@ let votedFor: string | null = null;
 function loadVotedIds(customerId: string): Promise<Set<string>> {
   if (!votedIds || votedFor !== customerId) {
     votedFor = customerId;
-    votedIds = customerApiFetch<{ reviewIds: string[] }>('/api/customer/reviews/helpful').then(
-      (res) => new Set(res.data?.reviewIds || [])
-    );
+    votedIds = customerApiFetch<{ reviewIds: string[] }>('/api/customer/reviews/helpful').then((res) => {
+      // A failed fetch must not be remembered as "voted for nothing" — that
+      // would show voted reviews as unvoted, and a click would then un-vote.
+      if (!res.data) votedIds = null;
+      return new Set(res.data?.reviewIds || []);
+    });
   }
   return votedIds;
 }

@@ -38,22 +38,28 @@ export const AdminReviews: React.FC = () => {
     setLoading(true);
     const res = await apiFetch<AdminReviewsResponse>(`/api/admin/reviews?status=${tab}&page=${page}`);
     setLoading(false);
-    if (res.data) {
-      setData(res.data);
-      setError('');
-    } else setError(res.error || 'Could not load reviews.');
+    if (!res.data) return setError(res.error || 'Could not load reviews.');
+    // Moderating the last item on the last page empties it: step back a page.
+    const lastPage = Math.max(1, Math.ceil((res.data.counts[tab] || 0) / res.data.pageSize));
+    if (page > lastPage) return setPage(lastPage);
+    setData(res.data);
   }, [tab, page]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const moderate = async (id: string, status: 'approved' | 'rejected', note?: string) => {
-    setBusyId(id);
-    const res = await apiFetch(`/api/admin/reviews/${id}`, { method: 'PATCH', body: JSON.stringify({ status, note }) });
+  const moderate = async (review: AdminReview, status: 'approved' | 'rejected', note?: string) => {
+    setBusyId(review.id);
+    setError('');
+    const res = await apiFetch(`/api/admin/reviews/${review.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, note, reviewedVersion: review.date }),
+    });
     setBusyId(null);
-    if (res.error) return setError(res.error);
     setRejecting(null);
+    if (res.error) setError(res.error);
+    // Reload either way: on a 409 the admin needs to see the edited text.
     load();
   };
 
@@ -156,7 +162,7 @@ export const AdminReviews: React.FC = () => {
                     />
                     <div className="flex gap-2">
                       <button
-                        onClick={() => moderate(r.id, 'rejected', rejecting.note)}
+                        onClick={() => moderate(r, 'rejected', rejecting.note)}
                         disabled={busyId === r.id}
                         className="px-4 py-2 rounded-lg bg-[#F05A7E] text-white text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50"
                       >
@@ -173,7 +179,7 @@ export const AdminReviews: React.FC = () => {
               <div className="flex md:flex-col gap-2 shrink-0">
                 {r.status !== 'approved' && (
                   <button
-                    onClick={() => moderate(r.id, 'approved')}
+                    onClick={() => moderate(r, 'approved')}
                     disabled={busyId === r.id}
                     className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-[#2E7D32] hover:bg-[#388E3C] text-white text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50"
                   >

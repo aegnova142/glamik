@@ -452,7 +452,10 @@ const REVIEW_HAS_PHOTO_SQL = `(photo_url IS NOT NULL OR EXISTS (
   SELECT 1 FROM jsonb_array_elements(COALESCE(media, '[]'::jsonb)) m WHERE m->>'type' = 'image'))`;
 
 // "Customers also mention" — counted from the actual review text, so a tag
-// only appears once real reviews say it. Case-insensitive POSIX regexes.
+// only appears once real reviews say it. Case-insensitive POSIX regexes, and
+// only over 4★+ reviews: the labels are praise, and "it irritated my skin"
+// must not count toward "Gentle on Skin".
+// ponytail: keyword match, not sentiment; a negated phrase in a 4★ review still counts.
 const REVIEW_MENTIONS = [
   { id: 'smooth-texture', label: 'Smooth Texture', pattern: 'smooth|silky|creamy|lightweight' },
   { id: 'visible-results', label: 'Visible Results', pattern: 'result|difference|brighter|glow' },
@@ -496,7 +499,7 @@ router.get('/reviews', async (req: Request, res: Response) => {
   const mention = REVIEW_MENTIONS.find((m) => m.id === req.query.mention);
   if (mention) {
     params.push(mention.pattern);
-    where.push(`(COALESCE(title, '') || ' ' || comment) ~* $${params.length}`);
+    where.push(`rating >= 4 AND (COALESCE(title, '') || ' ' || comment) ~* $${params.length}`);
   }
   const whereSql = `WHERE ${where.join(' AND ')}`;
   const orderSql =
@@ -522,7 +525,7 @@ router.get('/reviews', async (req: Request, res: Response) => {
         ${[5, 4, 3, 2, 1].map((s) => `COUNT(*) FILTER (WHERE rating = ${s})::int AS s${s}`).join(', ')}
       FROM reviews WHERE status = 'approved'`),
     pool.query(
-      `SELECT ${REVIEW_MENTIONS.map((m, i) => `COUNT(*) FILTER (WHERE (COALESCE(title, '') || ' ' || comment) ~* $${i + 1})::int AS "${m.id}"`).join(', ')} FROM reviews WHERE status = 'approved'`,
+      `SELECT ${REVIEW_MENTIONS.map((m, i) => `COUNT(*) FILTER (WHERE (COALESCE(title, '') || ' ' || comment) ~* $${i + 1})::int AS "${m.id}"`).join(', ')} FROM reviews WHERE status = 'approved' AND rating >= 4`,
       REVIEW_MENTIONS.map((m) => m.pattern)
     ),
   ]);
@@ -606,12 +609,24 @@ router.patch('/admin/reviews/:id', requireAdmin, async (req: AuthenticatedReques
     return res.status(400).json({ error: 'Status must be approved or rejected.' });
   }
   const note = status === 'rejected' ? String(req.body?.note || '').trim().slice(0, 300) || null : null;
+  // The version the admin was looking at (the review's `date`). A customer
+  // edit resets created_at, so a stale Approve can't publish text nobody saw.
+  const seenVersion = typeof req.body?.reviewedVersion === 'string' ? req.body.reviewedVersion : null;
   const updated = await pool.query(
-    `UPDATE reviews SET status = $2, moderation_note = $3, moderated_at = now() WHERE id = $1 RETURNING *`,
-    [req.params.id, status, note]
+    `UPDATE reviews SET status = $2, moderation_note = $3, moderated_at = now()
+     WHERE id = $1 AND status <> $2
+       AND ($4::timestamptz IS NULL OR date_trunc('milliseconds', created_at) = $4::timestamptz)
+     RETURNING *`,
+    [req.params.id, status, note, seenVersion]
   );
   const row = updated.rows[0];
-  if (!row) return res.status(404).json({ error: 'Review not found.' });
+  if (!row) {
+    const current = await pool.query('SELECT * FROM reviews WHERE id = $1', [req.params.id]);
+    if (!current.rows[0]) return res.status(404).json({ error: 'Review not found.' });
+    // Already in the requested state: nothing to redo (no repeat notification or audit row).
+    if (current.rows[0].status === status) return res.json({ review: mapReviewRow(current.rows[0]) });
+    return res.status(409).json({ error: 'The customer edited this review after you loaded it. Reload to see the new version.' });
+  }
 
   const db = await loadDatabase();
   const productName = db.products.find((p) => p.id === row.product_id)?.name || 'your product';

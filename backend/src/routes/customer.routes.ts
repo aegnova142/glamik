@@ -62,8 +62,6 @@ import {
   ReviewMedia,
   REVIEW_MEDIA_MAX_ITEMS,
   OrderStatus,
-  REVIEW_SKIN_TONES,
-  REVIEW_UNDERTONES,
 } from '@glamirk/shared/types';
 
 /**
@@ -93,6 +91,7 @@ import {
 import {
   isVerifiedPurchase,
   mapReviewRow,
+  pickReviewDetails,
   recomputeProductRating,
   destroyReviewMedia,
   orphanedReviewMedia,
@@ -2501,13 +2500,18 @@ router.post('/reviews', requireCustomer, async (req: AuthenticatedCustomerReques
   const product = findProduct(db.products, productId);
   if (!product) return res.status(404).json({ error: 'Product not found.' });
 
-  // Beauty details are picked from fixed lists (and the product's own shades),
-  // so anything else is dropped rather than stored as free text.
-  const pick = (value: unknown, allowed: readonly string[]) =>
-    typeof value === 'string' && allowed.includes(value) ? value : null;
-  const shadeName = pick(req.body?.shadeName, (product.shades || []).map((s) => s.name));
-  const skinTone = pick(req.body?.skinTone, REVIEW_SKIN_TONES);
-  const undertone = pick(req.body?.undertone, REVIEW_UNDERTONES);
+  const { shadeName, skinTone, undertone } = pickReviewDetails(product, req.body);
+
+  // Our team may already have published this customer's off-site feedback for
+  // one of their orders; a second review of the same purchase would double-count.
+  const adminEntered = await pool.query(
+    `SELECT 1 FROM reviews r JOIN orders o ON o.id = r.order_id
+     WHERE r.source = 'admin' AND r.product_id = $1 AND o.user_id = $2 LIMIT 1`,
+    [productId, req.customer!.id]
+  );
+  if (adminEntered.rows[0]) {
+    return res.status(409).json({ error: 'Your feedback on this product is already published — thank you!' });
+  }
 
   const numericRating = Math.max(1, Math.min(5, Math.round(Number(rating))));
   const custRes = await pool.query('SELECT name FROM customers WHERE id = $1', [req.customer!.id]);

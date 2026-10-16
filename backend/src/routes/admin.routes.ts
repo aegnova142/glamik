@@ -26,6 +26,7 @@ import {
 import {
   mapReviewRow,
   notifyReviewModerated,
+  pickReviewDetails,
   publicReviewerName,
   recomputeProductRating,
   REVIEW_WITH_HELPFUL_SQL,
@@ -519,7 +520,7 @@ router.get('/reviews', async (req: Request, res: Response) => {
     pool.query(`SELECT
         COUNT(*)::int AS count,
         COALESCE(AVG(rating), 0)::float AS average,
-        COUNT(DISTINCT customer_id) FILTER (WHERE is_verified_purchase)::int AS "verifiedBuyers",
+        COUNT(DISTINCT COALESCE(customer_id, 'order:' || order_id)) FILTER (WHERE is_verified_purchase)::int AS "verifiedBuyers",
         COUNT(*) FILTER (WHERE ${REVIEW_HAS_PHOTO_SQL})::int AS "withPhotos",
         COUNT(*) FILTER (WHERE rating >= 4)::int AS positive,
         ${[5, 4, 3, 2, 1].map((s) => `COUNT(*) FILTER (WHERE rating = ${s})::int AS s${s}`).join(', ')}
@@ -595,7 +596,14 @@ router.get('/admin/reviews', requireAdmin, async (req: AuthenticatedRequest, res
   res.json({
     reviews: rows.rows.map((row) => {
       const product = db.products.find((p) => p.id === row.product_id);
-      return { ...mapReviewRow(row, product?.name), productImage: product?.images?.primary };
+      // Provenance is admin-only; mapReviewRow (the public shape) never carries it.
+      return {
+        ...mapReviewRow(row, product?.name),
+        productImage: product?.images?.primary,
+        source: row.source,
+        sourceChannel: row.source_channel || undefined,
+        enteredBy: row.entered_by || undefined,
+      };
     }),
     counts: { pending: countBy.pending || 0, approved: countBy.approved || 0, rejected: countBy.rejected || 0 },
     page,
@@ -634,13 +642,92 @@ router.patch('/admin/reviews/:id', requireAdmin, async (req: AuthenticatedReques
   await recomputeProductRating(row.product_id);
   // Points wait for approval so a rejected review earns nothing. The ledger's
   // unique (user, type, product) key keeps a re-approval from paying twice.
-  if (status === 'approved' && row.is_verified_purchase) {
-    await grantReviewPoints(row.customer_id, row.product_id, productName);
+  // Admin-entered reviews have no account behind them: no points, no bell.
+  if (row.customer_id) {
+    if (status === 'approved' && row.is_verified_purchase) {
+      await grantReviewPoints(row.customer_id, row.product_id, productName);
+    }
+    await notifyReviewModerated(row.customer_id, productName, status, note);
   }
-  await notifyReviewModerated(row.customer_id, productName, status, note);
   await logAudit(req, status === 'approved' ? 'APPROVE_REVIEW' : 'REJECT_REVIEW', 'REVIEW', row.id, productName, note || undefined);
 
   res.json({ review: mapReviewRow(row, productName) });
+});
+
+// Publish a review a real customer gave off-site (WhatsApp, Instagram, email,
+// phone, in store). It is published immediately and looks like any other
+// review on the storefront; where it came from and who entered it stay
+// admin-only. "Verified Purchase" is never asserted by hand — only by linking
+// a real DELIVERED order that contains the product.
+const ADMIN_REVIEW_CHANNELS = ['whatsapp', 'instagram', 'email', 'phone', 'store', 'other'];
+
+router.post('/admin/reviews', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const body = req.body || {};
+  if (body.consent !== true) {
+    return res.status(400).json({ error: "Confirm the customer agreed to have their review published." });
+  }
+  const customerName = String(body.customerName || '').trim().replace(/\s+/g, ' ');
+  if (customerName.length < 2 || customerName.length > 60) {
+    return res.status(400).json({ error: "Enter the customer's name (2–60 characters)." });
+  }
+  const rating = Number(body.rating);
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: 'Choose a rating from 1 to 5 stars.' });
+  }
+  if (!ADMIN_REVIEW_CHANNELS.includes(body.sourceChannel)) {
+    return res.status(400).json({ error: 'Choose where the customer gave this review.' });
+  }
+  const db = await loadDatabase();
+  const product = db.products.find((p) => p.id === body.productId);
+  if (!product) return res.status(404).json({ error: 'Product not found.' });
+
+  // Verified only through a real delivered order that contains this product.
+  let orderId: string | null = null;
+  const orderNumber = String(body.orderNumber || '').trim();
+  if (orderNumber) {
+    const order = await pool.query(
+      `SELECT o.id, o.user_id FROM orders o JOIN order_items oi ON oi.order_id = o.id
+       WHERE o.order_number = $1 AND o.status = 'DELIVERED' AND oi.product_id = $2 LIMIT 1`,
+      [orderNumber, product.id]
+    );
+    if (!order.rows[0]) {
+      return res.status(400).json({ error: `Order ${orderNumber} isn't a delivered order containing ${product.name}.` });
+    }
+    // The same purchase must not be reviewed twice — by the customer or by us.
+    const dup = await pool.query(
+      `SELECT 1 FROM reviews WHERE product_id = $1 AND (order_id = $2 OR customer_id = $3) LIMIT 1`,
+      [product.id, order.rows[0].id, order.rows[0].user_id]
+    );
+    if (dup.rows[0]) return res.status(409).json({ error: 'This customer already has a review for this product.' });
+    orderId = order.rows[0].id;
+  }
+
+  const { shadeName, skinTone, undertone } = pickReviewDetails(product, body);
+  const id = 'rev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const inserted = await pool.query(
+    `INSERT INTO reviews (id, product_id, customer_id, customer_name, rating, title, comment, is_verified_purchase,
+                          shade_name, skin_tone, undertone, status, moderated_at, source, source_channel, entered_by, order_id)
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9, $10, 'approved', now(), 'admin', $11, $12, $13)
+     RETURNING *`,
+    [
+      id,
+      product.id,
+      customerName,
+      rating,
+      String(body.title || '').trim().slice(0, 100) || null,
+      String(body.comment || '').trim().slice(0, 1000),
+      !!orderId,
+      shadeName,
+      skinTone,
+      undertone,
+      body.sourceChannel,
+      req.user?.email || 'admin',
+      orderId,
+    ]
+  );
+  await recomputeProductRating(product.id);
+  await logAudit(req, 'CREATE_REVIEW', 'REVIEW', id, product.name, `On behalf of ${customerName} via ${body.sourceChannel}`);
+  res.status(201).json({ review: mapReviewRow(inserted.rows[0], product.name) });
 });
 
 router.get('/admin/audit-logs', requireAdmin, async (req: AuthenticatedRequest, res: Response) => {

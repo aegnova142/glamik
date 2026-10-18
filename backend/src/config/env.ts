@@ -6,8 +6,11 @@ import {
   describeOtpChannels,
   devOtpEnabled,
   devOtpRequestedButRefused,
+  firebaseOtpSelected,
   otpDeliveryEnabled,
 } from '../services/messaging.service';
+// Also env-only — no SDK is loaded by reading these.
+import { describeFirebaseReadiness } from '../services/firebaseAuth.service';
 // Pure URL classification — no database connection, no import cycle.
 import { classifyDatabaseTarget } from './databaseTarget';
 
@@ -533,22 +536,45 @@ export function warnOnWeakConfig(): void {
   if (!otpDeliveryEnabled() && !devOtpEnabled()) {
     // Distinguished from "nobody configured it" because the cause and the fix
     // are different: this one is a switch somebody threw on purpose.
+    //
+    // Firebase gets its own wording. The switch still applies — it decides
+    // whether mobile sign-in is OFFERED — but telling a Firebase deployment
+    // that "no SMS will be sent to any provider" describes something that was
+    // never going to happen from this server anyway, and sends whoever reads
+    // it looking for absent SMS credentials.
+    if (firebaseOtpSelected()) {
+      console.warn(
+        '[config] Mobile sign-in is SWITCHED OFF (OTP_DELIVERY_ENABLED is not set) — the sign-in screen ' +
+          'reports itself unavailable and the login button stays disabled. Firebase Phone Auth is selected, so ' +
+          'Google sends the SMS from the browser and this server never carries a code; the switch only decides ' +
+          'whether mobile sign-in is offered. Set OTP_DELIVERY_ENABLED=true to turn it on.'
+      );
+    } else {
+      console.warn(
+        '[config] OTP delivery is SWITCHED OFF (OTP_DELIVERY_ENABLED is not set) — no SMS will be sent ' +
+          'to any provider, and mobile sign-in reports itself unavailable. Set OTP_DELIVERY_ENABLED=true to resume ' +
+          'real delivery, or OTP_DEV_MODE=1 with NODE_ENV=development to test locally via the console.'
+      );
+    }
+  } else if (firebaseOtpSelected() && !channels.sms) {
+    // Switched ON but still unusable. Names each missing piece: this is the
+    // failure that otherwise reaches customers as an enabled button that
+    // cannot work, and it is exactly what a VPS build with an incomplete .env
+    // produces.
+    const { problems } = describeFirebaseReadiness();
     console.warn(
-      '[config] OTP delivery is SWITCHED OFF (OTP_DELIVERY_ENABLED is not set) — no SMS or WhatsApp will be sent ' +
-        'to any provider, and mobile sign-in reports itself unavailable. Set OTP_DELIVERY_ENABLED=true to resume ' +
-        'real delivery, or OTP_DEV_MODE=1 with NODE_ENV=development to test locally via the console.'
+      '[config] Firebase Phone Auth is selected and mobile sign-in is switched ON, but it is NOT ready — ' +
+        'customers cannot sign in with a mobile number:'
     );
-  } else if (!channels.sms && !channels.whatsapp) {
+    for (const problem of problems) console.warn(`[config]   - ${problem}`);
+    console.warn(
+      '[config] The VITE_ values are read at BUILD time, so they must be present before `npm run build` runs, ' +
+        'not only when the server starts.'
+    );
+  } else if (!channels.sms) {
     console.warn(
       '[config] No OTP delivery channel is configured — customers cannot sign in with a mobile number. ' +
-        'Set SMS_PROVIDER (+ its credentials) and/or WHATSAPP_PROVIDER; see .env.example.'
+        'Set SMS_PROVIDER="firebase" and the Firebase values; see .env.example.'
     );
-  } else {
-    if (!channels.sms) {
-      console.warn('[config] SMS OTP is not configured — the sign-in screen will offer WhatsApp only.');
-    }
-    if (!channels.whatsapp) {
-      console.warn('[config] WhatsApp OTP is not configured — the sign-in screen will offer SMS only.');
-    }
   }
 }

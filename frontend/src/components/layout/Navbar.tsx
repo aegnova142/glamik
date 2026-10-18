@@ -489,9 +489,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                           <h4 className="font-serif text-sm text-[#FAF9F6] mt-0.5">Account &amp; Sign In</h4>
                         </div>
 
-                        {/* Signing in and creating an account are the same
-                            step now — one mobile number, one code — so this is
-                            one button rather than two that go to the same place. */}
+                        {/* Two entry points, in order of how most people get
+                            in. Mobile is primary: one number and one code both
+                            signs in and signs up, so it needs no second
+                            button. Creating an account with an email address
+                            is the secondary path, offered as a link rather
+                            than a rival call to action. */}
                         <div className="p-3.5 space-y-2.5">
                           <p className="text-[11px] text-[#9C9689] leading-relaxed">
                             Sign in with your mobile number. New here? Your account is created automatically.
@@ -502,8 +505,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                             className="w-full px-3.5 py-2.5 bg-gradient-to-r from-[#C9972B] to-[#E3B84B] text-[#0B0B0B] text-[10.5px] font-bold tracking-[0.14em] uppercase rounded-full hover:brightness-110 transition-all cursor-pointer flex items-center justify-center gap-2"
                           >
                             <LogIn className="w-3.5 h-3.5" />
-                            Sign In / Create Account
+                            Login / Create Account
                           </button>
+
+                          <p className="text-[10.5px] text-[#9C9689] text-center">
+                            Prefer email?{' '}
+                            <button
+                              onClick={() => closeAccountMenu(() => onOpenAuth?.('register'))}
+                              className="font-semibold text-[#C9972B] hover:text-[#E3B84B] transition-colors cursor-pointer"
+                            >
+                              Create an account
+                            </button>
+                          </p>
                         </div>
 
                         <div className="p-2 space-y-0.5">

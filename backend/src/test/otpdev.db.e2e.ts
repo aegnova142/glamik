@@ -81,7 +81,7 @@ function otpFromConsole(printed: string): string | null {
   return match ? match[1] : null;
 }
 
-/** Stands in for MSG91 so the production-safety cases can prove a REAL send
+/** Stands in for Meta so the production-safety cases can prove a REAL send
  * was attempted without any network traffic. */
 let realProviderCalls = 0;
 globalThis.fetch = (async () => {
@@ -109,6 +109,9 @@ function setMode(nodeEnv: string | undefined, devFlag: string | undefined) {
 const message = (over: Record<string, unknown> = {}) => ({
   phone: '+919876543210',
   otp: '123456',
+  // 'sms' is the only OTP channel there is. No server-side vendor backs it —
+  // Firebase sends the code from the browser — so this suite is about the dev
+  // bypass versus silence, not versus a real vendor.
   method: 'sms' as const,
   expiresInSeconds: 60,
   ...over,
@@ -181,20 +184,22 @@ async function main() {
   // ==========================================
   section('2. Production safety — the bypass is inert, not merely unreported');
 
+  // There is no server-side OTP vendor any more, so "the bypass is off" can no
+  // longer be proved by watching a real send happen. What replaces it is
+  // stronger in the way that matters: in production the code must not be
+  // printed AND nothing may be sent — the channel simply reports unconfigured.
   {
     setMode('production', '1');
-    process.env.SMS_PROVIDER = 'msg91';
-    process.env.MSG91_AUTH_KEY = 'test-authkey-NOT-A-REAL-CREDENTIAL';
-    process.env.MSG91_OTP_TEMPLATE_ID = 'test-template-id';
+    process.env.SMS_PROVIDER = '';
 
     realProviderCalls = 0;
     const { result, printed } = await captureStdout(() => sendOtpMessage(message()));
 
     check('in production the code is NEVER printed', !printed.includes('123456'));
     check('nothing resembling the dev banner is printed', !printed.includes('DEVELOPMENT OTP'));
-    check('the real provider is called instead', realProviderCalls === 1);
-    check('and the send is attributed to the real provider', result.status === 'sent' && result.provider === 'msg91');
-    check('never to the console transport', result.status === 'sent' && result.provider !== 'dev-console');
+    check('nothing is sent — the channel reports unconfigured', result.status === 'unconfigured');
+    check('and it is never attributed to the console transport', result.status !== 'sent');
+    check('no vendor is contacted', realProviderCalls === 0);
   }
 
   {
@@ -203,21 +208,21 @@ async function main() {
     realProviderCalls = 0;
     const { result, printed } = await captureStdout(() => sendOtpMessage(message()));
     check('with NODE_ENV unset the bypass stays off — it fails closed', !printed.includes('123456'));
-    check('and a real send is attempted', realProviderCalls === 1 && result.status === 'sent');
+    check('and nothing is sent in its place', result.status === 'unconfigured');
+    check('with no vendor contacted', realProviderCalls === 0);
   }
 
   {
-    // Production with NO credentials must report unconfigured, never quietly
-    // fall back to printing the code.
+    // Firebase selected: the backend must refuse rather than pretend, because
+    // Google both sends the code and checks it.
     setMode('production', '1');
-    const savedKey = process.env.MSG91_AUTH_KEY;
-    delete process.env.MSG91_AUTH_KEY;
+    process.env.SMS_PROVIDER = 'firebase';
     realProviderCalls = 0;
     const { result, printed } = await captureStdout(() => sendOtpMessage(message()));
-    check('production without credentials reports unconfigured', result.status === 'unconfigured');
+    check('firebase mode refuses a backend send', result.status === 'error');
     check('and still does not print the code', !printed.includes('123456'));
     check('and makes no provider call', realProviderCalls === 0);
-    process.env.MSG91_AUTH_KEY = savedKey;
+    process.env.SMS_PROVIDER = '';
   }
 
   // ==========================================
@@ -239,48 +244,38 @@ async function main() {
   }
 
   {
-    // Dev mode must not depend on credentials existing at all.
+    // Dev mode must not depend on credentials existing at all — and since the
+    // WhatsApp credentials now belong to order notifications, not to OTP,
+    // removing them must make no difference to sign-in either way.
     setMode('development', '1');
     const saved = {
-      provider: process.env.SMS_PROVIDER,
-      key: process.env.MSG91_AUTH_KEY,
-      template: process.env.MSG91_OTP_TEMPLATE_ID,
+      token: process.env.WHATSAPP_ACCESS_TOKEN,
+      phoneId: process.env.WHATSAPP_PHONE_NUMBER_ID,
     };
-    delete process.env.SMS_PROVIDER;
-    delete process.env.MSG91_AUTH_KEY;
-    delete process.env.MSG91_OTP_TEMPLATE_ID;
+    delete process.env.WHATSAPP_ACCESS_TOKEN;
+    delete process.env.WHATSAPP_PHONE_NUMBER_ID;
 
     check('SMS is offered with no credentials whatsoever', channelConfigured('sms') === true);
-    check('so is WhatsApp — the console transport cannot fail', channelConfigured('whatsapp') === true);
 
     const { result, printed } = await captureStdout(() => sendOtpMessage(message()));
     check('and a send still succeeds', result.status === 'sent');
     check('printing the code', printed.includes('123456'));
+    check('attributed to the console, not a vendor', result.status === 'sent' && result.provider === 'dev-console');
 
-    const wa = await captureStdout(() => sendOtpMessage(message({ method: 'whatsapp' })));
-    check('the WhatsApp channel prints too, labelled as such', wa.printed.includes('channel : whatsapp'));
-
-    process.env.SMS_PROVIDER = saved.provider!;
-    process.env.MSG91_AUTH_KEY = saved.key!;
-    process.env.MSG91_OTP_TEMPLATE_ID = saved.template!;
+    if (saved.token) process.env.WHATSAPP_ACCESS_TOKEN = saved.token;
+    if (saved.phoneId) process.env.WHATSAPP_PHONE_NUMBER_ID = saved.phoneId;
   }
 
   {
-    // Turning the flag off must restore normal behaviour in the same process.
+    // Turning the flag off must restore normal behaviour in the same process:
+    // the console stops printing, and nothing silently takes its place.
     setMode('development', undefined);
-    check('with the flag off, present credentials still configure SMS', channelConfigured('sms') === true);
-
-    // ...and the credential requirement is genuinely back, rather than the
-    // previous line passing only because the dev override was still latched.
-    const savedKey = process.env.MSG91_AUTH_KEY;
-    delete process.env.MSG91_AUTH_KEY;
-    check('with the flag off and no credentials, SMS is NOT offered', channelConfigured('sms') === false);
-    process.env.MSG91_AUTH_KEY = savedKey;
 
     realProviderCalls = 0;
-    const { printed } = await captureStdout(() => sendOtpMessage(message()));
+    const { result, printed } = await captureStdout(() => sendOtpMessage(message()));
     check('and the code is no longer printed', !printed.includes('123456'));
-    check('the real provider is used', realProviderCalls === 1);
+    check('with no vendor standing in for the console', realProviderCalls === 0);
+    check('the send reports unconfigured rather than success', result.status === 'unconfigured');
   }
 
   // ==========================================
@@ -314,7 +309,7 @@ async function main() {
     check('with BOTH switches off, nothing is sent', closed.result.status === 'unconfigured');
     check('no provider is contacted', realProviderCalls === 0);
     check('nothing is printed', !closed.printed.includes('123456'));
-    check('and no channel is offered', channelConfigured('sms') === false && channelConfigured('whatsapp') === false);
+    check('and no channel is offered', channelConfigured('sms') === false && channelConfigured('sms') === false);
 
     process.env.OTP_DELIVERY_ENABLED = 'true';
   }

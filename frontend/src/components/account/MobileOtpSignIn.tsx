@@ -17,6 +17,14 @@ import {
   Check,
 } from 'lucide-react';
 import {
+  confirmFirebaseOtp,
+  describeFirebaseError,
+  clearRecaptcha,
+  isFirebaseConfigured,
+  sendFirebaseOtp,
+  RECAPTCHA_CONTAINER_ID,
+} from '@/utils/firebaseAuth';
+import {
   useCustomerAuth,
   OtpDeliveryMethod,
   OtpChannelAvailability,
@@ -93,10 +101,10 @@ function writePersisted(value: PersistedChallenge | null): void {
 interface MobileOtpSignInProps {
   /** Fired once the customer is signed in and the session is stored. */
   onSuccess: (info: { isNewAccount: boolean }) => void;
-  /** Escape hatch to the email + password form. Omitted when that form is
-   * switched off (see LEGACY_EMAIL_AUTH_ENABLED in AuthModal), in which case
-   * no link is rendered and OTP is the only way in. */
-  onUsePassword?: () => void;
+  /** Switches to the email screen. Omitted when email sign-in is switched
+   * off, in which case no link is rendered and the mobile number is the only
+   * way in. */
+  onUseEmail?: () => void;
   remember: boolean;
   onToggleRemember: () => void;
 }
@@ -110,11 +118,23 @@ function formatCountdown(totalSeconds: number): string {
 
 export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
   onSuccess,
-  onUsePassword,
+  onUseEmail,
   remember,
   onToggleRemember,
 }) => {
-  const { fetchOtpChannels, requestOtp, verifyOtp } = useCustomerAuth();
+  const { fetchOtpChannels, requestOtp, verifyOtp, verifyFirebaseToken } = useCustomerAuth();
+
+  /**
+   * Firebase mode is decided by the presence of its public config, not by a
+   * separate flag: the backend only accepts Firebase tokens when it is the
+   * selected provider, so a stale bundle cannot force the path.
+   *
+   * The ConfirmationResult is the Firebase equivalent of our challengeId — it
+   * is what confirm() is called against — and it is held in a ref rather than
+   * state because it is not rendered and must survive a re-render untouched.
+   */
+  const firebaseMode = isFirebaseConfigured();
+  const confirmationRef = useRef<Awaited<ReturnType<typeof sendFirebaseOtp>> | null>(null);
 
   // Restored synchronously so a refresh never flashes the phone step first.
   const restored = useMemo(() => {
@@ -245,7 +265,32 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
       setError(null);
       setNotice(null);
 
-      const result = await requestOtp({ phone, countryCode, method: chosen });
+      if (firebaseMode) {
+        // Google sends the SMS. A fresh verifier is built per attempt inside
+        // sendFirebaseOtp — a spent reCAPTCHA is the usual reason a second
+        // attempt fails with an opaque error.
+        try {
+          confirmationRef.current = await sendFirebaseOtp(`${countryCode}${phone.replace(/\D/g, '')}`);
+        } catch (err) {
+          clearRecaptcha();
+          confirmationRef.current = null;
+          setSending(false);
+          setError(describeFirebaseError(err));
+          if (!isResend) setStep('method');
+          return;
+        }
+      }
+      const result = firebaseMode
+        ? ({
+            success: true,
+            // Firebase owns the real windows; these drive the same countdown
+            // UI the server-side path uses so the screen behaves identically.
+            challengeId: 'firebase',
+            maskedPhone: `${countryCode} ${'*'.repeat(Math.max(0, phone.replace(/\D/g, '').length - 4))}${phone.replace(/\D/g, '').slice(-4)}`,
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            resendAvailableAt: new Date(Date.now() + 60_000).toISOString(),
+          } as Awaited<ReturnType<typeof requestOtp>>)
+        : await requestOtp({ phone, countryCode, method: chosen });
       setSending(false);
 
       if (!result.success) {
@@ -310,7 +355,33 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
       setError(null);
       setNotice(null);
 
-      const result = await verifyOtp({ challengeId, code: value, remember });
+      let result;
+      if (firebaseMode) {
+        const confirmation = confirmationRef.current;
+        if (!confirmation) {
+          setVerifying(false);
+          setError('This sign-in attempt has expired. Please request a new OTP.');
+          setMustResend(true);
+          return;
+        }
+        try {
+          const idToken = await confirmFirebaseOtp(confirmation, value);
+          result = await verifyFirebaseToken({ idToken, phone, countryCode, remember });
+        } catch (err) {
+          setVerifying(false);
+          setError(describeFirebaseError(err));
+          // A wrong code leaves the confirmation usable for another try; an
+          // expired one does not, so only that forces a resend.
+          if (String((err as any)?.code) === 'auth/code-expired') setMustResend(true);
+          else {
+            setCode(Array(OTP_LENGTH).fill(''));
+            window.setTimeout(() => inputsRef.current[0]?.focus(), 50);
+          }
+          return;
+        }
+      } else {
+        result = await verifyOtp({ challengeId, code: value, remember });
+      }
       setVerifying(false);
 
       if (!result.success) {
@@ -426,10 +497,15 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Mount point for Firebase's invisible reCAPTCHA. Renders nothing and
+          takes no space — the widget attaches here and stays hidden — but it
+          must exist in the DOM before sendFirebaseOtp() runs. */}
+      <div id={RECAPTCHA_CONTAINER_ID} />
+
       {noChannelAvailable && (
         <div className="p-2.5 rounded-lg bg-[#0B0B0B]/60 border border-[#E8D5A8]/15 text-[10.5px] text-[#6B6B6B] leading-relaxed">
-          {onUsePassword
-            ? 'OTP sign-in isn’t available right now — please sign in with your email and password instead.'
+          {onUseEmail
+            ? 'Mobile sign-in isn’t available right now — please use your email ID instead.'
             : 'Sign-in is temporarily unavailable. Please try again in a little while, or contact us if it persists.'}
         </div>
       )}
@@ -518,13 +594,13 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
               Continue
             </button>
 
-            {onUsePassword && (
+            {onUseEmail && (
               <button
                 type="button"
-                onClick={onUsePassword}
-                className="w-full text-center text-[11px] text-[#6B6B6B] hover:text-[#FAF9F6] cursor-pointer"
+                onClick={onUseEmail}
+                className="w-full text-center text-[11.5px] font-semibold text-[#C9972B] hover:text-[#E3B84B] transition-colors cursor-pointer"
               >
-                Sign in with email and password instead
+                Use Email ID
               </button>
             )}
 
@@ -646,14 +722,29 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
             transition={{ duration: 0.18 }}
             className="space-y-4"
           >
-            <div className="text-center space-y-1">
+            <div className="text-center space-y-1.5">
               <h3 className="font-serif text-lg text-[#FAF9F6]">Enter the OTP</h3>
-              <p className="text-xs text-[#6B6B6B]">
-                {sentVia === 'whatsapp'
-                  ? 'We sent a verification code to your WhatsApp number'
-                  : 'We sent a verification code to'}
+              {/* The number is shown MASKED. The customer typed it moments ago
+                  so they do not need it read back in full, and a modal left
+                  open on a shared screen should not display it. Edit is the
+                  way back if they got it wrong. */}
+              <p className="text-xs text-[#6B6B6B] leading-relaxed">
+                Please enter the verification code we&rsquo;ve sent you on{' '}
+                <span className="text-[#E8D5A8] font-mono tracking-wide whitespace-nowrap">{maskedPhone}</span>
+                {!succeeded && (
+                  <>
+                    {' '}
+                    <button
+                      type="button"
+                      onClick={resetToPhone}
+                      aria-label="Edit mobile number"
+                      className="font-semibold text-[#C9972B] hover:text-[#E3B84B] underline underline-offset-2 transition-colors cursor-pointer"
+                    >
+                      Edit
+                    </button>
+                  </>
+                )}
               </p>
-              <p className="text-sm text-[#E8D5A8] font-mono tracking-wide">{maskedPhone}</p>
             </div>
 
             {errorBanner}
@@ -749,15 +840,10 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
 
             {!succeeded && (
               <div className="flex items-center justify-center gap-4 pt-1">
-                <button
-                  type="button"
-                  onClick={resetToPhone}
-                  className="text-[11px] text-[#6B6B6B] hover:text-[#FAF9F6] cursor-pointer flex items-center gap-1"
-                >
-                  <ArrowLeft className="w-3 h-3" />
-                  Change number
-                </button>
-                <span className="w-px h-3 bg-[#E8D5A8]/20" />
+                {/* "Change number" used to live here too. Two controls doing
+                    the same thing in one view is a decision the customer has
+                    to make for no reason — Edit sits next to the number it
+                    edits, which is where it is looked for. */}
                 <button
                   type="button"
                   onClick={() => {

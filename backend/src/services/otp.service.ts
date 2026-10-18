@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import type { PoolClient } from 'pg';
 import { pool, JWT_SECRET } from '../db/db';
-import { sendOtpMessage, OtpChannel } from './messaging.service';
+import { sendOtpMessage, OtpChannel, firebaseOtpSelected } from './messaging.service';
 
 // ==========================================
 // OTP ISSUE AND VERIFICATION
@@ -191,7 +191,15 @@ export type IssueResult =
   | { status: 'daily_quota'; retryAfterSeconds: number }
   | { status: 'ip_quota'; retryAfterSeconds: number }
   | { status: 'channel_unconfigured'; method: OtpChannel }
-  | { status: 'delivery_failed'; method: OtpChannel };
+  | { status: 'delivery_failed'; method: OtpChannel }
+  /**
+   * SMS_PROVIDER is "firebase": Google both sends the code and checks it, so
+   * this backend issues nothing. A distinct status rather than reusing
+   * 'channel_unconfigured' because the cause and the fix are different — the
+   * channel IS configured, the client is simply calling the wrong endpoint,
+   * and the route can say so instead of implying a setup problem.
+   */
+  | { status: 'provider_is_client_side'; method: OtpChannel };
 
 export interface IssueOptions {
   phoneE164: string;
@@ -200,6 +208,19 @@ export interface IssueOptions {
 }
 
 export async function issueOtp({ phoneE164, method, ip }: IssueOptions): Promise<IssueResult> {
+  // Bypass before anything else — before the IP quota, before a row is
+  // written, before any code is generated.
+  //
+  // In firebase mode the OTP does not exist on this side at all: the browser
+  // asks Google for it and Google checks it. Generating and storing a code
+  // here would create a second, unused credential and burn the customer's
+  // daily allowance on a message this server never sent. The dev console
+  // transport is bypassed too, so there is no path by which a locally-printed
+  // code could be mistaken for the one Firebase actually sent.
+  if (method === 'sms' && firebaseOtpSelected()) {
+    return { status: 'provider_is_client_side', method };
+  }
+
   // IP is checked outside the per-number lock: it's a different key, and a
   // single attacker rotating numbers would otherwise never contend on it.
   if (ip) {

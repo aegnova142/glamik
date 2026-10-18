@@ -1,5 +1,4 @@
 import express, { Response } from 'express';
-import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { v2 as cloudinary } from 'cloudinary';
 import {
@@ -125,16 +124,38 @@ router.get('/account/profile', requireCustomer, async (req: AuthenticatedCustome
 });
 
 router.put('/account/profile', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
-  const { firstName, lastName, phone, dateOfBirth, gender } = req.body || {};
+  const body = req.body || {};
+  const { firstName, lastName, phone, dateOfBirth, gender, email } = body;
 
+  // Mobile + OTP accounts start with no name and no email, so every field here
+  // is optional on its own. A key that is ABSENT means "leave this alone"; a
+  // key that is present and blank means "clear it". Collapsing those two —
+  // which the previous `String(x || '')` did — is what let a profile save that
+  // never mentioned the phone number wipe a verified one.
+  const supplied = (key: string) => Object.prototype.hasOwnProperty.call(body, key);
+
+  // ------------------------------------------
+  // Name
+  // ------------------------------------------
+  const nameSupplied = supplied('firstName') || supplied('lastName');
   const first = String(firstName || '').trim();
   const last = String(lastName || '').trim();
-  if (!first) return res.status(400).json({ error: 'First name is required.' });
-  if (first.length > 60 || last.length > 60) return res.status(400).json({ error: 'Please enter a shorter name.' });
 
+  if (nameSupplied) {
+    // `name` is NOT NULL, and blanking it would leave the account with no
+    // display name at all. Refused rather than silently ignored, so a customer
+    // who meant to change their name is told why nothing happened.
+    if (!first) return res.status(400).json({ error: 'First name is required.' });
+    if (first.length > 60 || last.length > 60) return res.status(400).json({ error: 'Please enter a shorter name.' });
+  }
+
+  // ------------------------------------------
+  // Phone
+  // ------------------------------------------
+  const phoneSupplied = supplied('phone');
   const rawPhone = String(phone || '').trim();
   let normalizedPhone: string | null = null;
-  if (rawPhone) {
+  if (phoneSupplied && rawPhone) {
     const digits = rawPhone.replace(/\D/g, '');
     const significant = digits.length > 10 ? digits.slice(-10) : digits;
     if (significant.length !== 10 || !/^[6-9]/.test(significant)) {
@@ -143,6 +164,32 @@ router.put('/account/profile', requireCustomer, async (req: AuthenticatedCustome
     normalizedPhone = rawPhone;
   }
 
+  // ------------------------------------------
+  // Email
+  //
+  // The only way an account created by phone can ever get an email: there is
+  // no other endpoint that writes the column. It updates the authenticated
+  // row and never inserts, so adding an email cannot produce a second account.
+  // ------------------------------------------
+  const emailSupplied = supplied('email');
+  let normalizedEmail: string | null = null;
+  if (emailSupplied) {
+    const raw = String(email || '').trim().toLowerCase();
+    if (raw) {
+      // Deliberately permissive — the same shape check the rest of the app
+      // uses. Proof that the address exists comes from the verification mail,
+      // not from a regex.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw) || raw.length > 255) {
+        return res.status(400).json({ error: 'Please enter a valid email address.' });
+      }
+      normalizedEmail = raw;
+    }
+    // else: explicitly cleared — stored as NULL below, never as ''. The UNIQUE
+    // constraint on email is not partial, so two rows holding '' would collide
+    // and the second customer to clear their address would get a 500.
+  }
+
+  const dobSupplied = supplied('dateOfBirth');
   let dob: string | null = null;
   if (dateOfBirth) {
     const raw = String(dateOfBirth).trim();
@@ -161,6 +208,7 @@ router.put('/account/profile', requireCustomer, async (req: AuthenticatedCustome
 
   // Validated against the same list the column's CHECK constraint allows, so
   // a bad value is a 400 rather than a 500 from the database. Empty clears it.
+  const genderSupplied = supplied('gender');
   let normalizedGender: Gender | null = null;
   if (gender) {
     const candidate = String(gender).trim();
@@ -170,21 +218,74 @@ router.put('/account/profile', requireCustomer, async (req: AuthenticatedCustome
     normalizedGender = candidate as Gender;
   }
 
-  // Changing the number invalidates any previous verification of it.
-  const currentRes = await pool.query('SELECT phone, phone_verified FROM customers WHERE id = $1', [req.customer!.id]);
-  const phoneChanged = (currentRes.rows[0]?.phone || null) !== normalizedPhone;
+  const currentRes = await pool.query('SELECT phone, phone_verified, email FROM customers WHERE id = $1', [
+    req.customer!.id,
+  ]);
+  const current = currentRes.rows[0];
+  if (!current) return res.status(404).json({ error: 'Account not found.' });
 
-  // `name` stays the canonical display name every other query already reads,
-  // so it's recomposed here rather than left to drift from first/last.
-  const fullName = [first, last].filter(Boolean).join(' ');
+  // Changing the number invalidates any previous verification of it. Only
+  // meaningful when the field was actually supplied — an absent key leaves
+  // both the number and its verified flag exactly as they were.
+  const phoneChanged = phoneSupplied && (current.phone || null) !== normalizedPhone;
+  const emailChanged = emailSupplied && (current.email || null) !== normalizedEmail;
 
-  await pool.query(
-    `UPDATE customers SET first_name = $1, last_name = $2, name = $3, phone = $4, date_of_birth = $5,
-       gender = $6,
-       phone_verified = CASE WHEN $7 THEN false ELSE phone_verified END
-     WHERE id = $8`,
-    [first, last || null, fullName, normalizedPhone, dob, normalizedGender, phoneChanged, req.customer!.id]
-  );
+  // Nothing to do. Returning the profile unchanged beats an UPDATE that
+  // rewrites every column to its own value.
+  const sets: string[] = [];
+  const values: any[] = [];
+  const push = (fragment: string, value: any) => {
+    values.push(value);
+    sets.push(fragment.replace('?', `$${values.length}`));
+  };
+
+  if (nameSupplied) {
+    // `name` stays the canonical display name every other query already reads,
+    // so it's recomposed here rather than left to drift from first/last.
+    push('first_name = ?', first);
+    push('last_name = ?', last || null);
+    push('name = ?', [first, last].filter(Boolean).join(' '));
+  }
+  if (phoneSupplied) push('phone = ?', normalizedPhone);
+  if (dobSupplied) push('date_of_birth = ?', dob);
+  if (genderSupplied) push('gender = ?', normalizedGender);
+  if (phoneChanged) sets.push('phone_verified = false');
+
+  if (emailChanged) {
+    push('email = ?', normalizedEmail);
+    // A new address has not been proved yet, and any link already in flight
+    // was issued for the previous one — same reasoning as phone_verified
+    // above. Cleared together so a stale token cannot verify a new address.
+    sets.push('email_verified = false');
+    sets.push('email_verification_token = NULL');
+    sets.push('email_verification_expiry = NULL');
+  }
+
+  if (sets.length) {
+    values.push(req.customer!.id);
+    // Guarded before the write so the common case is a clear 409 rather than a
+    // constraint error, and caught below as well because the check and the
+    // write are not atomic — two customers can claim the same address at once.
+    if (emailChanged && normalizedEmail) {
+      const owner = await pool.query('SELECT id FROM customers WHERE email = $1 AND id <> $2', [
+        normalizedEmail,
+        req.customer!.id,
+      ]);
+      if (owner.rows.length) {
+        return res.status(409).json({ error: 'That email address is already in use on another account.' });
+      }
+    }
+
+    try {
+      await pool.query(`UPDATE customers SET ${sets.join(', ')} WHERE id = $${values.length}`, values);
+    } catch (err) {
+      const pgErr = err as { code?: string; constraint?: string };
+      if (pgErr.code === '23505' && String(pgErr.constraint || '').includes('email')) {
+        return res.status(409).json({ error: 'That email address is already in use on another account.' });
+      }
+      throw err;
+    }
+  }
 
   res.json({ profile: await loadProfile(req.customer!.id) });
 });
@@ -269,6 +370,12 @@ router.post(
     const userRes = await pool.query('SELECT email, name, email_verified FROM customers WHERE id = $1', [req.customer!.id]);
     const user = userRes.rows[0];
     if (!user) return res.status(404).json({ error: 'Account not found.' });
+    // Accounts created by mobile + OTP have no email until the customer adds
+    // one. Said plainly here rather than handing a null recipient to the mail
+    // service, which would fail somewhere far less obvious.
+    if (!user.email) {
+      return res.status(400).json({ error: 'Add an email address to your profile first, then verify it.' });
+    }
     if (user.email_verified) return res.json({ success: true, alreadyVerified: true });
 
     const token = crypto.randomBytes(32).toString('hex');
@@ -291,8 +398,9 @@ router.post(
     });
 
     // With no SMTP configured the token comes back in the response so the
-    // flow still completes end to end — the same fallback the existing
-    // forgot-password route already uses.
+    // flow still completes end to end. Safe because reaching this route
+    // already required a valid session: the token only confirms an address on
+    // the caller's own account, it cannot be used to sign in.
     res.json({ success: true, emailSent: sent, verificationToken: sent ? undefined : token });
   }
 );
@@ -329,47 +437,8 @@ router.post('/account/profile/send-phone-verification', requireCustomer, async (
 });
 
 // ==========================================
-// SECURITY — password, sessions, deletion
+// SECURITY — sessions and deletion
 // ==========================================
-
-router.post(
-  '/account/change-password',
-  requireCustomer,
-  rateLimit({ scope: 'account-password', windowMs: 60 * 60 * 1000, max: 10 }),
-  async (req: AuthenticatedCustomerRequest, res: Response) => {
-    const { currentPassword, newPassword } = req.body || {};
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Your current and new passwords are both required.' });
-    }
-    if (String(newPassword).length < 8) {
-      return res.status(400).json({ error: 'Your new password must be at least 8 characters.' });
-    }
-    if (currentPassword === newPassword) {
-      return res.status(400).json({ error: 'Your new password must be different from your current one.' });
-    }
-
-    const userRes = await pool.query('SELECT password_hash, email FROM customers WHERE id = $1', [req.customer!.id]);
-    const user = userRes.rows[0];
-    if (!user || !bcrypt.compareSync(currentPassword, user.password_hash)) {
-      return res.status(401).json({ error: 'Your current password is incorrect.' });
-    }
-
-    await pool.query('UPDATE customers SET password_hash = $1 WHERE id = $2', [
-      bcrypt.hashSync(newPassword, bcrypt.genSaltSync(10)),
-      req.customer!.id,
-    ]);
-
-    // Changing a password signs out every other device — that is the whole
-    // point of changing it. The device that made the change gets a freshly
-    // signed token so it isn't logged out of the screen it's standing on.
-    const tokenVersion = await bumpTokenVersion(req.customer!.id);
-    await deleteAllSessions(req.customer!.id, req.customer!.sessionId);
-    const sessionId = req.customer!.sessionId || (await createSession(req.customer!.id, req));
-    const token = signCustomerToken(req.customer!.id, user.email, tokenVersion, sessionId);
-
-    res.json({ success: true, token });
-  }
-);
 
 function describeDevice(userAgent?: string | null): string {
   const ua = String(userAgent || '');
@@ -437,19 +506,24 @@ router.post('/account/sessions/logout-all', requireCustomer, async (req: Authent
 const ACCOUNT_DELETION_GRACE_DAYS = 7;
 
 router.post('/account/delete', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
-  const { password, confirmation } = req.body || {};
-  // Two independent confirmations: typing the word, and proving it's really
-  // this person at the keyboard. Neither alone is enough.
+  const { confirmation } = req.body || {};
+
+  // This used to demand the account password as a second factor. Accounts are
+  // created by mobile + OTP now and password_hash holds a random value nobody
+  // has ever seen, so that check could not be satisfied by anyone — it did not
+  // make deletion safer, it made it impossible, and erasure is a right rather
+  // than a feature.
+  //
+  // What remains is still two independent things: a session proved by OTP
+  // within its own freshness window, and an explicit typed confirmation that
+  // cannot be produced by a mis-click or a stray request. The grace period
+  // below is the real protection against a deletion the owner did not intend.
   if (String(confirmation || '').trim().toUpperCase() !== 'DELETE') {
     return res.status(400).json({ error: 'Please type DELETE to confirm you want to close your account.' });
   }
 
-  const userRes = await pool.query('SELECT password_hash FROM customers WHERE id = $1', [req.customer!.id]);
-  const user = userRes.rows[0];
-  if (!user) return res.status(404).json({ error: 'Account not found.' });
-  if (!password || !bcrypt.compareSync(password, user.password_hash)) {
-    return res.status(401).json({ error: 'Please enter your current password to confirm.' });
-  }
+  const userRes = await pool.query('SELECT id FROM customers WHERE id = $1', [req.customer!.id]);
+  if (!userRes.rows[0]) return res.status(404).json({ error: 'Account not found.' });
 
   // Scheduled rather than immediate: the account keeps working through the
   // grace window so an accidental or coerced deletion can be undone by the

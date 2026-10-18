@@ -128,7 +128,7 @@ function renderSignIn(props: Partial<React.ComponentProps<typeof MobileOtpSignIn
         onSuccess={onSuccess}
         remember={props.remember ?? true}
         onToggleRemember={onToggleRemember}
-        onUsePassword={props.onUsePassword}
+        onUseEmail={props.onUseEmail}
       />
     </CustomerAuthProvider>
   );
@@ -539,6 +539,156 @@ describe('MobileOtpSignIn', () => {
 
       expect(await screen.findByPlaceholderText('10 digit number')).toBeInTheDocument();
       expect(sessionStorage.getItem('glamirk_otp_challenge')).toBeNull();
+    });
+  });
+
+  /**
+   * The method toggle.
+   *
+   * Two authentication methods share one modal, so the link that moves between
+   * them is the only thing standing between a customer with no mobile number
+   * and a dead end. It is a prop rather than internal state: the modal owns
+   * which screen is showing, and this component only asks to leave.
+   */
+  describe('switching to email', () => {
+    it('offers "Use Email ID" when the email method is available', async () => {
+      mockApi({ channels: { ...ALL_CHANNELS, sms: true, whatsapp: false } });
+      renderSignIn({ onUseEmail: vi.fn() });
+
+      expect(await screen.findByRole('button', { name: /use email id/i })).toBeInTheDocument();
+    });
+
+    it('asks the modal to switch, rather than switching itself', async () => {
+      const user = userEvent.setup();
+      mockApi({ channels: { ...ALL_CHANNELS, sms: true, whatsapp: false } });
+      const onUseEmail = vi.fn();
+      renderSignIn({ onUseEmail });
+
+      await user.click(await screen.findByRole('button', { name: /use email id/i }));
+      expect(onUseEmail).toHaveBeenCalledTimes(1);
+      // Still on the phone screen — the parent decides what happens next.
+      expect(screen.getByPlaceholderText('10 digit number')).toBeInTheDocument();
+    });
+
+    it('hides the link entirely when email sign-in is not on offer', async () => {
+      mockApi({ channels: { ...ALL_CHANNELS, sms: true, whatsapp: false } });
+      renderSignIn();
+
+      await screen.findByPlaceholderText('10 digit number');
+      expect(screen.queryByRole('button', { name: /use email id/i })).not.toBeInTheDocument();
+    });
+
+    it('points at email when no channel can deliver, instead of a dead end', async () => {
+      mockApi({ channels: { ...ALL_CHANNELS, sms: false, whatsapp: false } });
+      renderSignIn({ onUseEmail: vi.fn() });
+
+      expect(await screen.findByText(/use your email id instead/i)).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * The verification screen itself.
+   *
+   * Everything here is about the six boxes and the way out of them. The
+   * mechanics matter more than they look: a customer who mistypes one digit of
+   * a number, or pastes a code from a notification, hits these paths on the
+   * way to signing in, and each of them used to be a dead end in some form.
+   */
+  describe('the verification screen', () => {
+    it('names the number the code went to', async () => {
+      const user = userEvent.setup();
+      mockApi({ request: () => json(200, requestOk()) });
+      renderSignIn();
+      await reachCodeStep(user);
+
+      expect(screen.getByText(/please enter the verification code/i)).toBeInTheDocument();
+      // Masked, not the full number — it is shown back for recognition only.
+      expect(screen.getByText('+91 ******3210')).toBeInTheDocument();
+    });
+
+    it('Edit returns to the phone screen with the number still typed in', async () => {
+      const user = userEvent.setup();
+      mockApi({ request: () => json(200, requestOk()) });
+      renderSignIn();
+      await reachCodeStep(user);
+
+      await user.click(screen.getByRole('button', { name: /edit mobile number/i }));
+
+      const field = await screen.findByPlaceholderText('10 digit number');
+      // The number survives — editing it is the point, retyping it is not.
+      expect(field).toHaveValue(PHONE);
+    });
+
+    it('Edit discards the challenge so a stale one cannot be resumed', async () => {
+      const user = userEvent.setup();
+      mockApi({ request: () => json(200, requestOk()) });
+      renderSignIn();
+      await reachCodeStep(user);
+      expect(sessionStorage.getItem('glamirk_otp_challenge')).not.toBeNull();
+
+      await user.click(screen.getByRole('button', { name: /edit mobile number/i }));
+
+      await screen.findByPlaceholderText('10 digit number');
+      expect(sessionStorage.getItem('glamirk_otp_challenge')).toBeNull();
+    });
+
+    it('keeps Verify disabled until all six digits are present', async () => {
+      const user = userEvent.setup();
+      mockApi({ request: () => json(200, requestOk()) });
+      renderSignIn();
+      await reachCodeStep(user);
+
+      const verify = screen.getByRole('button', { name: /verify/i });
+      expect(verify).toBeDisabled();
+
+      for (let i = 0; i < 5; i++) {
+        await user.type(screen.getByLabelText(`OTP digit ${i + 1}`), String(i + 1));
+      }
+      expect(verify).toBeDisabled();
+    });
+
+    it('spreads a pasted six-digit code across the boxes', async () => {
+      const user = userEvent.setup();
+      mockApi({
+        request: () => json(200, requestOk()),
+        verify: () => json(200, { token: 'jwt.test.token', user: SESSION_USER, isNewAccount: false }),
+        me: () => json(200, { user: SESSION_USER }),
+      });
+      renderSignIn();
+      await reachCodeStep(user);
+
+      const first = screen.getByLabelText('OTP digit 1');
+      first.focus();
+      await user.paste('123456');
+
+      for (let i = 0; i < 6; i++) {
+        expect(screen.getByLabelText(`OTP digit ${i + 1}`)).toHaveValue(String(i + 1));
+      }
+    });
+
+    it('backspace on an empty box steps back to the previous one', async () => {
+      const user = userEvent.setup();
+      mockApi({ request: () => json(200, requestOk()) });
+      renderSignIn();
+      await reachCodeStep(user);
+
+      await user.type(screen.getByLabelText('OTP digit 1'), '1');
+      const second = screen.getByLabelText('OTP digit 2');
+      second.focus();
+      await user.keyboard('{Backspace}');
+
+      expect(screen.getByLabelText('OTP digit 1')).toHaveFocus();
+    });
+
+    it('uses a numeric keypad and offers the SMS code on the first box', async () => {
+      const user = userEvent.setup();
+      mockApi({ request: () => json(200, requestOk()) });
+      renderSignIn();
+      await reachCodeStep(user);
+
+      const first = screen.getByLabelText('OTP digit 1');
+      expect(first).toHaveAttribute('inputMode', 'numeric');
+      expect(first).toHaveAttribute('autoComplete', 'one-time-code');
     });
   });
 });

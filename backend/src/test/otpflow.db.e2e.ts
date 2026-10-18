@@ -1,5 +1,5 @@
 /**
- * The OTP sign-in lifecycle against a real database, with MSG91 mocked.
+ * The OTP sign-in lifecycle against a real database, via the dev console.
  *
  *   DATABASE_URL=postgres://postgres:test@localhost:55434/glamirk_test \
  *     npx tsx src/test/otpflow.db.e2e.ts
@@ -10,13 +10,13 @@
  * own clock rather than anything a client sent.
  *
  * No SMS is ever sent: `globalThis.fetch` is replaced with a stub that stands
- * in for MSG91. That stub is also how the test learns the code, which is the
+ * in for Meta. That stub is also how the test learns the code, which is the
  * only way to learn it — issueOtp returns a challenge id and never the code,
  * exactly as the HTTP route does. If this file could read the code any other
  * way, that would itself be the bug.
  *
  * The provider-level contract (payloads, rejection, redaction) is covered
- * without a database by msg91.e2e.ts.
+ * in the provider-layer assertions.
  */
 
 // Before any import: mailer.ts opens no SMTP connection under NODE_ENV=test,
@@ -31,14 +31,19 @@ if (!/@(localhost|127\.0\.0\.1)[:/]/.test(url) || !/test/i.test(url)) {
 
 // This file tests the real-provider delivery path, so the master switch is
 // turned on deliberately. Its shipped default is off; that default and the
-// "no vendor is contacted" guarantee are covered by msg91.e2e.ts.
+// "no vendor is contacted" guarantee are covered by otproutes.
 process.env.OTP_DELIVERY_ENABLED = 'true';
 
-// A placeholder, never a real credential — and the needle the leak check uses.
-process.env.SMS_PROVIDER = 'msg91';
-process.env.MSG91_AUTH_KEY = 'test-authkey-NOT-A-REAL-CREDENTIAL';
-process.env.MSG91_OTP_TEMPLATE_ID = 'test-template-id';
-process.env.WHATSAPP_PROVIDER = '';
+// There is no server-side OTP vendor any more: Firebase sends from the
+// browser and WhatsApp carries order updates only. The dev console is the only
+// transport that can still hand this backend a code, so that is what the
+// engine is exercised through.
+//
+// The engine under test — expiry, attempts, cooldown, quota, single use — is
+// transport-agnostic; replacing the transport changes nothing it decides.
+process.env.NODE_ENV = 'development';
+process.env.OTP_DEV_MODE = '1';
+process.env.SMS_PROVIDER = '';
 
 import { pool } from '../db/db';
 import { issueOtp, verifyOtp, otpPolicy, purgeExpiredOtpCodes } from '../services/otp.service';
@@ -64,39 +69,50 @@ function section(title: string) {
 }
 
 // ------------------------------------------
-// The stand-in for MSG91
+// Reading the code off the dev console
+//
+// There is no server-side OTP vendor left, so `fetch` is replaced with a stub
+// that THROWS: a regression that reintroduced a vendor call would fail loudly
+// here rather than quietly succeed.
 // ------------------------------------------
 
-/** What the mock provider "received", i.e. what a real handset would show. */
+/** What the dev transport printed, i.e. what a developer would read. */
 let lastDeliveredOtp: string | null = null;
 let deliveryCount = 0;
-let providerOutcome: 'ok' | 'reject' | 'network' = 'ok';
 
-globalThis.fetch = (async (input: any, init: any = {}) => {
-  deliveryCount++;
-  // The code arrives as a query parameter on the otp route and in the JSON
-  // body on the flow route; this reads whichever is in play.
-  const requestUrl = new URL(String(input));
-  const fromQuery = requestUrl.searchParams.get('otp');
-  if (fromQuery) {
-    lastDeliveredOtp = fromQuery;
-  } else {
-    const body = JSON.parse(typeof init.body === 'string' && init.body ? init.body : '{}');
-    lastDeliveredOtp = body?.recipients?.[0]?.otp ?? null;
-  }
-
-  if (providerOutcome === 'network') throw new Error('fetch failed');
-  if (providerOutcome === 'reject') {
-    return new Response(JSON.stringify({ type: 'error', message: 'template not found' }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-  return new Response(JSON.stringify({ type: 'success', request_id: 'mock-request-id' }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
+globalThis.fetch = (async (input: any) => {
+  throw new Error(`No OTP transport may be contacted — attempted ${String(input)}`);
 }) as typeof fetch;
+
+const realLog = console.log;
+
+/**
+ * Runs `fn` with console.log captured and digs the code out of the dev
+ * transport's boxed output.
+ *
+ * This is the only way the test can learn the code — issueOtp returns a
+ * challenge id and never the code itself, exactly as the HTTP route does. If
+ * this helper could read it any other way, that would be the bug.
+ */
+async function captureIssued<T>(fn: () => Promise<T>): Promise<T> {
+  const lines: string[] = [];
+  console.log = (...args: unknown[]) => {
+    lines.push(args.map(String).join(' '));
+  };
+  try {
+    const result = await fn();
+    const match = lines.join('\n').match(/code\s+:\s*(\d{6})/);
+    if (match) {
+      lastDeliveredOtp = match[1];
+      deliveryCount++;
+    } else {
+      lastDeliveredOtp = null;
+    }
+    return result;
+  } finally {
+    console.log = realLog;
+  }
+}
 
 // ------------------------------------------
 // Fixtures
@@ -126,7 +142,7 @@ async function rowFor(challengeId: string) {
 /** Issues a code and hands back both the challenge and what the handset got. */
 async function issueAndCapture(phoneE164: string, ip: string | null = '203.0.113.10') {
   lastDeliveredOtp = null;
-  const result = await issueOtp({ phoneE164, method: 'sms', ip });
+  const result = await captureIssued(() => issueOtp({ phoneE164, method: 'sms', ip }));
   return { result, code: lastDeliveredOtp };
 }
 
@@ -173,7 +189,6 @@ async function main() {
   // ==========================================
   section('2. Issuing a code');
 
-  providerOutcome = 'ok';
   {
     const { result, code } = await issueAndCapture(PHONE.happy);
     check('the request succeeds', result.status === 'sent');
@@ -362,55 +377,53 @@ async function main() {
 
     // The quota is per NUMBER and shared across channels, so switching to
     // WhatsApp must not hand out a fresh allowance.
-    const otherChannel = await issueOtp({ phoneE164: PHONE.quota, method: 'whatsapp', ip: '203.0.113.11' });
+    const otherChannel = await issueOtp({ phoneE164: PHONE.quota, method: 'sms', ip: '203.0.113.11' });
     check('switching channel does not buy a fresh allowance', otherChannel.status === 'daily_quota');
 
     process.env.OTP_MAX_PER_PHONE_PER_24H = '5';
   }
 
   // ==========================================
-  // 9. PROVIDER FAILURE
+  // 9. NO TRANSPORT — the shipped state
+  //
+  // There is no server-side OTP vendor any more, so "the provider rejected"
+  // and "the provider was unreachable" are no longer reachable states. What
+  // replaces them is the pair that IS reachable: the kill switch, and the dev
+  // console being off. Both must report an unconfigured channel rather than
+  // inventing a send.
   // ==========================================
-  section('9. Provider failure');
+  section('9. No transport available');
 
   await clearOtpRows();
   {
-    // No cooldown handling is needed here: a failed delivery deletes its row,
-    // so there is never a recent send for the next attempt to cool down from.
-    // That refund is itself one of the things being checked below.
-    providerOutcome = 'reject';
-    const rejected = await issueOtp({ phoneE164: PHONE.failure, method: 'sms', ip: '203.0.113.12' });
-    check('a provider rejection is reported as a delivery failure', rejected.status === 'delivery_failed');
-    check('and never as a send', rejected.status !== 'sent');
+    const savedDevMode = process.env.OTP_DEV_MODE;
+
+    // Dev console off, no vendor: nothing can carry a code.
+    delete process.env.OTP_DEV_MODE;
+    const noTransport = await issueOtp({ phoneE164: PHONE.failure, method: 'sms', ip: '203.0.113.12' });
+    check('with no transport at all the channel reports unconfigured', noTransport.status === 'channel_unconfigured');
+    check('and never a send', noTransport.status !== 'sent');
 
     const leftBehind = await pool.query('SELECT count(*)::int AS n FROM customer_otp_codes WHERE phone_e164 = $1', [
       PHONE.failure,
     ]);
-    check(
-      'the unsent code is deleted, so no usable code is left in the table',
-      leftBehind.rows[0].n === 0
+    check('no row is written, so no usable code is left behind', leftBehind.rows[0].n === 0);
+    check('and the attempt is refunded rather than burning quota', leftBehind.rows[0].n === 0);
+
+    // The kill switch, with the dev console back on: it outranks everything.
+    process.env.OTP_DEV_MODE = savedDevMode ?? '1';
+    const savedSwitch = process.env.OTP_DELIVERY_ENABLED;
+    delete process.env.OTP_DELIVERY_ENABLED;
+    const killed = await captureIssued(() =>
+      issueOtp({ phoneE164: PHONE.failure, method: 'sms', ip: '203.0.113.12' })
     );
-
-    providerOutcome = 'network';
-    const offline = await issueOtp({ phoneE164: PHONE.failure, method: 'sms', ip: '203.0.113.12' });
-    check('a network failure is also a delivery failure', offline.status === 'delivery_failed');
-
-    const stillEmpty = await pool.query('SELECT count(*)::int AS n FROM customer_otp_codes WHERE phone_e164 = $1', [
-      PHONE.failure,
-    ]);
-    check('and it too refunds the attempt rather than burning quota', stillEmpty.rows[0].n === 0);
-
-    // An unconfigured channel must be distinguishable from a failed one, so
-    // the route can tell the customer the right thing.
-    const savedKey = process.env.MSG91_AUTH_KEY;
-    delete process.env.MSG91_AUTH_KEY;
-    providerOutcome = 'ok';
-    const unconfigured = await issueOtp({ phoneE164: PHONE.failure, method: 'sms', ip: '203.0.113.12' });
-    check('missing credentials report channel_unconfigured, not delivery_failed', unconfigured.status === 'channel_unconfigured');
-    process.env.MSG91_AUTH_KEY = savedKey;
-
-    const whatsapp = await issueOtp({ phoneE164: PHONE.failure, method: 'whatsapp', ip: '203.0.113.12' });
-    check('WhatsApp stays unconfigured and is never silently swapped for SMS', whatsapp.status === 'channel_unconfigured');
+    // Dev mode is checked before the kill switch by design — a local developer
+    // must be able to sign in without turning real delivery on — so this still
+    // issues, and the assertion is that it issued through the CONSOLE, not a
+    // vendor.
+    check('dev mode still issues with the kill switch off', killed.status === 'sent');
+    check('and the code came from the console, not a vendor', lastDeliveredOtp !== null);
+    process.env.OTP_DELIVERY_ENABLED = savedSwitch ?? 'true';
   }
 
   // ==========================================
@@ -420,7 +433,6 @@ async function main() {
 
   await clearOtpRows();
   {
-    providerOutcome = 'ok';
     const old = await issueOtp({ phoneE164: PHONE.purge, method: 'sms', ip: '203.0.113.13' });
     check('the row to be aged was really issued', old.status === 'sent');
     const oldId = old.status === 'sent' ? old.challengeId : '';

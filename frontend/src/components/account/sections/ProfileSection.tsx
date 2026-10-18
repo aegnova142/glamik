@@ -36,6 +36,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
   const [phone, setPhone] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState<Gender | ''>('');
+  const [email, setEmail] = useState('');
   const [dirty, setDirty] = useState(false);
 
   const [saving, setSaving] = useState(false);
@@ -60,6 +61,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
     setPhone(profile.data.phone || '');
     setDateOfBirth(profile.data.dateOfBirth || '');
     setGender(profile.data.gender || '');
+    setEmail(profile.data.email || '');
   }, [profile.data, dirty]);
 
   // A verification link lands on /account/profile?verifyEmail=<token>.
@@ -79,8 +81,14 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
     setError(null);
     setSuccess(null);
 
-    if (!firstName.trim()) {
-      setError('Please enter your first name.');
+    // A name is no longer required to save: accounts created by mobile + OTP
+    // start without one, and someone setting only their date of birth should
+    // not be made to invent a name first. Supplying a BLANK name is still
+    // refused below by the server, which will not overwrite a real name with
+    // nothing — so the field is simply omitted when empty.
+    const trimmedEmail = email.trim();
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError('Please enter a valid email address.');
       return;
     }
     if (phone.trim()) {
@@ -94,8 +102,10 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
 
     setSaving(true);
     const res = await updateProfile({
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
+      // Omitted rather than sent blank — an absent key leaves the stored name
+      // alone, which is what an empty box should mean here.
+      ...(firstName.trim() ? { firstName: firstName.trim(), lastName: lastName.trim() } : {}),
+      email: trimmedEmail,
       phone: phone.trim(),
       dateOfBirth: dateOfBirth || undefined,
       gender,
@@ -241,7 +251,7 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
             <Mail className="w-4 h-4 text-[#C9972B] shrink-0" />
             <div className="min-w-0">
               <span className="text-[10px] font-semibold tracking-[0.14em] uppercase text-[#6B6B6B] block">Email</span>
-              <span className="text-[13px] text-[#121212] truncate block">{data?.email}</span>
+              <span className="text-[13px] text-[#121212] truncate block">{data?.email || 'Not added yet'}</span>
             </div>
           </div>
           {data?.emailVerified ? (
@@ -310,12 +320,18 @@ export const ProfileSection: React.FC<ProfileSectionProps> = ({ showToast, verif
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <AccountField
-              label="Email"
-              htmlFor="profile-email"
-              hint="Your email is your sign-in ID and can't be changed here — contact support to update it."
-            >
-              <input id="profile-email" value={data?.email || ''} disabled className={inputClass} />
+            <AccountField label="Email" htmlFor="profile-email" hint="For order confirmations and receipts">
+              <input
+                id="profile-email"
+                type="email"
+                value={email}
+                placeholder="Not added yet"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setDirty(true);
+                }}
+                className={inputClass}
+              />
             </AccountField>
             <AccountField label="Mobile Number" htmlFor="profile-phone" hint="Used for delivery updates">
               <input

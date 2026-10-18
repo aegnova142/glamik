@@ -4,7 +4,7 @@
  *   DATABASE_URL=postgres://postgres:test@localhost:55434/glamirk_test \
  *     npx tsx src/test/otproutes.db.e2e.ts
  *
- * The service-level suites (otpflow, otpdev, msg91) prove the rules. This one
+ * The service-level suites (otpflow, otpdev) prove the rules. This one
  * proves the HTTP contract on top of them, because that is where several
  * things live that calling the services directly would skip entirely:
  *
@@ -195,9 +195,11 @@ async function main() {
   {
     delete process.env.OTP_DELIVERY_ENABLED;
     delete process.env.OTP_DEV_MODE;
-    process.env.SMS_PROVIDER = 'msg91';
-    process.env.MSG91_AUTH_KEY = 'test-authkey-NOT-A-REAL-CREDENTIAL';
-    process.env.MSG91_OTP_TEMPLATE_ID = 'test-template-id';
+    process.env.SMS_PROVIDER = '';
+    process.env.WHATSAPP_PROVIDER = 'meta';
+    process.env.WHATSAPP_ACCESS_TOKEN = 'test-token-NOT-A-REAL-CREDENTIAL';
+    process.env.WHATSAPP_PHONE_NUMBER_ID = 'test-phone-number-id';
+    process.env.WHATSAPP_OTP_TEMPLATE_NAME = 'test_otp_template';
     providerCalls = 0;
 
     const channels = await api('GET', '/api/customer/auth/otp/channels');
@@ -240,7 +242,7 @@ async function main() {
   //
   // The combination a real misconfiguration would produce: a production
   // server that still carries OTP_DEV_MODE=1 from a copied .env, with
-  // delivery switched off and MSG91 credentials present.
+  // delivery switched off and Meta WhatsApp credentials present.
   //
   // Both halves of this were already covered separately — section 1 proves
   // "delivery off → 503, no vendor" under NODE_ENV=test, and otpdev proves
@@ -251,7 +253,7 @@ async function main() {
   // This block configures its OWN provider credentials rather than inheriting
   // section 1's. Inheriting meant that if section 1 were ever reordered or
   // trimmed, this section would still PASS — but for the wrong reason,
-  // refusing because MSG91 looked unconfigured rather than because the kill
+  // refusing because the provider looked unconfigured rather than because the kill
   // switch stopped it. The assertions would have lost their teeth without
   // anything going red.
   //
@@ -266,15 +268,17 @@ async function main() {
     // Same placeholders section 1 uses. Obviously not credentials, and the
     // mocked fetch means they are never sent anywhere regardless.
     const PLACEHOLDER_AUTH_KEY = 'test-authkey-NOT-A-REAL-CREDENTIAL';
-    const PLACEHOLDER_TEMPLATE_ID = 'test-template-id';
+    const PLACEHOLDER_PROJECT_ID = 'test-template-id';
 
     const TOUCHED = [
       'NODE_ENV',
       'OTP_DEV_MODE',
       'OTP_DELIVERY_ENABLED',
       'SMS_PROVIDER',
-      'MSG91_AUTH_KEY',
-      'MSG91_OTP_TEMPLATE_ID',
+      'WHATSAPP_PROVIDER',
+      'WHATSAPP_ACCESS_TOKEN',
+      'WHATSAPP_PHONE_NUMBER_ID',
+      'WHATSAPP_OTP_TEMPLATE_NAME',
     ];
 
     // Captured before anything is changed. `undefined` means "was absent",
@@ -289,9 +293,11 @@ async function main() {
       process.env.NODE_ENV = 'production';
       process.env.OTP_DEV_MODE = '1';
       delete process.env.OTP_DELIVERY_ENABLED;
-      process.env.SMS_PROVIDER = 'msg91';
-      process.env.MSG91_AUTH_KEY = PLACEHOLDER_AUTH_KEY;
-      process.env.MSG91_OTP_TEMPLATE_ID = PLACEHOLDER_TEMPLATE_ID;
+      process.env.SMS_PROVIDER = '';
+      process.env.WHATSAPP_PROVIDER = 'meta';
+      process.env.WHATSAPP_ACCESS_TOKEN = PLACEHOLDER_AUTH_KEY;
+      process.env.WHATSAPP_PHONE_NUMBER_ID = PLACEHOLDER_PROJECT_ID;
+      process.env.WHATSAPP_OTP_TEMPLATE_NAME = 'test_otp_template';
       providerCalls = 0;
 
       // Stated as an assertion rather than a comment: if this ever stops
@@ -299,7 +305,7 @@ async function main() {
       // because an unconfigured provider refuses too.
       check(
         '[prod] the provider is fully credentialled, so nothing passes by being unconfigured',
-        !!process.env.SMS_PROVIDER && !!process.env.MSG91_AUTH_KEY && !!process.env.MSG91_OTP_TEMPLATE_ID
+        !!process.env.WHATSAPP_PROVIDER && !!process.env.WHATSAPP_ACCESS_TOKEN && !!process.env.WHATSAPP_PHONE_NUMBER_ID
       );
 
       const before = await pool.query('SELECT count(*)::int AS n FROM customer_otp_codes WHERE phone_e164 = $1', [

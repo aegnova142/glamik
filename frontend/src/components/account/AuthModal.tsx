@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { MobileOtpSignIn } from './MobileOtpSignIn';
-import { isGoogleSignInConfigured, requestGoogleAccessToken } from '../../utils/googleAuth';
 import {
   COUNTRY_PHONE_RULES,
   DEFAULT_COUNTRY_CODE,
@@ -37,8 +36,8 @@ import {
  *
  * ON. Mobile + OTP is the primary and default way in, but this stays
  * reachable from a link under the OTP form because of who needs it: an
- * account with no mobile number on it — an old email-only registration, or a
- * Google sign-up — has nothing to send a code to. Removing this form would
+ * account with no mobile number on it — an old email-only registration — has
+ * nothing to send a code to. Removing this form would
  * lock those customers out of accounts that are already theirs, along with
  * their orders, addresses and rewards.
  *
@@ -48,16 +47,6 @@ import {
  * either way — this is a UI switch, not a capability switch.
  */
 const LEGACY_EMAIL_AUTH_ENABLED = true;
-
-/**
- * "Continue with Google".
- *
- * OFF by product decision. Kept rather than deleted so re-enabling it is one
- * line; /auth/google on the backend still works, and any customer who
- * originally signed up through Google can still get in with the email +
- * password form above (via forgot-password) or by adding their mobile number.
- */
-const GOOGLE_SIGN_IN_ENABLED = false;
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -79,7 +68,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialResetToken,
   initialMode,
 }) => {
-  const { customerLogin, customerLoginWithGoogle, customerRegister, requestPasswordReset, resetPassword } = useCustomerAuth();
+  const { customerLogin, customerRegister, requestPasswordReset, resetPassword } = useCustomerAuth();
 
   // Customer Login State — real accounts, backed by Postgres via /api/customer/auth
   // 'otp' — mobile number + one-time code — is where everyone lands. The
@@ -97,9 +86,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [showPasswordChecklist, setShowPasswordChecklist] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [googleComingSoon, setGoogleComingSoon] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleError, setGoogleError] = useState<string | null>(null);
   const [forgotStep, setForgotStep] = useState<'request' | 'reset' | 'done'>('request');
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -198,32 +184,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }, 600);
   };
 
-  const handleGoogleSignIn = async () => {
-    if (!isGoogleSignInConfigured()) {
-      setGoogleComingSoon(true);
-      return;
-    }
-    setGoogleError(null);
-    setGoogleLoading(true);
-    try {
-      const accessToken = await requestGoogleAccessToken();
-      const res = await customerLoginWithGoogle(accessToken, rememberMe);
-      if (!res.success) {
-        setGoogleError(res.error || 'Google sign-in failed.');
-        return;
-      }
-      setCustomerSuccess(true);
-      setTimeout(() => {
-        onCustomerLoginSuccess?.({ name: '', email: '', phone: '' });
-        onClose();
-      }, 500);
-    } catch (err: any) {
-      setGoogleError(err?.message || 'Google sign-in was cancelled.');
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
   const openForgotPassword = () => {
     setCustomerFormMode('forgot');
     setForgotStep('request');
@@ -306,12 +266,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               GLAMIRK ATELIER AUTHENTICATION
             </span>
             <h2 className="font-serif text-2xl text-[#FAF9F6] mt-1 tracking-wider">
-              {customerFormMode === 'forgot' ? 'Reset Your Password' : 'Customer Sign In'}
+              {customerFormMode === 'forgot'
+                ? 'Reset Your Password'
+                : customerFormMode === 'register'
+                  ? 'Create Your Account'
+                  : 'Sign In or Sign Up'}
             </h2>
+            {/* The subtitle names the method in play, so the toggle below has
+                something to visibly change. */}
             <p className="text-xs text-[#6B6B6B] mt-1">
               {customerFormMode === 'forgot'
                 ? 'We’ll help you get back into your account'
-                : 'Access your beauty profile, saved shades, and Privé points'}
+                : customerFormMode === 'otp'
+                  ? 'Enter your mobile number — we’ll send a one-time code'
+                  : 'Continue with your email ID'}
             </p>
           </div>
 
@@ -479,50 +447,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Login / Register mode selector — only meaningful when
-                    there is more than one way in (see LEGACY_EMAIL_AUTH_ENABLED). */}
-                {LEGACY_EMAIL_AUTH_ENABLED && (
-                <div className="flex justify-center gap-4 text-xs pb-2 border-b border-[#E8D5A8]/10">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCustomerFormMode('otp');
-                      setCustomerError(null);
-                    }}
-                    className={`font-semibold pb-1 border-b-2 transition-all cursor-pointer ${
-                      // The password form lives under this same tab, so it
-                      // stays highlighted when the customer switches to it.
-                      customerFormMode === 'otp' || customerFormMode === 'login'
-                        ? 'border-[#C9972B] text-[#C9972B]'
-                        : 'border-transparent text-[#6B6B6B]'
-                    }`}
-                  >
-                    Sign In
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCustomerFormMode('register');
-                      setCustomerError(null);
-                    }}
-                    className={`font-semibold pb-1 border-b-2 transition-all cursor-pointer ${
-                      customerFormMode === 'register'
-                        ? 'border-[#C9972B] text-[#C9972B]'
-                        : 'border-transparent text-[#6B6B6B]'
-                    }`}
-                  >
-                    Create Account
-                  </button>
-                </div>
-                )}
-
                 {!LEGACY_EMAIL_AUTH_ENABLED || customerFormMode === 'otp' ? (
                   <MobileOtpSignIn
                     remember={rememberMe}
                     onToggleRemember={() => setRememberMe(!rememberMe)}
-                    // Omitted entirely when the legacy form is off, which is
-                    // what removes the "use a password instead" link.
-                    onUsePassword={
+                    // Omitted entirely when email sign-in is off, which is
+                    // what removes the "Use Email ID" link.
+                    onUseEmail={
                       LEGACY_EMAIL_AUTH_ENABLED
                         ? () => {
                             setCustomerFormMode('login');
@@ -761,55 +692,40 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </>
                 )}
 
-                {LEGACY_EMAIL_AUTH_ENABLED && (
-                <>
-                {GOOGLE_SIGN_IN_ENABLED && (
-                <>
-                {/* OR divider */}
-                <div className="flex items-center gap-3">
-                  <span className="flex-1 h-px bg-[#E8D5A8]/15" />
-                  <span className="text-[10px] uppercase tracking-wider text-[#6B6B6B]">Or</span>
-                  <span className="flex-1 h-px bg-[#E8D5A8]/15" />
-                </div>
+                {/* Both switches live together under the email form: one moves
+                    between signing in and registering (same method), the other
+                    returns to the mobile number (different method). Keeping the
+                    method toggle in the same place on both screens is what
+                    makes it read as one control rather than two. */}
+                {LEGACY_EMAIL_AUTH_ENABLED && customerFormMode !== 'otp' && (
+                  <div className="space-y-2.5 pt-1">
+                    <p className="text-center text-[11px] text-[#6B6B6B]">
+                      {customerFormMode === 'register' ? 'Already have an account? ' : "Don't have an account? "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomerFormMode(customerFormMode === 'register' ? 'login' : 'register');
+                          setCustomerError(null);
+                        }}
+                        className="font-semibold text-[#C9972B] hover:underline cursor-pointer"
+                      >
+                        {customerFormMode === 'register' ? 'Sign In' : 'Create Account'}
+                      </button>
+                    </p>
 
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  disabled={googleLoading}
-                  className="w-full py-2.5 px-3 bg-[#0B0B0B] hover:bg-[#171717] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] flex items-center justify-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#C9972B">
-                    <path d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.63h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.57-5.17 3.57-8.81z" />
-                    <path d="M12 24c3.24 0 5.95-1.07 7.94-2.92l-3.88-3c-1.08.72-2.45 1.15-4.06 1.15-3.13 0-5.78-2.11-6.73-4.96H1.26v3.1A12 12 0 0 0 12 24z" />
-                    <path d="M5.27 14.27a7.2 7.2 0 0 1 0-4.54v-3.1H1.26a12 12 0 0 0 0 10.74z" />
-                    <path d="M12 4.77c1.77 0 3.35.61 4.6 1.8l3.44-3.44C17.94 1.19 15.24 0 12 0 7.31 0 3.26 2.69 1.26 6.63l4.01 3.1C6.22 6.88 8.87 4.77 12 4.77z" />
-                  </svg>
-                  <span>{googleLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
-                </button>
-                {googleComingSoon && (
-                  <p className="text-[10.5px] text-center text-[#6B6B6B]">Google sign-in is coming soon — please use email for now.</p>
-                )}
-                {googleError && (
-                  <p className="text-[10.5px] text-center text-[#F05A7E]">{googleError}</p>
-                )}
-                </>
-                )}
-
-                <p className="text-center text-[11px] text-[#6B6B6B]">
-                  {customerFormMode === 'register' ? 'Already have an account? ' : "Don't have an account? "}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Leaving registration returns to OTP, the default way in.
-                      setCustomerFormMode(customerFormMode === 'register' ? 'otp' : 'register');
-                      setCustomerError(null);
-                    }}
-                    className="font-semibold text-[#C9972B] hover:underline cursor-pointer"
-                  >
-                    {customerFormMode === 'register' ? 'Sign In' : 'Create Account'}
-                  </button>
-                </p>
-                </>
+                    <div className="pt-2 border-t border-[#E8D5A8]/10">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomerFormMode('otp');
+                          setCustomerError(null);
+                        }}
+                        className="w-full text-center text-[11.5px] font-semibold text-[#C9972B] hover:text-[#E3B84B] transition-colors cursor-pointer"
+                      >
+                        Use Phone Number
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             )}

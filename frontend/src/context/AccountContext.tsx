@@ -84,12 +84,16 @@ interface AccountContextType {
   loadPayments: (force?: boolean) => Promise<void>;
   loadTryOnHistory: (force?: boolean) => Promise<void>;
 
+  /** Every field is optional: an omitted key leaves that column untouched, so
+   * a mobile-only account can fill its profile in one piece at a time. An
+   * empty-string email clears the address. */
   updateProfile: (input: {
-    firstName: string;
+    firstName?: string;
     lastName?: string;
     phone?: string;
     dateOfBirth?: string;
     gender?: Gender | '';
+    email?: string;
   }) => Promise<MutationResult>;
   uploadAvatar: (file: File) => Promise<MutationResult>;
   removeAvatar: () => Promise<MutationResult>;
@@ -110,10 +114,9 @@ interface AccountContextType {
   deleteTryOnEntry: (id: string) => Promise<MutationResult>;
   clearTryOnHistory: () => Promise<MutationResult>;
 
-  changePassword: (currentPassword: string, newPassword: string) => Promise<MutationResult>;
   revokeSession: (sessionId: string) => Promise<MutationResult>;
   logoutAllDevices: () => Promise<MutationResult>;
-  requestAccountDeletion: (password: string, confirmation: string) => Promise<MutationResult & { scheduledFor?: string }>;
+  requestAccountDeletion: (confirmation: string) => Promise<MutationResult & { scheduledFor?: string }>;
   cancelAccountDeletion: () => Promise<MutationResult>;
 
   submitSupportTicket: (input: { topic: string; message: string; orderId?: string }) => Promise<MutationResult>;
@@ -288,11 +291,12 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
   // ------------------------------------------
 
   const updateProfile = async (input: {
-    firstName: string;
+    firstName?: string;
     lastName?: string;
     phone?: string;
     dateOfBirth?: string;
     gender?: Gender | '';
+    email?: string;
   }): Promise<MutationResult> => {
     const res = await customerApiFetch<{ profile: CustomerProfile }>('/api/customer/account/profile', {
       method: 'PUT',
@@ -527,24 +531,6 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
   // Security
   // ------------------------------------------
 
-  const changePassword = async (currentPassword: string, newPassword: string): Promise<MutationResult> => {
-    const res = await customerApiFetch<{ success: boolean; token: string }>('/api/customer/account/change-password', {
-      method: 'POST',
-      body: JSON.stringify({ currentPassword, newPassword }),
-    });
-    if (res.data?.success) {
-      // The server invalidated every token for this account, including the one
-      // this tab is holding — swap in the replacement it issued, or the very
-      // next request would 401 the user out of the screen they just used.
-      if (res.data.token && customerUser) {
-        setCustomerAuth(res.data.token, customerUser, true);
-      }
-      setSessions((prev) => ({ ...prev, loaded: false }));
-      return { success: true };
-    }
-    return { success: false, error: res.error || 'Could not change your password.' };
-  };
-
   const revokeSession = async (sessionId: string): Promise<MutationResult> => {
     const res = await customerApiFetch<{ success: boolean }>(`/api/customer/account/sessions/${sessionId}`, {
       method: 'DELETE',
@@ -570,10 +556,10 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
     return { success: false, error: res.error || 'Could not sign out your other devices.' };
   };
 
-  const requestAccountDeletion = async (password: string, confirmation: string) => {
+  const requestAccountDeletion = async (confirmation: string) => {
     const res = await customerApiFetch<{ success: boolean; scheduledFor: string; profile: CustomerProfile }>(
       '/api/customer/account/delete',
-      { method: 'POST', body: JSON.stringify({ password, confirmation }) }
+      { method: 'POST', body: JSON.stringify({ confirmation }) }
     );
     if (res.data?.success) {
       setProfile({ data: res.data.profile, loading: false, error: null, loaded: true });
@@ -699,7 +685,6 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
     recordTryOn,
     deleteTryOnEntry,
     clearTryOnHistory,
-    changePassword,
     revokeSession,
     logoutAllDevices,
     requestAccountDeletion,

@@ -26,12 +26,13 @@ import {
   X,
   ImageOff,
 } from 'lucide-react';
-import { useFileUpload } from '../../hooks/useFileUpload';
+import { useFileUpload, useUploadsInFlight } from '../../hooks/useFileUpload';
+import { ProductVideosEditor } from './ProductVideosEditor';
 import { useDragReorder } from '../../hooks/useDragReorder';
 import { apiFetch } from '@glamirk/shared/utils/cmsClient';
 import { InventoryPanel, ReadOnlyStockField } from './InventoryPanel';
 import { ShadeEditor } from './ShadeEditor';
-import { validateProductVariants } from '@glamirk/shared/utils/productValidation';
+import { validateProductVariants, validateProductVideos } from '@glamirk/shared/utils/productValidation';
 import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 type ProductImageSlot = 'primary' | 'secondary' | 'detail' | 'texture' | 'lifestyle' | 'swatch';
@@ -72,9 +73,21 @@ export const AdminProducts: React.FC = () => {
 
   const { upload, error: uploadError } = useFileUpload({
     acceptedTypes: ['image/'],
-    maxSizeBytes: 8 * 1024 * 1024,
-    typeErrorMessage: 'Please choose an image file (JPG, PNG, or WebP).',
+    // The server's own limit (MEDIA_MAX_IMAGE_MB, default 20). This used to be
+    // 8 MB, which refused ordinary phone photos before they were even sent.
+    maxSizeBytes: 20 * 1024 * 1024,
+    typeErrorMessage: 'Please choose an image file (JPG, PNG, WebP or AVIF).',
   });
+  // Any upload anywhere in the editor (images, shade images, videos). Save
+  // waits for them: saving mid-upload stored the product without the new file.
+  const uploadsInFlight = useUploadsInFlight();
+  // JSON of the product as it was when the editor opened; null = brand new.
+  const [editBaseline, setEditBaseline] = useState<string | null>(null);
+  const openProductEditor = (product: Product, isNew = false) => {
+    setEditingProduct(product);
+    setEditBaseline(isNew ? null : JSON.stringify(product));
+    setSaveError(null);
+  };
 
   // Product Details & Content — reorder handles for the four dynamic lists.
   // Hooks must run unconditionally every render, so these are declared here
@@ -245,7 +258,7 @@ export const AdminProducts: React.FC = () => {
       relatedProductIds: [],
       completeTheLookProductIds: [],
     };
-    setEditingProduct(newProd);
+    openProductEditor(newProd, true);
   };
 
   const validateProduct = (product: Product): string | null => {
@@ -256,6 +269,8 @@ export const AdminProducts: React.FC = () => {
     // and the two can never drift into disagreeing about what is saveable.
     const variantError = validateProductVariants(product);
     if (variantError) return variantError;
+    const videoError = validateProductVideos(product);
+    if (videoError) return videoError;
     if ((product.benefits || []).some((b) => !b.trim())) {
       return 'Remove empty benefit entries before saving (or fill them in).';
     }
@@ -274,7 +289,7 @@ export const AdminProducts: React.FC = () => {
   };
 
   const handleSaveProduct = async () => {
-    if (!editingProduct) return;
+    if (!editingProduct || uploadsInFlight) return;
     const validationError = validateProduct(editingProduct);
     if (validationError) {
       setSaveError(validationError);
@@ -353,12 +368,18 @@ export const AdminProducts: React.FC = () => {
 
   // If editing a product
   if (editingProduct) {
+    const isDirty = editBaseline === null || JSON.stringify(editingProduct) !== editBaseline;
+    const leaveEditor = () => {
+      if (isDirty && !window.confirm('You have unsaved changes (uploads included). Leave without saving?')) return;
+      setEditingProduct(null);
+    };
     return (
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#171717] border border-[#E8D5A8]/30">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setEditingProduct(null)}
+              onClick={leaveEditor}
+              aria-label="Back to products"
               className="p-2 rounded-lg bg-[#0B0B0B] text-[#E8D5A8] border border-[#E8D5A8]/20 transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -370,14 +391,19 @@ export const AdminProducts: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            {saveError && <span className="text-xs text-[#F05A7E] max-w-xs text-right">{saveError}</span>}
+            {saveError && <span role="alert" className="text-xs text-[#F05A7E] max-w-xs text-right">{saveError}</span>}
+            {!saveError && (uploadsInFlight || isDirty) && !saveSuccess && (
+              <span role="status" className="text-[11px] text-[#F6C177] max-w-xs text-right">
+                {uploadsInFlight ? 'Upload in progress — Save unlocks when it finishes.' : 'Unsaved changes — click Save Product to make them live.'}
+              </span>
+            )}
             <button
               onClick={handleSaveProduct}
-              disabled={isSaving}
+              disabled={isSaving || uploadsInFlight}
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#F05A7E] hover:bg-[#E3B84B] hover:text-[#0B0B0B] text-[#FFFFFF] font-semibold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md disabled:opacity-50"
             >
               {saveSuccess ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-              <span>{saveSuccess ? 'Saved!' : isSaving ? 'Saving...' : 'Save Product'}</span>
+              <span>{saveSuccess ? 'Saved!' : isSaving ? 'Saving...' : uploadsInFlight ? 'Uploading…' : 'Save Product'}</span>
             </button>
           </div>
         </div>
@@ -1014,6 +1040,11 @@ export const AdminProducts: React.FC = () => {
                   </div>
                 );
               })}
+
+              <ProductVideosEditor
+                videos={editingProduct.videos || []}
+                onChange={(videos) => setEditingProduct((prev) => (prev ? { ...prev, videos } : prev))}
+              />
             </div>
 
             {/* Card Button Visibility */}
@@ -1327,7 +1358,7 @@ export const AdminProducts: React.FC = () => {
                   </td>
                   <td className="p-4 text-right space-x-1.5">
                     <button
-                      onClick={() => setEditingProduct(p)}
+                      onClick={() => openProductEditor(p)}
                       className="px-2.5 py-1.5 bg-[#0B0B0B] hover:bg-[#C9972B] hover:text-[#0B0B0B] border border-[#E8D5A8]/30 rounded text-xs font-semibold transition-colors cursor-pointer"
                     >
                       Edit

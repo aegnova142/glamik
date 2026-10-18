@@ -18,3 +18,5 @@ export {
   heroTextAlignClasses,
 } from './heroSlideLayout';
 export type { ResolvedHeroLayout } from './heroSlideLayout';
+export { LivePrivilegesPopupView } from './LivePrivilegesPopupView';
+export type { LivePrivilegesPopupViewProps } from './LivePrivilegesPopupView';

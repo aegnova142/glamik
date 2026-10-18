@@ -85,9 +85,12 @@ jobs:
 
             # Fail loudly if the app didn't actually come up, instead of
             # reporting a green deploy over a site that is down.
-            sleep 5
-            curl -fsS http://127.0.0.1:3000/api/health > /dev/null \
-              || { echo "Health check FAILED after deploy"; pm2 logs glamirk-beauty --lines 40 --nostream; exit 1; }
+            # Boot takes ~5s (env + DB schema check), so retry for up to 60s.
+            for i in $(seq 1 30); do
+              curl -fsS http://127.0.0.1:3000/api/health > /dev/null && break
+              [ "$i" = 30 ] && { echo "Health check FAILED after deploy"; pm2 logs glamirk-beauty --lines 40 --nostream; exit 1; }
+              sleep 2
+            done
 
             echo "Deployment completed successfully!"
           EOF

@@ -91,10 +91,17 @@ export const ShadeSelector: React.FC<ShadeSelectorProps> = ({
         })}
       </div>
 
-      {/* Shade description */}
-      <p className="text-xs text-[#6B6B6B] bg-[#FCE8ED] p-3 rounded-2xl border border-[#E8D5A8] leading-relaxed">
-        {selectedShade.description}
-      </p>
+      {/* Shade description: the short line if the admin wrote one, else the
+          colour description (clamped — its full text is in Product Story). */}
+      {(selectedShade.shortDescription || selectedShade.description) && (
+        <p
+          className={`text-xs text-[#6B6B6B] bg-[#FCE8ED] p-3 rounded-2xl border border-[#E8D5A8] leading-relaxed whitespace-pre-line ${
+            selectedShade.shortDescription ? '' : 'line-clamp-3'
+          }`}
+        >
+          {selectedShade.shortDescription || selectedShade.description}
+        </p>
+      )}
 
       {status !== 'in-stock' && (
         <p className={`text-[11px] font-bold ${status === 'out-of-stock' ? 'text-[#F05A7E]' : 'text-[#C9972B]'}`}>

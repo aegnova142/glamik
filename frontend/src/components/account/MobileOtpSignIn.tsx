@@ -14,7 +14,9 @@ import {
   Loader2,
   ShieldCheck,
   AlertCircle,
-  Check,
+  ArrowRight,
+  ChevronDown,
+  Globe,
 } from 'lucide-react';
 import {
   confirmFirebaseOtp,
@@ -216,6 +218,7 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
 
   const [code, setCode] = useState<string[]>(() => Array(OTP_LENGTH).fill(''));
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
+  const phoneInputRef = useRef<HTMLInputElement | null>(null);
 
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -279,8 +282,10 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
 
   const fullNumberForDisplay = useMemo(() => `${countryCode} ${phone}`, [countryCode, phone]);
 
-  // Focus the first box when resuming a restored challenge.
+  // Focus the number field (without scrolling the header out of view on
+  // short screens), or the first box when resuming a restored challenge.
   useEffect(() => {
+    if (step === 'phone') phoneInputRef.current?.focus({ preventScroll: true });
     if (step === 'code') window.setTimeout(() => inputsRef.current[0]?.focus(), 50);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -522,6 +527,7 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
     // clearing it here would empty the field the customer came back to fix.
     writePersisted(null);
     setStep('phone');
+    window.setTimeout(() => phoneInputRef.current?.focus({ preventScroll: true }), 250);
     setError(null);
     setNotice(null);
     setMustResend(false);
@@ -538,9 +544,9 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
   const errorBanner = error && (
     <div
       role="alert"
-      className="flex items-start gap-2 p-2.5 rounded bg-[#F05A7E]/20 text-[#F05A7E] border border-[#F05A7E]/30 text-xs"
+      className="flex items-start gap-2 p-3 rounded-[var(--auth-radius-control)] bg-[var(--auth-banner-bg)] text-[var(--auth-error)] border border-[var(--auth-banner-border)] text-sm"
     >
-      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+      <AlertCircle className="w-4 h-4 shrink-0 mt-px" />
       <span>{error}</span>
     </div>
   );
@@ -548,28 +554,43 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
   const noticeBanner = notice && !error && (
     <div
       role="status"
-      className="flex items-start gap-2 p-2.5 rounded bg-[#C9972B]/15 text-[#E8D5A8] border border-[#C9972B]/30 text-xs"
+      className="flex items-start gap-2 p-3 rounded-[var(--auth-radius-control)] bg-[#C9972B]/10 text-[var(--auth-gold-soft)] border border-[#C9972B]/40 text-sm"
     >
-      <CheckCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+      <CheckCircle className="w-4 h-4 shrink-0 mt-px" />
       <span>{notice}</span>
     </div>
   );
 
   const primaryButtonClass =
-    'w-full py-3 bg-[#C9972B] hover:bg-[#E3B84B] text-[#0B0B0B] font-bold text-xs uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2';
+    'auth-cta w-full h-14 sm:h-16 flex items-center justify-center gap-3 text-[16px] sm:text-[19px] font-medium uppercase tracking-[0.08em] cursor-pointer';
+
+  const inlinePhoneError = step === 'phone' && error;
 
   return (
     <div className="space-y-4">
-      {/* Mount point for Firebase's invisible reCAPTCHA. Renders nothing and
-          takes no space — the widget attaches here and stays hidden — but it
-          must exist in the DOM before sendFirebaseOtp() runs. */}
-      <div id={RECAPTCHA_CONTAINER_ID} />
+        {/* Mount point for Firebase's invisible reCAPTCHA. Renders nothing and
+            takes no space — the widget attaches here and stays hidden — but it
+            must exist in the DOM before sendFirebaseOtp() runs. */}
+        <div id={RECAPTCHA_CONTAINER_ID} />
 
-      {noChannelAvailable && (
-        <div className="p-2.5 rounded-lg bg-[#0B0B0B]/60 border border-[#E8D5A8]/15 text-[10.5px] text-[#6B6B6B] leading-relaxed">
-          {onUseEmail
-            ? 'Mobile sign-in isn’t available right now — please use your email ID instead.'
-            : 'Sign-in is temporarily unavailable. Please try again in a little while, or contact us if it persists.'}
+      {(noChannelAvailable || step === 'phone') && (
+        <div
+          // Space is reserved while channel availability loads, so the form
+          // doesn't jump — but nothing is claimed until the server answers.
+          className={`flex items-center gap-4 px-4 sm:px-[18px] py-4 rounded-[var(--auth-radius-control)] border border-[var(--auth-banner-border)] bg-[linear-gradient(90deg,rgb(240_90_126/0.09),rgb(240_90_126/0.03))] ${
+            channels === null ? 'invisible' : ''
+          }`}
+        >
+          <span className="grid place-items-center w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-full bg-[radial-gradient(circle_at_35%_30%,#A8355C,#5E1630)] text-[#FCE8ED]">
+            {noChannelAvailable ? <AlertCircle className="w-5 h-5" /> : <Phone className="w-5 h-5" strokeWidth={2} />}
+          </span>
+          <p className="text-[14px] sm:text-[17px] leading-[1.5] text-[var(--auth-text)]">
+            {noChannelAvailable
+              ? onUseEmail
+                ? 'OTP sign-in isn’t available right now — please use your email ID instead.'
+                : 'Sign-in is temporarily unavailable. Please try again in a little while, or contact us if it persists.'
+              : 'OTP sign-in is available right now — please sign in with your mobile number. No password needed.'}
+          </p>
         </div>
       )}
 
@@ -583,52 +604,66 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
             exit={{ opacity: 0, x: -12 }}
             transition={{ duration: 0.18 }}
             onSubmit={handleContinueFromPhone}
-            className="space-y-4"
+            noValidate
+            className="space-y-5"
           >
-            <p className="text-xs text-[#6B6B6B] leading-relaxed">
-              Enter your mobile number and we’ll send you a one-time code. No password needed.
+            <p className="text-[14px] sm:text-[17px] leading-[1.55] text-[var(--auth-text-secondary)] max-w-[548px] -mt-1">
+              Enter your mobile number and we’ll send you a one-time code to sign in automatically.
             </p>
-
-            {errorBanner}
 
             <div>
               <label
                 htmlFor="otp-mobile"
-                className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1"
+                className="block text-[15px] sm:text-[18px] font-medium uppercase tracking-[0.02em] text-[var(--auth-gold)] mb-2.5"
               >
                 Mobile Number
               </label>
-              <div className="flex gap-2">
-                <select
-                  aria-label="Country code"
-                  value={countryCode}
-                  onChange={(e) => {
-                    setCountryCode(e.target.value);
-                    // Re-normalised against the NEW country: a number
-                    // pasted with its old dial code must not keep it.
-                    setPhone((prev) => normalizePhoneInput(prev, e.target.value));
-                    setError(null);
-                  }}
-                  className="shrink-0 px-2 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
-                >
-                  {COUNTRY_PHONE_RULES.filter(
-                    (c) => !channels?.countryCodes?.length || channels.countryCodes.includes(c.code)
-                  ).map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.code} {c.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="relative flex-1">
-                  <Phone className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
+              <div className="flex flex-col min-[420px]:flex-row gap-3 sm:gap-4">
+                <div className="auth-control relative flex items-center w-full min-[420px]:w-[150px] sm:w-[188px] shrink-0">
+                  {countryCode === '+91' ? (
+                    <IndiaFlag className="absolute left-3 w-[30px] h-5 pointer-events-none" />
+                  ) : (
+                    <Globe className="absolute left-3.5 w-5 h-5 text-[var(--auth-gold)] pointer-events-none" strokeWidth={1.5} />
+                  )}
+                  <select
+                    aria-label="Country calling code"
+                    value={countryCode}
+                    onChange={(e) => {
+                      setCountryCode(e.target.value);
+                      // Re-normalised against the NEW country: a number pasted with its
+                        // old dial code must not keep it, and truncating first would
+                        // silently produce a different valid number.
+                        setPhone((prev) => normalizePhoneInput(prev, e.target.value));
+                      setError(null);
+                    }}
+                    className="appearance-none w-full h-full bg-transparent pl-[52px] pr-10 text-[15px] sm:text-[17px] text-[var(--auth-text)] truncate rounded-[inherit] cursor-pointer focus:outline-none"
+                  >
+                    {COUNTRY_PHONE_RULES.filter(
+                      (c) => !channels?.countryCodes?.length || channels.countryCodes.includes(c.code)
+                    ).map((c) => (
+                      <option key={c.code} value={c.code} className="bg-[var(--auth-bg-raised)] text-[var(--auth-text)]">
+                        {c.code} {c.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3.5 w-5 h-5 text-[var(--auth-text)] pointer-events-none" strokeWidth={1.75} />
+                </div>
+                <div className="auth-control relative min-[420px]:flex-1 flex items-center">
+                  <Phone className="absolute left-4 w-[22px] h-[22px] text-[var(--auth-gold)] pointer-events-none" strokeWidth={1.5} />
                   <input
                     id="otp-mobile"
                     type="tel"
                     inputMode="numeric"
-                    autoComplete="tel"
-                    autoFocus
+                    ref={phoneInputRef}
+                    autoComplete="tel-national"
                     required
-                    placeholder={`${activeRule.minDigits} digit number`}
+                    aria-invalid={inlinePhoneError ? true : undefined}
+                    aria-describedby={inlinePhoneError ? 'otp-mobile-error' : undefined}
+                    placeholder={
+                      activeRule.minDigits === activeRule.maxDigits
+                        ? `${activeRule.minDigits} digit mobile number`
+                        : 'Mobile number'
+                    }
                     value={phone}
                     onChange={(e) => {
                       // Strips a pasted dial code and trunk prefix BEFORE
@@ -639,49 +674,55 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                       setError(null);
                       setDailyLimitReached(false);
                     }}
-                    className="w-full pl-9 pr-3 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-sm tracking-wider font-mono text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
+                    className="w-full h-full bg-transparent pl-[60px] pr-4 text-[16px] sm:text-[17px] tracking-[0.08em] tabular-nums text-[var(--auth-text)] placeholder:text-[#A39E97] rounded-[inherit] focus:outline-none"
                   />
                 </div>
               </div>
+              {inlinePhoneError && (
+                <p id="otp-mobile-error" role="alert" className="mt-2 flex items-start gap-2 text-sm text-[var(--auth-error)]">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </p>
+              )}
             </div>
 
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <button
-                type="button"
-                onClick={onToggleRemember}
-                aria-pressed={remember}
-                className={`w-4 h-4 shrink-0 rounded border flex items-center justify-center transition-colors cursor-pointer ${
-                  remember ? 'bg-[#C9972B] border-[#C9972B]' : 'border-[#E8D5A8]/40 bg-[#0B0B0B]'
-                }`}
-              >
-                {remember && <Check className="w-3 h-3 text-[#0B0B0B]" />}
-              </button>
-              <span className="text-[11px] text-[#6B6B6B]">Keep me signed in</span>
+            <label className="flex items-center gap-3 w-fit cursor-pointer select-none">
+              <input type="checkbox" className="auth-check" checked={remember} onChange={onToggleRemember} />
+              <span className="text-[15px] sm:text-[17px] text-[#E4DFD8]">Keep me signed in on this device</span>
             </label>
 
-            <button type="submit" disabled={noChannelAvailable} className={primaryButtonClass}>
-              Continue
+            {/* Muted until the number is valid; still clickable then, so a
+                tap explains what is wrong instead of doing nothing. */}
+            <button
+              type="submit"
+              disabled={noChannelAvailable}
+              data-ready={!validatePhone()}
+              className={primaryButtonClass}
+            >
+              <span>Continue</span>
+              <ArrowRight className="auth-cta-arrow w-6 h-6" strokeWidth={1.5} />
             </button>
 
             {onUseEmail && (
-              <button
-                type="button"
-                onClick={onUseEmail}
-                className="w-full text-center text-[11.5px] font-semibold text-[#C9972B] hover:text-[#E3B84B] transition-colors cursor-pointer"
-              >
-                Use Email ID
-              </button>
+              <>
+                <div className="flex items-center gap-4 pt-1 text-[14px] sm:text-[15px] text-[var(--auth-text-secondary)]">
+                  <span aria-hidden="true" className="flex-1 h-px bg-[var(--auth-divider)]" />
+                  <span>OR</span>
+                  <span aria-hidden="true" className="flex-1 h-px bg-[var(--auth-divider)]" />
+                </div>
+                <button
+                  type="button"
+                  onClick={onUseEmail}
+                  className="auth-focus group block mx-auto px-1 rounded text-[15px] sm:text-[17px] text-[#E4DFD8] hover:text-[var(--auth-text)] transition-colors cursor-pointer"
+                >
+                  Sign in with email{' '}
+                  <span className="text-[var(--auth-gold)] group-hover:underline underline-offset-4">and password instead</span>
+                </button>
+              </>
             )}
 
-            {/* Said before the code is sent, not after: this is the point
-                at which continuing is the agreement. */}
-            <p className="text-center text-[10.5px] text-[#6B6B6B] leading-relaxed">
-              By continuing you confirm you are 18 or older and agree to Glamirk&rsquo;s Terms of Use and
-              Privacy Policy.
-            </p>
-
-            <p className="text-center text-[10.5px] text-[#6B6B6B] leading-relaxed">
-              New here? No need to sign up separately — verifying your number creates your account.
+            <p className="text-center text-[14px] sm:text-[17px] leading-[1.55] text-[#D9D4CD] max-w-[560px] mx-auto">
+              New here? No need to sign up separately — verifying your number creates your account automatically.
             </p>
           </motion.form>
         )}
@@ -701,14 +742,14 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
               <button
                 type="button"
                 onClick={resetToPhone}
-                className="shrink-0 text-[11px] text-[#C9972B] hover:underline cursor-pointer flex items-center gap-1"
+                className="shrink-0 text-xs text-[#C9972B] hover:underline cursor-pointer flex items-center gap-1"
               >
                 <ArrowLeft className="w-3 h-3" />
                 Change
               </button>
             </div>
 
-            <p className="text-[11px] text-[#6B6B6B] font-mono tracking-wide">{fullNumberForDisplay}</p>
+            <p className="text-xs text-[var(--auth-text-secondary)] tabular-nums tracking-wide">{fullNumberForDisplay}</p>
 
             {errorBanner}
             {noticeBanner}
@@ -752,12 +793,12 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                     >
                       {selected && <span className="w-2 h-2 rounded-full bg-[#C9972B]" />}
                     </span>
-                    <Icon className={`w-4 h-4 shrink-0 ${selected ? 'text-[#C9972B]' : 'text-[#6B6B6B]'}`} />
-                    <span className={`text-xs font-semibold ${selected ? 'text-[#FAF9F6]' : 'text-[#6B6B6B]'}`}>
+                    <Icon className={`w-4 h-4 shrink-0 ${selected ? 'text-[#C9972B]' : 'text-[var(--auth-text-secondary)]'}`} />
+                    <span className={`text-xs font-semibold ${selected ? 'text-[#FAF9F6]' : 'text-[var(--auth-text-secondary)]'}`}>
                       {option.emoji} {option.label}
                     </span>
                     {!option.available && (
-                      <span className="ml-auto text-[10px] text-[#6B6B6B] uppercase tracking-wider">Unavailable</span>
+                      <span className="ml-auto text-xs text-[var(--auth-text-secondary)] uppercase tracking-wider">Unavailable</span>
                     )}
                   </button>
                 );
@@ -766,7 +807,7 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
 
             {/* Both channels draw on one daily allowance, so it's worth saying
                 plainly rather than letting someone discover it by switching. */}
-            <p className="text-[10px] text-[#6B6B6B] text-center">
+            <p className="text-xs text-[var(--auth-text-secondary)] text-center">
               SMS and WhatsApp share the same daily OTP limit.
             </p>
 
@@ -774,6 +815,7 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
               type="button"
               onClick={() => void sendOtp(method)}
               disabled={sending || noChannelAvailable || dailyLimitReached}
+              aria-busy={sending}
               className={primaryButtonClass}
             >
               {sending ? (
@@ -846,7 +888,7 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                   onChange={(e) => setDigit(i, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(i, e)}
                   onFocus={(e) => e.currentTarget.select()}
-                  className={`w-11 sm:w-12 py-3 text-center text-lg font-mono rounded-lg bg-[#0B0B0B] border text-[#FAF9F6] focus:outline-none transition-colors disabled:opacity-40 ${
+                  className={`w-11 sm:w-12 py-3 text-center text-lg tabular-nums rounded-lg bg-[#0B0B0B] border text-[#FAF9F6] focus:outline-none transition-colors disabled:opacity-40 ${
                     error
                       ? 'border-[#F05A7E]/60 focus:border-[#F05A7E]'
                       : digit
@@ -865,9 +907,9 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                   OTP expired. Please request a new OTP.
                 </p>
               ) : (
-                <p className="text-xs text-[#6B6B6B]">
+                <p className="text-xs text-[var(--auth-text-secondary)]">
                   OTP expires in{' '}
-                  <span className="font-mono text-[#E8D5A8] tabular-nums">{formatCountdown(secondsLeft)}</span>
+                  <span className="tabular-nums text-[#E8D5A8] tabular-nums">{formatCountdown(secondsLeft)}</span>
                 </p>
               )}
             </div>
@@ -876,6 +918,7 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
               type="button"
               onClick={() => void submitCode(code.join(''))}
               disabled={verifying || succeeded || expired || mustResend || code.join('').length !== OTP_LENGTH}
+              aria-busy={verifying}
               className={primaryButtonClass}
             >
               {succeeded ? (
@@ -897,12 +940,12 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
             </button>
 
             <div className="text-center space-y-1">
-              <p className="text-[11px] text-[#6B6B6B]">Didn’t receive the OTP?</p>
+              <p className="text-xs text-[var(--auth-text-secondary)]">Didn’t receive the OTP?</p>
               <button
                 type="button"
                 onClick={() => void sendOtp(sentVia, { isResend: true })}
                 disabled={!canResend || succeeded}
-                className="text-[11px] font-semibold text-[#C9972B] hover:underline cursor-pointer disabled:text-[#6B6B6B] disabled:no-underline disabled:cursor-not-allowed"
+                className="text-xs font-semibold text-[#C9972B] hover:underline cursor-pointer disabled:text-[var(--auth-text-secondary)] disabled:no-underline disabled:cursor-not-allowed"
               >
                 {sending
                   ? 'Sending…'
@@ -927,7 +970,7 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                     setError(null);
                     setNotice(null);
                   }}
-                  className="text-[11px] text-[#6B6B6B] hover:text-[#FAF9F6] cursor-pointer"
+                  className="text-xs text-[var(--auth-text-secondary)] hover:text-[#FAF9F6] cursor-pointer"
                 >
                   Try another method
                 </button>
@@ -939,3 +982,15 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
     </div>
   );
 };
+
+/** India's tricolour for the default country. Inline so it renders the same
+ * everywhere — Windows has no flag emoji. */
+const IndiaFlag: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} viewBox="0 0 30 20" aria-hidden="true">
+    <rect width="30" height="20" rx="2" fill="#FFFFFF" />
+    <path d="M2 0h26a2 2 0 0 1 2 2v4.67H0V2a2 2 0 0 1 2-2Z" fill="#FF9933" />
+    <path d="M0 13.33h30V18a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-4.67Z" fill="#138808" />
+    <circle cx="15" cy="10" r="2.6" fill="none" stroke="#000080" strokeWidth="0.6" />
+    <circle cx="15" cy="10" r="0.5" fill="#000080" />
+  </svg>
+);

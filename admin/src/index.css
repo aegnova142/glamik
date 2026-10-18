@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* Components shared with the other app (e.g. LivePrivilegesPopupView) live
+   outside this package; scan them so their utility classes are generated. */
+@source "../../shared/src";
 
 @layer base {
   :root {

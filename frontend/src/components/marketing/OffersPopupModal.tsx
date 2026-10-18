@@ -1,107 +1,122 @@
-import React, { useState } from 'react';
-import { CMSOffer } from '@glamirk/shared/types';
-import { X, Tag, Check, Copy, Sparkles } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useEffect, useRef } from 'react';
+import { motion, AnimatePresence, MotionConfig } from 'motion/react';
+import { LivePrivilegesPopupView } from '@glamirk/shared/components';
+import type { LivePrivilegesPopupConfig } from '@glamirk/shared/types';
+import type { LivePrivilegesCard } from '@glamirk/shared/utils/livePrivilegesPopup';
+import { isSafeBannerUrl } from '@glamirk/shared/utils/homeBanners';
 
 interface OffersPopupModalProps {
   isOpen: boolean;
   onClose: () => void;
-  offers: CMSOffer[];
+  config: LivePrivilegesPopupConfig;
+  cards: LivePrivilegesCard[];
+  /** Navigates to the CTA destination (an in-app path or https URL). */
+  onNavigate: (url: string) => void;
 }
 
-export const OffersPopupModal: React.FC<OffersPopupModalProps> = ({ isOpen, onClose, offers }) => {
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+/**
+ * "Live Privileges For You" — the admin-managed popup on Shop the Look.
+ * Content, theme and offer cards all come from the published CMS config;
+ * this component only adds dialog behaviour around the shared view.
+ */
+export const OffersPopupModal: React.FC<OffersPopupModalProps> = ({ isOpen, onClose, config, cards, onNavigate }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
-  const handleCopyCode = (code: string) => {
-    navigator.clipboard.writeText(code);
-    setCopiedCode(code);
-    setTimeout(() => setCopiedCode(null), 2000);
+  // Escape, focus trap, scroll lock, focus return — same contract as the
+  // sign-in dialog.
+  useEffect(() => {
+    if (!isOpen) return;
+    const trigger = document.activeElement as HTMLElement | null;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')
+      ).filter((el) => el.offsetParent !== null);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && (document.activeElement === first || !dialogRef.current.contains(document.activeElement))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    const raf = requestAnimationFrame(() => {
+      dialogRef.current?.querySelector<HTMLElement>('button[aria-label="Close offers"]')?.focus({ preventScroll: true });
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = prevOverflow;
+      if (trigger?.isConnected) trigger.focus();
+    };
+  }, [isOpen]);
+
+  const handleCta = () => {
+    onClose();
+    // Validated on save as well; checked again here because it becomes a
+    // navigation target.
+    if (config.cta.url && isSafeBannerUrl(config.cta.url)) onNavigate(config.cta.url.trim());
   };
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#0B0B0B]/70 backdrop-blur-sm p-4">
+    <MotionConfig reducedMotion="user">
+      <AnimatePresence>
+        {isOpen && (
           <motion.div
+            key="live-privileges"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="absolute inset-0"
-          />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ type: 'tween', duration: 0.2 }}
-            className="relative w-full max-w-lg max-h-[90vh] bg-[#FAF9F6] border border-[#E8D5A8] rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-6"
           >
-            <div className="flex items-center justify-between p-5 border-b border-[#E8D5A8] shrink-0 bg-white">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#F05A7E]" />
-                <h2 className="font-serif text-lg text-[#121212]">Live Privileges For You</h2>
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close offers popup"
-                className="p-1.5 text-[#6B6B6B] hover:text-[#F05A7E] transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-3.5 overflow-y-auto min-h-0">
-              {offers.map((offer) => (
-                <div
-                  key={offer.id}
-                  className="p-4 bg-white border border-[#E8D5A8] hover:border-[#C9972B] transition-colors rounded-lg"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    {offer.tag && (
-                      <span className="text-[9.5px] tracking-widest uppercase font-semibold text-[#C9972B] bg-[#C9972B]/10 px-2 py-0.5 rounded">
-                        {offer.tag}
-                      </span>
-                    )}
-                    {offer.couponCode && (
-                      <button
-                        onClick={() => handleCopyCode(offer.couponCode!)}
-                        className="flex items-center gap-1 font-mono text-xs font-semibold tracking-wider text-[#121212] bg-[#FAF9F6] px-2 py-1 border border-[#E8D5A8] rounded hover:border-[#C9972B] transition-colors cursor-pointer"
-                      >
-                        {copiedCode === offer.couponCode ? (
-                          <Check className="w-3 h-3 text-[#C9972B]" />
-                        ) : (
-                          <Copy className="w-3 h-3" />
-                        )}
-                        {offer.couponCode}
-                      </button>
-                    )}
-                  </div>
-                  <h3 className="font-serif text-base text-[#121212] mt-2">
-                    {offer.publicTitle || offer.name}
-                  </h3>
-                  <p className="text-xs text-[#6B6B6B] mt-1 leading-relaxed">{offer.description}</p>
-                  {offer.minOrderValue > 0 && (
-                    <p className="text-[10.5px] text-[#6B6B6B] mt-1.5 font-mono">
-                      Minimum bag value: ₹{offer.minOrderValue}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="p-4 border-t border-[#E8D5A8] bg-white shrink-0">
-              <button
-                onClick={onClose}
-                className="w-full py-3 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-widest uppercase hover:bg-[#171717] transition-colors cursor-pointer rounded-lg flex items-center justify-center gap-2"
-              >
-                <Tag className="w-3.5 h-3.5 text-[#C9972B]" />
-                Continue Shopping
-              </button>
-            </div>
+            {/* Backdrop: click to close, like the previous popup. */}
+            <div
+              aria-hidden="true"
+              onClick={onClose}
+              className="absolute inset-0"
+              style={{
+                background: `rgba(11, 11, 11, ${config.layout.overlayOpacity})`,
+                backdropFilter: `blur(${config.layout.blurPx}px)`,
+                WebkitBackdropFilter: `blur(${config.layout.blurPx}px)`,
+              }}
+            />
+            <motion.div
+              ref={dialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="live-privileges-title"
+              initial={{ opacity: 0, scale: 0.97, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: 12 }}
+              transition={{ duration: 0.25, ease: [0.2, 0.7, 0.2, 1] }}
+              className="relative w-full flex justify-center max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] overflow-y-auto overscroll-contain rounded-[22px]"
+              style={{ maxWidth: config.layout.maxWidth }}
+            >
+              <LivePrivilegesPopupView
+                config={config}
+                cards={cards}
+                titleId="live-privileges-title"
+                onClose={onClose}
+                onCta={handleCta}
+              />
+            </motion.div>
           </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
+    </MotionConfig>
   );
 };

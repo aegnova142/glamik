@@ -31,7 +31,8 @@ import { ShopTheLookPage } from './components/product/ShopTheLookPage';
 import { WishlistPage } from './components/account/WishlistPage';
 
 // Phase 3 Pages & AI / AR Experiences
-import { FindMyShadePage } from './components/discovery/FindMyShadePage';
+// FIND-MY-SHADE-PAUSED: page switched off for now; restore this import with the route below.
+// import { FindMyShadePage } from './components/discovery/FindMyShadePage';
 import { MyGlamDashboard } from './components/account/MyGlamDashboard';
 import { AccountPage } from './components/account/AccountPage';
 import { VirtualTryOnModal } from './components/discovery/VirtualTryOnModal';
@@ -53,7 +54,9 @@ import { SocialCommerceHub } from './components/social/SocialCommerceHub';
 import { CampaignLandingPage } from './components/marketing/CampaignLandingPage';
 import { PromoBannerPopup } from './components/marketing/PromoBannerPopup';
 import { BeautyQuizModal } from './components/discovery/BeautyQuizModal';
-import { PersonalizedHomeBanner } from './components/home/PersonalizedHomeBanner';
+import { VideoReels } from './components/home/VideoReels';
+// PERSONALIZED-BEAUTY-PAUSED: section switched off for now; restore this import with the home section below.
+// import { PersonalizedHomeBanner } from './components/home/PersonalizedHomeBanner';
 import { TrendingDiscovery } from './components/home/TrendingDiscovery';
 
 // Phase 6 Production, Legal & Resilience Components
@@ -573,10 +576,25 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // FIND-MY-SHADE-PAUSED: the Find My Shade page is switched off for now, so every
+  // remaining "Find My Shade" / "Find My Match" button lands on the Shop page
+  // instead of an empty screen. To restore, put back the original body:
+  //   setCurrentRoute({ page: 'find-my-shade' });
+  //   window.scrollTo({ top: 0, behavior: 'smooth' });
   const navigateToFindMyShade = () => {
-    setCurrentRoute({ page: 'find-my-shade' });
+    setCurrentRoute({ page: 'shop' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // FIND-MY-SHADE-PAUSED: an old bookmark or shared /find-my-shade link would otherwise
+  // render a blank page — send it to the Shop. Delete when restoring.
+  // Replaces the history entry rather than pushing one, so Back can still
+  // leave — pushing here would re-trigger on every popstate.
+  useEffect(() => {
+    if (currentRoute.page !== 'find-my-shade') return;
+    setCurrentRouteState({ page: 'shop' });
+    window.history.replaceState({ route: { page: 'shop' } }, '', routeToPath({ page: 'shop' }));
+  }, [currentRoute.page]);
 
   const navigateToMyGlam = () => {
     setCurrentRoute({ page: 'my-glam' });
@@ -984,7 +1002,10 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#121212] font-sans antialiased selection:bg-[#C9972B] selection:text-white relative">
+    <div className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#121212] font-sans antialiased selection:bg-[#C9972B] selection:text-white relative pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
+      {/* pb on mobile = the fixed MobileBottomNav (h-16 + safe area), so the end of
+          the footer is never hidden behind it. It used to sit on <main> instead,
+          which left an 80px blank band above the footer and none below it. */}
 
       {/* Offline Connectivity Resilience Banner */}
       <OfflineBanner />
@@ -1046,7 +1067,7 @@ function AppContent() {
       />
 
       {/* Main Dynamic View Routing */}
-      <main className="flex-grow pb-20 md:pb-0">
+      <main className="flex-grow">
         
         {/* VIEW 1: HOMEPAGE */}
         {currentRoute.page === 'home' && (
@@ -1079,6 +1100,24 @@ function AppContent() {
               onExploreShop={() => navigateToShop()}
             />
 
+            {/* Watch It. Love It. — admin-managed shoppable videos; renders nothing until enabled with reels */}
+            <VideoReels
+              cartItems={cartItems}
+              onQuickAdd={(product, shade, size) => handleAddToCart(product, shade, size, 1)}
+              onGoToCart={navigateToCart}
+              onSelectProduct={(product) => navigateToProduct(product)}
+              onNavigate={(href) => {
+                // external links open in a new tab; site paths route in-app
+                if (/^https:\/\//i.test(href)) {
+                  window.open(href, '_blank', 'noopener,noreferrer');
+                  return;
+                }
+                const url = new URL(href, window.location.origin);
+                setCurrentRoute(pathToRoute(url.pathname, url.search));
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+
             {/* 3rd: Shop The Look (Curated Beauty Pairings) */}
             <ShopTheLook
               onSelectLook={(look) => navigateToShopTheLook()}
@@ -1091,14 +1130,16 @@ function AppContent() {
             />
 
             {/* 5th: Find Your Perfect Match (Shade Intelligence) */}
+            {/* FIND-MY-SHADE-PAUSED: home teaser for the paused Find My Shade page.
             <ShadeFinderTeaser
               onOpenShadeFinderModal={navigateToFindMyShade}
             />
+            */}
 
             {/* 6th: Frequently Asked Questions */}
             <FaqHomeSection onOpenSupport={navigateToSupport} />
 
-            {/* 7th: Personalize Beauty */}
+            {/* PERSONALIZED-BEAUTY-PAUSED: "Personalized Beauty" home section switched off for now — uncomment to restore.
             <PersonalizedHomeBanner
               beautyProfile={beautyProfile}
               onOpenShadeFinder={navigateToFindMyShade}
@@ -1111,10 +1152,12 @@ function AppContent() {
               onOpenArticle={navigateToArticle}
               onOpenQuiz={() => setIsQuizOpen(true)}
             />
+            */}
 
             {/* 7th: Match Your Shade CTA Banner (just before Footer) */}
-            {/* [Glamik] 2026-10-04 — restyled to match the site's pink "Still have
-                questions?" bar (icon + copy + pill CTA). */}
+            {/* FIND-MY-SHADE-PAUSED: CTA for the paused Find My Shade page — uncomment to restore.
+                [Glamik] 2026-10-04 — restyled to match the site's pink "Still have
+                questions?" bar (icon + copy + pill CTA).
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-24">
               <div className="bg-[#F05A7E] rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-5">
                 <div className="flex items-center gap-4">
@@ -1134,6 +1177,7 @@ function AppContent() {
                 </button>
               </div>
             </div>
+            */}
           </div>
         )}
 
@@ -1192,6 +1236,19 @@ function AppContent() {
             onAddLookToBag={handleAddLookToBag}
             onSelectProduct={(product) => navigateToProduct(product)}
             onOpenShadeFinder={navigateToFindMyShade}
+            wishlist={wishlist}
+            onToggleWishlist={handleToggleWishlist}
+            onNavigate={(url) => {
+              // Site paths go through the router (no reload); full URLs open
+              // in a new tab. Both are validated as safe before they get here.
+              if (url.startsWith('/')) {
+                const q = url.indexOf('?');
+                setCurrentRoute(pathToRoute(q === -1 ? url : url.slice(0, q), q === -1 ? '' : url.slice(q)));
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              } else {
+                window.open(url, '_blank', 'noopener,noreferrer');
+              }
+            }}
           />
         )}
 
@@ -1207,6 +1264,7 @@ function AppContent() {
         )}
 
         {/* VIEW 6: PHASE 3 FIND MY SHADE CONSULTATION */}
+        {/* FIND-MY-SHADE-PAUSED: page switched off for now — uncomment to restore.
         {currentRoute.page === 'find-my-shade' && (
           <FindMyShadePage
             onExploreShop={() => navigateToShop()}
@@ -1218,6 +1276,7 @@ function AppContent() {
             wishlist={wishlist}
           />
         )}
+        */}
 
         {/* VIEW 6b: CUSTOMER ACCOUNT — every /account/* URL. Renders nothing
             until the session is known; the guard effect above opens sign-in
@@ -1587,7 +1646,7 @@ function AppContent() {
         <button
           id="glamirk-beauty-assistant-trigger"
           onClick={() => setIsAssistantOpen(true)}
-          className="group relative flex items-center gap-2 px-3.5 py-3 sm:px-4 sm:py-3.5 bg-white/95 text-[#121212] border border-[#E8D5A8] rounded-full shadow-[0_8px_25px_rgba(240, 90, 126,0.18)] hover:border-[#F05A7E] hover:bg-[#FCE8ED] transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md"
+          className="group relative flex items-center gap-2 px-3.5 py-3 sm:px-4 sm:py-3.5 bg-white/95 text-[#121212] border border-[#E8D5A8] rounded-full shadow-[0_8px_25px_rgba(240,90,126,0.18)] hover:border-[#F05A7E] hover:bg-[#FCE8ED] transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md"
           title="Open Glamirk Beauty Assistant"
         >
           <div className="relative">

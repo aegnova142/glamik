@@ -86,11 +86,11 @@ export const CategoryGridSection: React.FC<CategoryGridSectionProps> = ({
   const visibleCategories = showAll ? CATEGORIES : CATEGORIES.slice(0, CARDS_PER_ROW);
   const hasMore = CATEGORIES.length > CARDS_PER_ROW;
   return (
-    <section id="shop-by-category-section" className="py-14 sm:py-20 bg-white border-b border-[#E8D5A8]">
+    <section id="shop-by-category-section" className="home-section bg-white border-b border-[#E8D5A8]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* Section Header */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 sm:mb-12 gap-4">
+        <div className="home-section-header flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#FCE8ED] border border-[#E8D5A8] rounded-full mb-2">
               <Sparkles className="w-3.5 h-3.5 text-[#F05A7E]" />

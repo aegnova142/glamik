@@ -39,6 +39,7 @@ const AccountMenuLink: React.FC<{ label: string; icon: React.ElementType; onClic
   onClick,
 }) => (
   <button
+    role="menuitem"
     onClick={onClick}
     className="w-full text-left px-4 sm:px-5 min-h-[48px] sm:min-h-[44px] text-[13.5px] text-[#F5F1EA] hover:text-white hover:bg-white/[0.035] flex items-center justify-between border-b border-[#34312D] last:border-b-0 transition-colors duration-200 cursor-pointer group outline-none focus-visible:bg-white/[0.05] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#C9972B]"
   >
@@ -409,6 +410,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="button"
                 onClick={() => setAccountMenuOpen(!accountMenuOpen)}
                 aria-expanded={accountMenuOpen}
+                aria-haspopup="menu"
                 aria-controls="nav-account-menu"
                 className={`p-2 rounded-full hover:bg-[#FCE8ED] transition-colors cursor-pointer flex items-center gap-1 outline-none focus-visible:ring-2 focus-visible:ring-[#C9972B] ${
                   accountMenuOpen || currentRoute.page === 'account' || currentRoute.page === 'my-glam'
@@ -452,6 +454,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {accountMenuOpen && (
                   <motion.div
                     id="nav-account-menu"
+                    // The trigger advertises aria-haspopup="menu" and the rows
+                    // are role="menuitem"; without this the items are orphaned
+                    // and a screen reader announces a list of loose buttons.
+                    role="menu"
                     aria-label="Account menu"
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -530,7 +536,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <div className="mx-5 h-px bg-[#C9972B]/30" />
 
                         <div className="p-2">
+                          {/* Styled apart from AccountMenuLink — it is the one
+                              destructive row — but it is still a menu item. */}
                           <button
+                            role="menuitem"
                             onClick={() => closeAccountMenu(() => onCustomerLogout?.())}
                             className="w-full text-left px-3 min-h-[44px] text-[13px] rounded-lg hover:bg-white/[0.035] text-[#F05A7E] flex items-center gap-3.5 transition-colors cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-[#F05A7E]"
                           >

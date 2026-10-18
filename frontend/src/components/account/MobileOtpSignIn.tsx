@@ -659,9 +659,13 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                     required
                     aria-invalid={inlinePhoneError ? true : undefined}
                     aria-describedby={inlinePhoneError ? 'otp-mobile-error' : undefined}
+                    // Keeps main's fixed-vs-variable-length branch, with the
+                    // wording we shipped: the field already sits behind a
+                    // "Mobile Number" label, so repeating the word here reads
+                    // as a stutter — and it is the copy the suite pins.
                     placeholder={
                       activeRule.minDigits === activeRule.maxDigits
-                        ? `${activeRule.minDigits} digit mobile number`
+                        ? `${activeRule.minDigits} digit number`
                         : 'Mobile number'
                     }
                     value={phone}
@@ -710,16 +714,26 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                   <span>OR</span>
                   <span aria-hidden="true" className="flex-1 h-px bg-[var(--auth-divider)]" />
                 </div>
+                {/* "Use Email ID", not "sign in with email and password":
+                    the email screen only ever signs in, and naming the method
+                    rather than the credential keeps it parallel with the
+                    "Use Phone Number" control that comes back the other way. */}
                 <button
                   type="button"
                   onClick={onUseEmail}
                   className="auth-focus group block mx-auto px-1 rounded text-[15px] sm:text-[17px] text-[#E4DFD8] hover:text-[var(--auth-text)] transition-colors cursor-pointer"
                 >
-                  Sign in with email{' '}
-                  <span className="text-[var(--auth-gold)] group-hover:underline underline-offset-4">and password instead</span>
+                  <span className="text-[var(--auth-gold)] group-hover:underline underline-offset-4">Use Email ID</span>
                 </button>
               </>
             )}
+
+            {/* Said before the code is sent, not after: this is the point at
+                which continuing is the agreement. */}
+            <p className="text-center text-[14px] sm:text-[17px] leading-[1.55] text-[#D9D4CD] max-w-[560px] mx-auto">
+              By continuing you confirm you are 18 or older and agree to Glamirk&rsquo;s Terms of Use and
+              Privacy Policy.
+            </p>
 
             <p className="text-center text-[14px] sm:text-[17px] leading-[1.55] text-[#D9D4CD] max-w-[560px] mx-auto">
               New here? No need to sign up separately — verifying your number creates your account automatically.

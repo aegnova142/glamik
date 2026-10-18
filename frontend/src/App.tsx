@@ -853,9 +853,14 @@ function AppContent() {
     if (res.data) {
       setSavedAddresses(res.data.addresses || []);
       showToast('Address removed');
-    } else {
-      showToast(res.error || 'Could not remove this address.');
+      return { success: true };
     }
+    // Reported back as well as toasted: the card needs to know it failed so
+    // it can stay on screen instead of disappearing on a delete that did not
+    // happen.
+    const error = res.error || 'Could not remove this address.';
+    showToast(error);
+    return { success: false, error };
   };
 
   const handleEditAddress = async (addressId: string, address: Omit<Address, 'id'>) => {

@@ -6,11 +6,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  User,
   X,
   Mail,
   Lock,
-  Phone,
   ArrowRight,
   CheckCircle,
   Eye,
@@ -20,11 +18,6 @@ import {
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { MobileOtpSignIn } from './MobileOtpSignIn';
 import {
-  COUNTRY_PHONE_RULES,
-  DEFAULT_COUNTRY_CODE,
-  sanitizePhoneDigits,
-  getCountryRule,
-  validatePhoneNumber,
   normalizeEmail,
   isValidEmail,
   getPasswordRequirements,
@@ -68,23 +61,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialResetToken,
   initialMode,
 }) => {
-  const { customerLogin, customerRegister, requestPasswordReset, resetPassword } = useCustomerAuth();
+  const { customerLogin, requestPasswordReset, resetPassword } = useCustomerAuth();
 
   // Customer Login State — real accounts, backed by Postgres via /api/customer/auth
   // 'otp' — mobile number + one-time code — is where everyone lands. The
   // other three are reached from the tabs and the "use a password instead"
   // link, and disappear entirely when LEGACY_EMAIL_AUTH_ENABLED is false.
-  const [customerFormMode, setCustomerFormMode] = useState<'otp' | 'login' | 'register' | 'forgot'>('otp');
-  const [customerName, setCustomerName] = useState('');
-  const [customerCountryCode, setCustomerCountryCode] = useState(DEFAULT_COUNTRY_CODE);
-  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerFormMode, setCustomerFormMode] = useState<'otp' | 'login' | 'forgot'>('otp');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPassword, setCustomerPassword] = useState('');
-  const [customerConfirmPassword, setCustomerConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [showPasswordChecklist, setShowPasswordChecklist] = useState(false);
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [forgotStep, setForgotStep] = useState<'request' | 'reset' | 'done'>('request');
   const [resetToken, setResetToken] = useState('');
@@ -99,8 +85,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [customerLoading, setCustomerLoading] = useState(false);
   const [customerError, setCustomerError] = useState<string | null>(null);
 
-  const activePhoneRule = getCountryRule(customerCountryCode);
-  const passwordRequirements = getPasswordRequirements(customerPassword);
 
   useEffect(() => {
     if (isOpen && initialResetToken) {
@@ -116,9 +100,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // a new password shouldn't be dropped onto the registration form.
   useEffect(() => {
     if (isOpen && initialMode && !initialResetToken) {
-      // Callers still ask for 'login'; that now means the OTP form, which is
-      // what signing in is. Nothing outside this component had to change.
-      setCustomerFormMode(initialMode === 'login' ? 'otp' : initialMode);
+      // BOTH entry points land on the mobile number. Verifying a number signs
+      // an existing customer in and creates the account if the number is new,
+      // so "Sign Up" has nothing extra to ask for — opening a name/password
+      // form there would demand four fields to do what one does.
+      //
+      // There is NO email-registration path in this UI. The email screen signs
+      // in only, for accounts that predate OTP; customerRegister and the
+      // backend's /auth/register are left in place but nothing here calls
+      // them. A new customer registers by verifying a mobile number.
+      setCustomerFormMode('otp');
       setCustomerError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -136,35 +127,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (customerFormMode === 'register') {
-      const phoneCheck = validatePhoneNumber(customerCountryCode, customerPhone);
-      if (!phoneCheck.valid) {
-        setCustomerError(phoneCheck.error || 'Invalid mobile number.');
-        return;
-      }
-      if (!isPasswordValid(customerPassword)) {
-        setShowPasswordChecklist(true);
-        setCustomerError('Your password doesn’t meet all requirements yet — check the list below.');
-        return;
-      }
-      if (customerPassword !== customerConfirmPassword) {
-        setCustomerError('Passwords do not match.');
-        return;
-      }
-      if (!agreedToTerms) {
-        setCustomerError('Please agree to the Terms & Privacy Policy to continue.');
-        return;
-      }
-    }
-
     setCustomerEmail(cleanEmail);
     setCustomerLoading(true);
 
-    const fullPhone = customerPhone ? `${customerCountryCode} ${customerPhone}` : undefined;
-    const res =
-      customerFormMode === 'login'
-        ? await customerLogin(cleanEmail, customerPassword, rememberMe)
-        : await customerRegister(customerName, cleanEmail, customerPassword, fullPhone);
+    // Sign-in only. Creating an account is the mobile + OTP flow's job:
+    // verifying a number signs the customer in, or creates them if the number
+    // is new. This form exists for accounts that predate that.
+    const res = await customerLogin(cleanEmail, customerPassword, rememberMe);
 
     setCustomerLoading(false);
 
@@ -175,11 +144,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setCustomerSuccess(true);
     setTimeout(() => {
-      onCustomerLoginSuccess?.({
-        name: customerName || cleanEmail,
-        email: cleanEmail,
-        phone: fullPhone || '',
-      });
+      // Every consumer reads the signed-in customer from CustomerAuthContext;
+      // this callback shape is kept for the existing greeting only.
+      onCustomerLoginSuccess?.({ name: cleanEmail, email: cleanEmail, phone: '' });
       onClose();
     }, 600);
   };
@@ -250,35 +217,53 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="relative w-full max-w-md bg-[#171717] border border-[#E8D5A8]/30 rounded-2xl shadow-2xl overflow-hidden my-8"
+          className="relative w-full max-w-md sm:max-w-3xl bg-[#171717] border border-[#E8D5A8]/30 rounded-2xl shadow-2xl overflow-hidden my-8 sm:flex sm:items-stretch"
         >
           {/* Close button */}
           <button
+            type="button"
             onClick={onClose}
+            // The icon carries no text, so without this the control is
+            // announced as an unlabelled button.
+            aria-label="Close"
             className="absolute top-4 right-4 p-2 rounded-full text-[#6B6B6B] hover:text-[#FAF9F6] hover:bg-[#0B0B0B] transition-colors cursor-pointer z-10"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden />
           </button>
 
-          {/* Top Brand Banner */}
-          <div className="p-6 text-center bg-[#0B0B0B] border-b border-[#E8D5A8]/20">
+          {/* Left panel: why signing in is worth it. Static — it carries no
+              state and no controls, so on a phone it collapses to a compact
+              header instead of pushing the form below the fold. */}
+          <div className="sm:w-[44%] sm:shrink-0 bg-[#0B0B0B] border-b sm:border-b-0 sm:border-r border-[#E8D5A8]/20 p-6 sm:p-8 sm:flex sm:flex-col sm:justify-center">
             <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-[#C9972B]">
-              GLAMIRK ATELIER AUTHENTICATION
+              GLAMIRK ATELIER
             </span>
-            <h2 className="font-serif text-2xl text-[#FAF9F6] mt-1 tracking-wider">
-              {customerFormMode === 'forgot'
-                ? 'Reset Your Password'
-                : customerFormMode === 'register'
-                  ? 'Create Your Account'
-                  : 'Sign In or Sign Up'}
+            <h2 className="font-serif text-2xl sm:text-3xl text-[#FAF9F6] mt-1.5 tracking-wider">
+              {customerFormMode === 'forgot' ? 'Reset Password' : 'Login'}
             </h2>
-            {/* The subtitle names the method in play, so the toggle below has
-                something to visibly change. */}
-            <p className="text-xs text-[#6B6B6B] mt-1">
+            <p className="hidden sm:block text-[12.5px] text-[#9C9689] mt-3 leading-relaxed">
+              {customerFormMode === 'forgot'
+                ? 'We’ll help you get back into your account.'
+                : 'Login to access your orders, saved shades, Privé rewards and recommendations made for you.'}
+            </p>
+            <p className="sm:hidden text-xs text-[#6B6B6B] mt-1">
               {customerFormMode === 'forgot'
                 ? 'We’ll help you get back into your account'
+                : 'Access your orders, saved shades and rewards'}
+            </p>
+          </div>
+
+          {/* Right panel: the form itself. */}
+          <div className="flex-1 min-w-0">
+          <div className="px-6 pt-6 sm:pt-8">
+            <h3 className="font-serif text-lg text-[#FAF9F6]">
+              {customerFormMode === 'forgot' ? 'Reset your password' : 'Log in for the best experience'}
+            </h3>
+            <p className="text-xs text-[#6B6B6B] mt-1">
+              {customerFormMode === 'forgot'
+                ? 'Enter the email address on your account'
                 : customerFormMode === 'otp'
-                  ? 'Enter your mobile number — we’ll send a one-time code'
+                  ? 'Enter your phone number to continue'
                   : 'Continue with your email ID'}
             </p>
           </div>
@@ -480,24 +465,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 )}
 
                 <form onSubmit={handleVerifyCustomer} className="space-y-3">
-                  {customerFormMode === 'register' && (
-                    <div>
-                      <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                        Full Name
-                      </label>
-                      <div className="relative">
-                        <User className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          required
-                          placeholder="Enter your full name"
-                          value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
-                          className="w-full pl-9 pr-3 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
-                        />
-                      </div>
-                    </div>
-                  )}
 
                   <div>
                     <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
@@ -516,45 +483,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </div>
                   </div>
 
-                  {customerFormMode === 'register' && (
-                    <div>
-                      <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                        Mobile Number <span className="normal-case text-[#6B6B6B]">(optional)</span>
-                      </label>
-                      <div className="flex gap-2">
-                        <select
-                          value={customerCountryCode}
-                          onChange={(e) => {
-                            setCustomerCountryCode(e.target.value);
-                            setCustomerPhone((prev) => sanitizePhoneDigits(prev, getCountryRule(e.target.value).maxDigits));
-                          }}
-                          className="shrink-0 px-2 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
-                        >
-                          {COUNTRY_PHONE_RULES.map((c) => (
-                            <option key={c.code} value={c.code}>
-                              {c.code} {c.label}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="relative flex-1">
-                          <Phone className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="tel"
-                            inputMode="numeric"
-                            placeholder={activePhoneRule.minDigits === activePhoneRule.maxDigits ? `${activePhoneRule.minDigits} digit number` : 'Mobile number'}
-                            value={customerPhone}
-                            onChange={(e) => setCustomerPhone(sanitizePhoneDigits(e.target.value, activePhoneRule.maxDigits))}
-                            className="w-full pl-9 pr-3 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
-                          />
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-[#6B6B6B] mt-1">
-                        {activePhoneRule.minDigits === activePhoneRule.maxDigits
-                          ? `${activePhoneRule.label}: exactly ${activePhoneRule.minDigits} digits, numbers only.`
-                          : `${activePhoneRule.label}: ${activePhoneRule.minDigits}-${activePhoneRule.maxDigits} digits, numbers only.`}
-                      </p>
-                    </div>
-                  )}
 
                   <div>
                     <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
@@ -565,11 +493,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <input
                         type={showPassword ? 'text' : 'password'}
                         required
-                        minLength={customerFormMode === 'register' ? 8 : undefined}
                         placeholder="••••••••"
                         value={customerPassword}
                         onChange={(e) => setCustomerPassword(e.target.value)}
-                        onFocus={() => customerFormMode === 'register' && setShowPasswordChecklist(true)}
                         className="w-full pl-9 pr-9 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
                       />
                       <button
@@ -581,21 +507,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       </button>
                     </div>
 
-                    {customerFormMode === 'register' && showPasswordChecklist && (
-                      <ul className="mt-2 space-y-1 p-2.5 rounded-lg bg-[#0B0B0B]/60 border border-[#E8D5A8]/15">
-                        {passwordRequirements.map((req) => (
-                          <li
-                            key={req.id}
-                            className={`flex items-center gap-1.5 text-[10.5px] transition-colors ${
-                              req.met ? 'text-[#C9972B]' : 'text-[#6B6B6B]'
-                            }`}
-                          >
-                            <CheckCircle className={`w-3 h-3 shrink-0 ${req.met ? 'opacity-100' : 'opacity-30'}`} />
-                            <span>{req.label}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
                   </div>
 
                   {customerFormMode === 'login' && (
@@ -622,97 +533,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </div>
                   )}
 
-                  {customerFormMode === 'register' && (
-                    <div>
-                      <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
-                        Confirm Password
-                      </label>
-                      <div className="relative">
-                        <Lock className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type={showConfirmPassword ? 'text' : 'password'}
-                          required
-                          placeholder="••••••••"
-                          value={customerConfirmPassword}
-                          onChange={(e) => setCustomerConfirmPassword(e.target.value)}
-                          className={`w-full pl-9 pr-9 py-2.5 bg-[#0B0B0B] border rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B] ${
-                            customerConfirmPassword && customerConfirmPassword !== customerPassword
-                              ? 'border-[#F05A7E]/60'
-                              : 'border-[#E8D5A8]/30'
-                          }`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B6B6B] hover:text-[#FAF9F6]"
-                        >
-                          {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                      {customerConfirmPassword && customerConfirmPassword !== customerPassword && (
-                        <p className="text-[10.5px] text-[#F05A7E] mt-1">Passwords do not match.</p>
-                      )}
-                    </div>
-                  )}
 
-                  {customerFormMode === 'register' && (
-                    <label className="flex items-start gap-2 cursor-pointer select-none">
-                      <button
-                        type="button"
-                        onClick={() => setAgreedToTerms(!agreedToTerms)}
-                        className={`mt-0.5 w-4 h-4 shrink-0 rounded border flex items-center justify-center transition-colors cursor-pointer ${
-                          agreedToTerms ? 'bg-[#C9972B] border-[#C9972B]' : 'border-[#E8D5A8]/40 bg-[#0B0B0B]'
-                        }`}
-                      >
-                        {agreedToTerms && <Check className="w-3 h-3 text-[#0B0B0B]" />}
-                      </button>
-                      <span className="text-[11px] text-[#6B6B6B] leading-snug">
-                        I agree to the <span className="text-[#E8D5A8] font-medium">Terms &amp; Privacy Policy</span>
-                      </span>
-                    </label>
-                  )}
 
                   <button
                     type="submit"
                     disabled={customerLoading}
                     className="w-full py-3 bg-[#C9972B] hover:bg-[#E3B84B] text-[#0B0B0B] font-bold text-xs uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
                   >
+                    {/* This form only ever signs in, so there is no second
+                        wording to choose between. */}
                     {customerSuccess ? (
                       <>
                         <CheckCircle className="w-4 h-4" />
-                        <span>{customerFormMode === 'login' ? 'Welcome Back!' : 'Account Created!'}</span>
+                        <span>Welcome Back!</span>
                       </>
                     ) : customerLoading ? (
-                      <span>{customerFormMode === 'login' ? 'Signing in...' : 'Creating account...'}</span>
+                      <span>Signing in...</span>
                     ) : (
-                      <span>{customerFormMode === 'login' ? 'Sign In to Account' : 'Create My Account'}</span>
+                      <span>Sign In to Account</span>
                     )}
                   </button>
                 </form>
                   </>
                 )}
 
-                {/* Both switches live together under the email form: one moves
-                    between signing in and registering (same method), the other
-                    returns to the mobile number (different method). Keeping the
-                    method toggle in the same place on both screens is what
-                    makes it read as one control rather than two. */}
+                {/* Only the method toggle. There is no "Create Account" link
+                    here on purpose: signing up is the mobile number, where
+                    verifying a new one creates the account. Offering a second
+                    way to register would ask for four fields to do what one
+                    already does, and split customers across two account types
+                    that this app deliberately does not merge. */}
                 {LEGACY_EMAIL_AUTH_ENABLED && customerFormMode !== 'otp' && (
                   <div className="space-y-2.5 pt-1">
-                    <p className="text-center text-[11px] text-[#6B6B6B]">
-                      {customerFormMode === 'register' ? 'Already have an account? ' : "Don't have an account? "}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCustomerFormMode(customerFormMode === 'register' ? 'login' : 'register');
-                          setCustomerError(null);
-                        }}
-                        className="font-semibold text-[#C9972B] hover:underline cursor-pointer"
-                      >
-                        {customerFormMode === 'register' ? 'Sign In' : 'Create Account'}
-                      </button>
-                    </p>
-
                     <div className="pt-2 border-t border-[#E8D5A8]/10">
                       <button
                         type="button"
@@ -729,6 +581,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 )}
               </div>
             )}
+          </div>
           </div>
         </motion.div>
       </div>

@@ -6,11 +6,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import {
-  User,
   X,
   Mail,
   Lock,
-  Phone,
   ArrowRight,
   CheckCircle,
   Eye,
@@ -18,14 +16,12 @@ import {
 } from 'lucide-react';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { MobileOtpSignIn } from './MobileOtpSignIn';
+<<<<<<< HEAD
+=======
 import { Leaf, Petal, OrnamentDefs } from '../marketing/BotanicalOrnaments';
 import { isGoogleSignInConfigured, requestGoogleAccessToken } from '../../utils/googleAuth';
+>>>>>>> main
 import {
-  COUNTRY_PHONE_RULES,
-  DEFAULT_COUNTRY_CODE,
-  sanitizePhoneDigits,
-  getCountryRule,
-  validatePhoneNumber,
   normalizeEmail,
   isValidEmail,
   getPasswordRequirements,
@@ -37,8 +33,8 @@ import {
  *
  * ON. Mobile + OTP is the primary and default way in, but this stays
  * reachable from a link under the OTP form because of who needs it: an
- * account with no mobile number on it — an old email-only registration, or a
- * Google sign-up — has nothing to send a code to. Removing this form would
+ * account with no mobile number on it — an old email-only registration — has
+ * nothing to send a code to. Removing this form would
  * lock those customers out of accounts that are already theirs, along with
  * their orders, addresses and rewards.
  *
@@ -48,16 +44,6 @@ import {
  * either way — this is a UI switch, not a capability switch.
  */
 const LEGACY_EMAIL_AUTH_ENABLED = true;
-
-/**
- * "Continue with Google".
- *
- * OFF by product decision. Kept rather than deleted so re-enabling it is one
- * line; /auth/google on the backend still works, and any customer who
- * originally signed up through Google can still get in with the email +
- * password form above (via forgot-password) or by adding their mobile number.
- */
-const GOOGLE_SIGN_IN_ENABLED = false;
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -79,27 +65,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialResetToken,
   initialMode,
 }) => {
-  const { customerLogin, customerLoginWithGoogle, customerRegister, requestPasswordReset, resetPassword } = useCustomerAuth();
+  const { customerLogin, requestPasswordReset, resetPassword } = useCustomerAuth();
 
   // Customer Login State — real accounts, backed by Postgres via /api/customer/auth
   // 'otp' — mobile number + one-time code — is where everyone lands. The
   // other three are reached from the tabs and the "use a password instead"
   // link, and disappear entirely when LEGACY_EMAIL_AUTH_ENABLED is false.
-  const [customerFormMode, setCustomerFormMode] = useState<'otp' | 'login' | 'register' | 'forgot'>('otp');
-  const [customerName, setCustomerName] = useState('');
-  const [customerCountryCode, setCustomerCountryCode] = useState(DEFAULT_COUNTRY_CODE);
-  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerFormMode, setCustomerFormMode] = useState<'otp' | 'login' | 'forgot'>('otp');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerPassword, setCustomerPassword] = useState('');
-  const [customerConfirmPassword, setCustomerConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [showPasswordChecklist, setShowPasswordChecklist] = useState(false);
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [googleComingSoon, setGoogleComingSoon] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleError, setGoogleError] = useState<string | null>(null);
   const [forgotStep, setForgotStep] = useState<'request' | 'reset' | 'done'>('request');
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -113,8 +89,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [customerLoading, setCustomerLoading] = useState(false);
   const [customerError, setCustomerError] = useState<string | null>(null);
 
-  const activePhoneRule = getCountryRule(customerCountryCode);
-  const passwordRequirements = getPasswordRequirements(customerPassword);
 
   useEffect(() => {
     if (isOpen && initialResetToken) {
@@ -130,9 +104,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // a new password shouldn't be dropped onto the registration form.
   useEffect(() => {
     if (isOpen && initialMode && !initialResetToken) {
-      // Callers still ask for 'login'; that now means the OTP form, which is
-      // what signing in is. Nothing outside this component had to change.
-      setCustomerFormMode(initialMode === 'login' ? 'otp' : initialMode);
+      // BOTH entry points land on the mobile number. Verifying a number signs
+      // an existing customer in and creates the account if the number is new,
+      // so "Sign Up" has nothing extra to ask for — opening a name/password
+      // form there would demand four fields to do what one does.
+      //
+      // There is NO email-registration path in this UI. The email screen signs
+      // in only, for accounts that predate OTP; customerRegister and the
+      // backend's /auth/register are left in place but nothing here calls
+      // them. A new customer registers by verifying a mobile number.
+      setCustomerFormMode('otp');
       setCustomerError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,35 +185,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (customerFormMode === 'register') {
-      const phoneCheck = validatePhoneNumber(customerCountryCode, customerPhone);
-      if (!phoneCheck.valid) {
-        setCustomerError(phoneCheck.error || 'Invalid mobile number.');
-        return;
-      }
-      if (!isPasswordValid(customerPassword)) {
-        setShowPasswordChecklist(true);
-        setCustomerError('Your password doesn’t meet all requirements yet — check the list below.');
-        return;
-      }
-      if (customerPassword !== customerConfirmPassword) {
-        setCustomerError('Passwords do not match.');
-        return;
-      }
-      if (!agreedToTerms) {
-        setCustomerError('Please agree to the Terms & Privacy Policy to continue.');
-        return;
-      }
-    }
-
     setCustomerEmail(cleanEmail);
     setCustomerLoading(true);
 
-    const fullPhone = customerPhone ? `${customerCountryCode} ${customerPhone}` : undefined;
-    const res =
-      customerFormMode === 'login'
-        ? await customerLogin(cleanEmail, customerPassword, rememberMe)
-        : await customerRegister(customerName, cleanEmail, customerPassword, fullPhone);
+    // Sign-in only. Creating an account is the mobile + OTP flow's job:
+    // verifying a number signs the customer in, or creates them if the number
+    // is new. This form exists for accounts that predate that.
+    const res = await customerLogin(cleanEmail, customerPassword, rememberMe);
 
     setCustomerLoading(false);
 
@@ -243,39 +202,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setCustomerSuccess(true);
     setTimeout(() => {
-      onCustomerLoginSuccess?.({
-        name: customerName || cleanEmail,
-        email: cleanEmail,
-        phone: fullPhone || '',
-      });
+      // Every consumer reads the signed-in customer from CustomerAuthContext;
+      // this callback shape is kept for the existing greeting only.
+      onCustomerLoginSuccess?.({ name: cleanEmail, email: cleanEmail, phone: '' });
       onClose();
     }, 600);
-  };
-
-  const handleGoogleSignIn = async () => {
-    if (!isGoogleSignInConfigured()) {
-      setGoogleComingSoon(true);
-      return;
-    }
-    setGoogleError(null);
-    setGoogleLoading(true);
-    try {
-      const accessToken = await requestGoogleAccessToken();
-      const res = await customerLoginWithGoogle(accessToken, rememberMe);
-      if (!res.success) {
-        setGoogleError(res.error || 'Google sign-in failed.');
-        return;
-      }
-      setCustomerSuccess(true);
-      setTimeout(() => {
-        onCustomerLoginSuccess?.({ name: '', email: '', phone: '' });
-        onClose();
-      }, 500);
-    } catch (err: any) {
-      setGoogleError(err?.message || 'Google sign-in was cancelled.');
-    } finally {
-      setGoogleLoading(false);
-    }
   };
 
   const openForgotPassword = () => {
@@ -361,8 +292,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           tabIndex={-1}
           initial={{ opacity: 0, scale: 0.97, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
+<<<<<<< HEAD
+          exit={{ opacity: 0, scale: 0.95, y: 15 }}
+          className="relative w-full max-w-md sm:max-w-3xl bg-[#171717] border border-[#E8D5A8]/30 rounded-2xl shadow-2xl overflow-hidden my-8 sm:flex sm:items-stretch"
+=======
           transition={{ duration: 0.28, ease: [0.2, 0.7, 0.2, 1] }}
           className="relative w-full max-w-[var(--auth-modal-w)] my-auto bg-[radial-gradient(120%_60%_at_50%_0%,#161412_0%,var(--auth-bg)_55%)] border-[1.5px] border-[var(--auth-border)] rounded-[var(--auth-radius-modal)] shadow-[var(--auth-shadow)] overflow-hidden font-sans text-[var(--auth-text)] focus:outline-none"
+>>>>>>> main
         >
           <BotanicalCorners />
 
@@ -370,6 +306,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="button"
             onClick={onClose}
+<<<<<<< HEAD
+            // The icon carries no text, so without this the control is
+            // announced as an unlabelled button.
+            aria-label="Close"
+            className="absolute top-4 right-4 p-2 rounded-full text-[#6B6B6B] hover:text-[#FAF9F6] hover:bg-[#0B0B0B] transition-colors cursor-pointer z-10"
+          >
+            <X className="w-5 h-5" aria-hidden />
+          </button>
+
+          {/* Left panel: why signing in is worth it. Static — it carries no
+              state and no controls, so on a phone it collapses to a compact
+              header instead of pushing the form below the fold. */}
+          <div className="sm:w-[44%] sm:shrink-0 bg-[#0B0B0B] border-b sm:border-b-0 sm:border-r border-[#E8D5A8]/20 p-6 sm:p-8 sm:flex sm:flex-col sm:justify-center">
+            <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-[#C9972B]">
+              GLAMIRK ATELIER
+            </span>
+            <h2 className="font-serif text-2xl sm:text-3xl text-[#FAF9F6] mt-1.5 tracking-wider">
+              {customerFormMode === 'forgot' ? 'Reset Password' : 'Login'}
+            </h2>
+            <p className="hidden sm:block text-[12.5px] text-[#9C9689] mt-3 leading-relaxed">
+              {customerFormMode === 'forgot'
+                ? 'We’ll help you get back into your account.'
+                : 'Login to access your orders, saved shades, Privé rewards and recommendations made for you.'}
+            </p>
+            <p className="sm:hidden text-xs text-[#6B6B6B] mt-1">
+=======
             aria-label="Close sign in"
             className="auth-focus absolute top-4 right-4 sm:top-6 sm:right-6 z-20 p-2 rounded-full text-[var(--auth-text)] hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer"
           >
@@ -388,9 +350,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               {customerFormMode === 'forgot' ? 'Reset Your Password' : 'Customer Sign In'}
             </h2>
             <p id="auth-modal-desc" className="text-[15px] sm:text-[17px] text-[#D9D4CD] mt-2 leading-snug">
+>>>>>>> main
               {customerFormMode === 'forgot'
                 ? 'We’ll help you get back into your account'
-                : 'Access your beauty profile, saved shades, and Privé points'}
+                : 'Access your orders, saved shades and rewards'}
+            </p>
+          </div>
+
+          {/* Right panel: the form itself. */}
+          <div className="flex-1 min-w-0">
+          <div className="px-6 pt-6 sm:pt-8">
+            <h3 className="font-serif text-lg text-[#FAF9F6]">
+              {customerFormMode === 'forgot' ? 'Reset your password' : 'Log in for the best experience'}
+            </h3>
+            <p className="text-xs text-[#6B6B6B] mt-1">
+              {customerFormMode === 'forgot'
+                ? 'Enter the email address on your account'
+                : customerFormMode === 'otp'
+                  ? 'Enter your phone number to continue'
+                  : 'Continue with your email ID'}
             </p>
           </div>
 
@@ -561,6 +539,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 )}
               </div>
             ) : (
+<<<<<<< HEAD
+              <div className="space-y-4">
+=======
               <div className="space-y-5">
                 {/* Login / Register mode selector — only meaningful when
                     there is more than one way in (see LEGACY_EMAIL_AUTH_ENABLED). */}
@@ -616,13 +597,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   aria-labelledby={LEGACY_EMAIL_AUTH_ENABLED ? (isSignInTab ? 'auth-tab-signin' : 'auth-tab-register') : undefined}
                   className="space-y-5"
                 >
+>>>>>>> main
                 {!LEGACY_EMAIL_AUTH_ENABLED || customerFormMode === 'otp' ? (
                   <MobileOtpSignIn
                     remember={rememberMe}
                     onToggleRemember={() => setRememberMe(!rememberMe)}
-                    // Omitted entirely when the legacy form is off, which is
-                    // what removes the "use a password instead" link.
-                    onUsePassword={
+                    // Omitted entirely when email sign-in is off, which is
+                    // what removes the "Use Email ID" link.
+                    onUseEmail={
                       LEGACY_EMAIL_AUTH_ENABLED
                         ? () => {
                             setCustomerFormMode('login');
@@ -649,6 +631,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 )}
 
                 <form onSubmit={handleVerifyCustomer} className="space-y-3">
+<<<<<<< HEAD
+=======
                   {customerFormMode === 'register' && (
                     <div>
                       <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
@@ -667,6 +651,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       </div>
                     </div>
                   )}
+>>>>>>> main
 
                   <div>
                     <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
@@ -686,6 +671,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </div>
                   </div>
 
+<<<<<<< HEAD
+=======
                   {customerFormMode === 'register' && (
                     <div>
                       <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
@@ -725,6 +712,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       </p>
                     </div>
                   )}
+>>>>>>> main
 
                   <div>
                     <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
@@ -736,12 +724,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         type={showPassword ? 'text' : 'password'}
                         autoComplete={customerFormMode === 'register' ? 'new-password' : 'current-password'}
                         required
-                        minLength={customerFormMode === 'register' ? 8 : undefined}
                         placeholder="••••••••"
                         value={customerPassword}
                         onChange={(e) => setCustomerPassword(e.target.value)}
+<<<<<<< HEAD
+                        className="w-full pl-9 pr-9 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
+=======
                         onFocus={() => customerFormMode === 'register' && setShowPasswordChecklist(true)}
                         className="w-full pl-9 pr-9 py-3 bg-[var(--auth-input-bg)] border border-[var(--auth-input-border)] rounded-[var(--auth-radius-control)] text-sm text-[var(--auth-text)] placeholder:text-[var(--auth-text-muted)] focus:outline-none focus:border-[var(--auth-gold-soft)] focus:ring-2 focus:ring-[#C9972B]/25"
+>>>>>>> main
                       />
                       <button
                         type="button"
@@ -753,6 +744,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       </button>
                     </div>
 
+<<<<<<< HEAD
+=======
                     {customerFormMode === 'register' && showPasswordChecklist && (
                       <ul className="mt-2 space-y-1 p-2.5 rounded-lg bg-[#0B0B0B]/60 border border-[#E8D5A8]/15">
                         {passwordRequirements.map((req) => (
@@ -768,6 +761,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         ))}
                       </ul>
                     )}
+>>>>>>> main
                   </div>
 
                   {customerFormMode === 'login' && (
@@ -791,6 +785,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </div>
                   )}
 
+<<<<<<< HEAD
+
+=======
                   {customerFormMode === 'register' && (
                     <div>
                       <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
@@ -839,21 +836,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       </span>
                     </label>
                   )}
+>>>>>>> main
 
                   <button
                     type="submit"
                     disabled={customerLoading}
                     className="auth-cta w-full py-4 font-medium text-[15px] uppercase tracking-[0.16em] cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                   >
+                    {/* This form only ever signs in, so there is no second
+                        wording to choose between. */}
                     {customerSuccess ? (
                       <>
                         <CheckCircle className="w-4 h-4" />
-                        <span>{customerFormMode === 'login' ? 'Welcome Back!' : 'Account Created!'}</span>
+                        <span>Welcome Back!</span>
                       </>
                     ) : customerLoading ? (
-                      <span>{customerFormMode === 'login' ? 'Signing in...' : 'Creating account...'}</span>
+                      <span>Signing in...</span>
                     ) : (
-                      <span>{customerFormMode === 'login' ? 'Sign In to Account' : 'Create My Account'}</span>
+                      <span>Sign In to Account</span>
                     )}
                   </button>
                 </form>
@@ -861,6 +861,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 )}
                 </div>
 
+<<<<<<< HEAD
+                {/* Only the method toggle. There is no "Create Account" link
+                    here on purpose: signing up is the mobile number, where
+                    verifying a new one creates the account. Offering a second
+                    way to register would ask for four fields to do what one
+                    already does, and split customers across two account types
+                    that this app deliberately does not merge. */}
+                {LEGACY_EMAIL_AUTH_ENABLED && customerFormMode !== 'otp' && (
+                  <div className="space-y-2.5 pt-1">
+                    <div className="pt-2 border-t border-[#E8D5A8]/10">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomerFormMode('otp');
+                          setCustomerError(null);
+                        }}
+                        className="w-full text-center text-[11.5px] font-semibold text-[#C9972B] hover:text-[#E3B84B] transition-colors cursor-pointer"
+                      >
+                        Use Phone Number
+                      </button>
+                    </div>
+                  </div>
+=======
                 {LEGACY_EMAIL_AUTH_ENABLED && (
                 <>
                 {GOOGLE_SIGN_IN_ENABLED && (
@@ -908,9 +931,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </button>
                 </p>
                 </>
+>>>>>>> main
                 )}
               </div>
             )}
+          </div>
           </div>
         </motion.div>
       </motion.div>

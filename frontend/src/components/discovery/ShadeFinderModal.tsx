@@ -61,11 +61,30 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
     { label: 'Wedding & Ceremonial', desc: 'High-pigment enduring regal scarlet and luxury sindoor' }
   ];
 
-  // Matched Shade logic based on user selections
+  /**
+   * Picks a lip shade, a sindoor shade and a cleanser for the answers given.
+   *
+   * Returns null when the catalogue cannot satisfy the match. It used to index
+   * catalogProducts[0], [1] and [3] as fallbacks and then dereference
+   * `.shades` on whatever came back — so a catalogue with fewer than four
+   * products produced `undefined.shades`, which threw during render. Because
+   * this runs unconditionally at render time and nothing above it is an error
+   * boundary, that single throw blanked the entire storefront.
+   *
+   * The ids below are the seeded catalogue's. Treating their absence as "no
+   * recommendation" rather than "crash" is the whole point: a renamed or
+   * retired product is a merchandising decision, not an outage.
+   */
   const getMatchedShade = () => {
-    const lipProduct = catalogProducts.find((p) => p.id === 'matte-liquid-lipstick-collection') || catalogProducts[0];
-    const sindoorProduct = catalogProducts.find((p) => p.id === 'luxury-sindoor-collection') || catalogProducts[1];
-    const cleanserProduct = catalogProducts.find((p) => p.id === 'balm-to-water-cleanser-50g') || catalogProducts[3];
+    const lipProduct = catalogProducts.find((p) => p.id === 'matte-liquid-lipstick-collection');
+    const sindoorProduct = catalogProducts.find((p) => p.id === 'luxury-sindoor-collection');
+    const cleanserProduct = catalogProducts.find((p) => p.id === 'balm-to-water-cleanser-50g');
+
+    // Every card in the results step reads a shade's hex and name, so a
+    // product without shades is as unusable here as a missing one.
+    if (!lipProduct?.shades?.length || !sindoorProduct?.shades?.length || !cleanserProduct) {
+      return null;
+    }
 
     let matchedLipShade = lipProduct.shades?.[0]; // Default Royal Rose
     let matchedSindoorShade = sindoorProduct.shades?.[0]; // Ceremonial Scarlet
@@ -88,11 +107,14 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
       matchedSindoorShade = sindoorProduct.shades?.find(s => s.id === 'sindoor-scarlet-glam');
     }
 
+    // The `?.find(...)` branches above can all miss when the catalogue is
+    // present but its shade ids have moved on; the first shade is a real
+    // product either way, so it is a safe answer rather than a guess.
     return {
       lipProduct,
-      matchedLipShade: matchedLipShade || lipProduct.shades![0],
+      matchedLipShade: matchedLipShade || lipProduct.shades[0],
       sindoorProduct,
-      matchedSindoorShade: matchedSindoorShade || sindoorProduct.shades![0],
+      matchedSindoorShade: matchedSindoorShade || sindoorProduct.shades[0],
       cleanserProduct
     };
   };
@@ -326,8 +348,33 @@ export const ShadeFinderModal: React.FC<ShadeFinderModalProps> = ({
                 </motion.div>
               )}
 
-              {/* Step 4: Results & Personalized Curation */}
-              {step === 4 && (
+              {/* Step 4: Results & Personalized Curation.
+                  `matched` is null when the catalogue cannot supply the
+                  products this step needs. Guarded explicitly: the project
+                  compiles without strictNullChecks, so a null dereference
+                  below would not be a type error — it would be a blank
+                  storefront at runtime. */}
+              {step === 4 && !matched && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="space-y-4 text-center py-8"
+                >
+                  <h3 className="font-serif text-2xl text-[#121212]">Shade matching is unavailable</h3>
+                  <p className="text-xs text-[#6B6B6B] max-w-sm mx-auto leading-relaxed">
+                    We couldn&rsquo;t put a match together just now — the products this uses
+                    aren&rsquo;t available. Everything else in the store works as normal.
+                  </p>
+                  <button
+                    onClick={onClose}
+                    className="px-6 py-3 bg-[#0B0B0B] text-[#FAF9F6] text-xs font-semibold tracking-widest uppercase"
+                  >
+                    CLOSE
+                  </button>
+                </motion.div>
+              )}
+
+              {step === 4 && matched && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}

@@ -6,7 +6,7 @@ import { getMailTransporter } from '../services/mailer';
 import { pool, loadDatabase, saveDatabase, withStockLock, evaluateOffers, InternalCMSDatabaseSchema } from '../db/db';
 import { requireCustomer, AuthenticatedCustomerRequest } from '../middleware/requireCustomer';
 import { rateLimit } from '../middleware/rateLimit';
-import { signCustomerToken, bumpTokenVersion } from '../auth/tokens';
+import { signCustomerToken, bumpTokenVersion, invalidateAccountCache } from '../auth/tokens';
 import { createSession, deleteSession, deleteAllSessions } from '../auth/sessions';
 import { clientIp } from '../utils/request';
 // Sellability, price and stock are all resolved by the shared helpers so the
@@ -29,6 +29,9 @@ import {
   SUPPORTED_COUNTRY_CODES,
 } from '../utils/phone';
 import { issueOtp, verifyOtp, otpPolicy } from '../services/otp.service';
+import { channelConfigured, OtpChannel, firebaseOtpSelected } from '../services/messaging.service';
+import { verifyFirebasePhoneToken } from '../services/firebaseAuth.service';
+import { grantSignupBonus, grantReviewPoints, recordCouponRedemption } from '../services/rewards.service';
 import { channelConfigured, OtpChannel } from '../services/messaging.service';
 import { grantSignupBonus, recordCouponRedemption } from '../services/rewards.service';
 import { resolveAvailableStock } from '../services/inventory.service';
@@ -350,65 +353,6 @@ router.post('/auth/reset-password', resetLimiter, async (req: Request, res: Resp
   res.json({ success: true, token: jwtToken, user: toSessionUser(user) });
 });
 
-// "Continue with Google" — the client obtains an OAuth access token via
-// Google Identity Services (see src/utils/googleAuth.ts) and hands it here.
-// We verify it's real by asking Google's own userinfo endpoint who it
-// belongs to, rather than trusting an unverifiable client-side claim.
-router.post('/auth/google', async (req: Request, res: Response) => {
-  const { accessToken } = req.body || {};
-  if (!accessToken) {
-    return res.status(400).json({ error: 'Missing Google access token.' });
-  }
-
-  let profile: { email?: string; email_verified?: boolean; name?: string };
-  try {
-    const googleRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!googleRes.ok) {
-      return res.status(401).json({ error: 'Google sign-in verification failed.' });
-    }
-    profile = await googleRes.json();
-  } catch (err) {
-    console.error('Google userinfo lookup failed:', err);
-    return res.status(502).json({ error: 'Could not reach Google right now. Please try again.' });
-  }
-
-  if (!profile.email || profile.email_verified === false) {
-    return res.status(401).json({ error: 'Your Google account email is not verified.' });
-  }
-
-  const normalizedEmail = profile.email.toLowerCase().trim();
-  const existing = await pool.query('SELECT * FROM customers WHERE email = $1', [normalizedEmail]);
-  let row = existing.rows[0];
-
-  if (row?.deleted_at) {
-    return res.status(403).json({ error: 'This account has been closed. Please contact support if this is unexpected.' });
-  }
-
-  if (!row) {
-    const id = 'cust-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-    // Google-authenticated accounts never use password login — a random,
-    // never-shared hash just satisfies the NOT NULL column.
-    const passwordHash = bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), bcrypt.genSaltSync(10));
-    const displayName = profile.name || normalizedEmail;
-    const [firstName, ...restName] = displayName.trim().split(/\s+/);
-    await pool.query(
-      // Google has already verified this address, so the account starts with
-      // its email confirmed rather than re-asking the customer to prove it.
-      'INSERT INTO customers (id, name, first_name, last_name, email, password_hash, email_verified) VALUES ($1, $2, $3, $4, $5, $6, true)',
-      [id, displayName, firstName || displayName, restName.join(' ') || null, normalizedEmail, passwordHash]
-    );
-    await grantSignupBonus(id);
-    const created = await pool.query('SELECT * FROM customers WHERE id = $1', [id]);
-    row = created.rows[0];
-  }
-
-  const sessionId = await createSession(row.id, req);
-  const token = signCustomerToken(row.id, row.email, Number(row.token_version) || 0, sessionId);
-  res.json({ token, user: toSessionUser(row) });
-});
-
 // ==========================================
 // MOBILE + OTP SIGN-IN
 //
@@ -460,7 +404,9 @@ const otpVerifyLimiter = rateLimit({
 router.get('/auth/otp/channels', async (_req: Request, res: Response) => {
   res.json({
     sms: channelConfigured('sms'),
-    whatsapp: channelConfigured('whatsapp'),
+    // Always false: WhatsApp carries order updates, never sign-in codes. The
+    // field stays so the sign-in screen's existing check keeps working.
+    whatsapp: false,
     countryCodes: SUPPORTED_COUNTRY_CODES,
     otpLength: OTP_LENGTH,
     expiresInSeconds: otpPolicy.expirySeconds,
@@ -476,9 +422,23 @@ router.post('/auth/otp/request', otpRequestLimiter, async (req: Request, res: Re
     return res.status(400).json({ error: 'Please enter a valid mobile number.' });
   }
 
-  // SMS is the default and anything unrecognised falls back to it — WhatsApp
-  // is only used when the customer explicitly asked for it.
-  const deliveryMethod: OtpChannel = method === 'whatsapp' ? 'whatsapp' : 'sms';
+  // The country the number actually resolved to must be one this store
+  // serves. normalizePhone has a generic branch for dial codes it does not
+  // know in detail, so without this a client could ask for a code to any
+  // country simply by sending a different countryCode — the sign-in screen
+  // only offers +91, but nothing stops a direct POST.
+  //
+  // Checked against the resolved value rather than the submitted one, so a
+  // mismatched pair cannot slip through either. The same guard already
+  // protects /auth/otp/firebase/verify.
+  if (!SUPPORTED_COUNTRY_CODES.includes(normalized.countryCode as any)) {
+    return res.status(400).json({ error: 'This mobile number is not supported.' });
+  }
+
+  // SMS is the only OTP channel. A client asking for anything else — a stale
+  // bundle offering the old WhatsApp option — gets SMS rather than an error,
+  // because the channel it asked for no longer exists on any code path.
+  const deliveryMethod: OtpChannel = 'sms';
 
   const result = await issueOtp({
     phoneE164: normalized.e164,
@@ -509,17 +469,38 @@ router.post('/auth/otp/request', otpRequestLimiter, async (req: Request, res: Re
           error: 'Too many OTP requests from this device. Please try again in a little while.',
           retryAfterSeconds: result.retryAfterSeconds,
         });
-      case 'channel_unconfigured':
-      case 'delivery_failed':
-        // Never reported as a success, and never silently re-routed to the
-        // other channel — the customer is told which one failed and chooses.
-        return res.status(503).json({
-          error:
-            deliveryMethod === 'whatsapp'
-              ? "We couldn't send the OTP on WhatsApp. Please try again or choose SMS."
-              : "We couldn't send the OTP right now. Please try again.",
+      case 'provider_is_client_side':
+        // Firebase mode. 409 rather than 503: nothing is broken or missing —
+        // the client is calling an endpoint this deployment does not use, and
+        // the fix is to call the Firebase route instead. Flagged explicitly so
+        // a stale frontend bundle fails loudly rather than appearing to send.
+        return res.status(409).json({
+          error: 'OTP sign-in is handled by the app on this device. Please reload the page and try again.',
           method: deliveryMethod,
-          channelAvailable: result.status !== 'channel_unconfigured',
+          clientSideProvider: 'firebase',
+        });
+      case 'channel_unconfigured':
+        // Deliberately switched off or never credentialled — not a blip. The
+        // wording must not invite a retry that is guaranteed to fail the same
+        // way; "try again" belongs to delivery_failed below, and telling a
+        // customer to keep retrying something permanently unavailable is how
+        // a support queue fills up with tickets nobody can action.
+        //
+        // Says nothing about the phone number, so it cannot be used to probe
+        // which numbers are registered.
+        return res.status(503).json({
+          error: 'OTP sign-in is currently unavailable. Please try again later or contact support.',
+          method: deliveryMethod,
+          channelAvailable: false,
+        });
+      case 'delivery_failed':
+        // Credentials exist and the provider was reached but refused or timed
+        // out. Transient as far as the customer is concerned, so this one DOES
+        // ask them to try again. Never reported as a success.
+        return res.status(503).json({
+          error: "We couldn't send the OTP right now. Please try again.",
+          method: deliveryMethod,
+          channelAvailable: true,
         });
     }
   }
@@ -572,8 +553,140 @@ async function findCustomerByVerifiedPhone(e164: string): Promise<any | null> {
   return legacy.rows[0] || null;
 }
 
+/**
+ * Turns a PROVED phone number into a signed-in session.
+ *
+ * The caller owns the proof — a verified OTP challenge, or a Firebase ID token
+ * whose signature checked out — and everything after that point is identical,
+ * so it lives here once. A session is therefore indistinguishable downstream
+ * whichever route minted it: same account resolution, same signup bonus, same
+ * token_version and revocation behaviour, same /auth/me.
+ *
+ * This deliberately performs NO verification of its own. Passing a number that
+ * was not proved would sign someone into that account, so the only callers may
+ * be routes that have just established control of it.
+ */
+async function establishPhoneSession(
+  verifiedE164: string,
+  req: Request
+): Promise<{ token: string; user: any; isNewAccount: boolean }> {
+  const parsedVerified = normalizePhone(verifiedE164);
+  // Display form for the free-text `phone` column the profile screen shows.
+  const displayPhone = parsedVerified
+    ? `${parsedVerified.countryCode} ${parsedVerified.national}`
+    : verifiedE164;
+
+  let row = await findCustomerByVerifiedPhone(verifiedE164);
+  // Not const: losing the create race below means this sign-in did not create
+  // the account after all, and the response must not claim it did.
+  let isNewAccount = !row;
+
+  if (row) {
+    // Pin the canonical number to the row the first time this account signs
+    // in by phone, so later sign-ins take the indexed exact-match path.
+    // Guarded on IS NULL and tolerant of the unique index rejecting it: if
+    // another row claimed the number in between, the sign-in still succeeds
+    // against the account we already resolved.
+    if (!row.phone_e164) {
+      try {
+        await pool.query('UPDATE customers SET phone_e164 = $1 WHERE id = $2 AND phone_e164 IS NULL', [
+          verifiedE164,
+          row.id,
+        ]);
+      } catch (err) {
+        console.error('Could not claim phone_e164 for existing customer:', (err as Error).message);
+      }
+    }
+    // The number has just been proved, and `phone` may be empty on an account
+    // that registered by email alone.
+    await pool.query(
+      'UPDATE customers SET phone_verified = true, phone = COALESCE(phone, $1) WHERE id = $2',
+      [displayPhone, row.id]
+    );
+  } else {
+    const id = 'cust-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    // password_hash is NOT NULL and this account has no password — a random,
+    // never-shared hash satisfies the column without creating a credential
+    // anyone could guess.
+    const passwordHash = bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), bcrypt.genSaltSync(10));
+    // No name is collected during phone sign-in; the customer sets a real one
+    // in their profile. email stays NULL rather than being faked, so order
+    // mail is never addressed to an invented address.
+    const placeholderName = 'Glamirk Customer';
+
+    // Two requests carrying the same proven number can be in flight at once —
+    // a double tap on verify, or a client retrying a slow request. Both find
+    // no account and both try to create one.
+    //
+    // The unique index on phone_e164 means the database will never store two
+    // rows, but an unguarded INSERT turns that protection into a 500 for
+    // whichever request loses: a customer who proved their number and got an
+    // error page. Letting the loser fall through to the existing row makes the
+    // retry succeed, which is what makes this endpoint safe to retry at all.
+    //
+    // Caught by error code rather than ON CONFLICT because the index is
+    // PARTIAL (phone_e164 IS NOT NULL AND deleted_at IS NULL). Inferring it
+    // would mean repeating that predicate here, which silently stops matching
+    // the day the index changes; the error code does not.
+    let created: any = null;
+    try {
+      const res = await pool.query(
+        `INSERT INTO customers (id, name, first_name, phone, phone_e164, phone_verified, password_hash)
+         VALUES ($1, $2, $3, $4, $5, true, $6)
+         RETURNING *`,
+        [id, placeholderName, placeholderName, displayPhone, verifiedE164, passwordHash]
+      );
+      created = res.rows[0];
+    } catch (err) {
+      // Only the phone race. A unique violation on anything else is a real
+      // defect and must not be swallowed into a successful sign-in.
+      const pgErr = err as { code?: string; constraint?: string };
+      if (pgErr.code !== '23505' || !String(pgErr.constraint || '').includes('phone_e164')) throw err;
+    }
+
+    if (created) {
+      // We created it, so we own the bonus. grantSignupBonus is idempotent per
+      // customer anyway (ON CONFLICT on user_id/type/reference), so the loser
+      // skipping it is belt and braces rather than the only protection.
+      await grantSignupBonus(id);
+      row = created;
+    } else {
+      // Lost the race. The winner's row is there now; resolve it exactly as
+      // the lookup above would have, and sign in against it.
+      row = await findCustomerByVerifiedPhone(verifiedE164);
+      if (!row) {
+        // Conflicted on phone_e164 yet not findable by it — not reachable
+        // through this path, but failing loudly beats minting a session for an
+        // account we could not identify.
+        throw new Error('phone_e164 conflicted but the owning account could not be resolved');
+      }
+      isNewAccount = false;
+    }
+  }
+
+  // Re-read so the session reflects the updates just applied — including the
+  // signup bonus, which writes to the row through its own query.
+  const fresh = await pool.query('SELECT * FROM customers WHERE id = $1', [row.id]);
+  row = fresh.rows[0];
+
+  const sessionId = await createSession(row.id, req);
+  const token = signCustomerToken(row.id, row.email, Number(row.token_version) || 0, sessionId);
+  return { token, user: toSessionUser(row), isNewAccount };
+}
+
 router.post('/auth/otp/verify', otpVerifyLimiter, async (req: Request, res: Response) => {
   const { challengeId, code } = req.body || {};
+
+  // Firebase mode: there is no challenge on this side to verify against, so
+  // refuse before touching the database. Without this the lookup would simply
+  // miss and report "no longer valid", which reads like an expired code and
+  // would send a developer hunting the wrong bug.
+  if (firebaseOtpSelected()) {
+    return res.status(409).json({
+      error: 'OTP sign-in is handled by the app on this device. Please reload the page and try again.',
+      clientSideProvider: 'firebase',
+    });
+  }
 
   if (!challengeId) {
     return res.status(400).json({ error: 'This sign-in attempt has expired. Please request a new OTP.', mustResend: true });
@@ -607,68 +720,189 @@ router.post('/auth/otp/verify', otpVerifyLimiter, async (req: Request, res: Resp
     }
   }
 
-  // Everything below keys off the number stored with the challenge, which is
-  // the one the code was actually delivered to.
-  const verifiedE164 = verification.phoneE164;
-  const parsedVerified = normalizePhone(verifiedE164);
-  // Display form for the free-text `phone` column the profile screen shows.
-  const displayPhone = parsedVerified
-    ? `${parsedVerified.countryCode} ${parsedVerified.national}`
-    : verifiedE164;
+  // Keys off the number stored with the challenge, which is the one the code
+  // was actually delivered to — never anything the client sent.
+  const { token, user, isNewAccount } = await establishPhoneSession(verification.phoneE164, req);
+  res.json({ token, user, isNewAccount });
+});
 
-  let row = await findCustomerByVerifiedPhone(verifiedE164);
-  const isNewAccount = !row;
-
-  if (row) {
-    // Pin the canonical number to the row the first time this account signs
-    // in by OTP, so later sign-ins take the indexed exact-match path. Guarded
-    // on IS NULL and tolerant of the unique index rejecting it: if another
-    // row claimed the number in between, the sign-in still succeeds against
-    // the account we already resolved.
-    if (!row.phone_e164) {
-      try {
-        await pool.query('UPDATE customers SET phone_e164 = $1 WHERE id = $2 AND phone_e164 IS NULL', [
-          verifiedE164,
-          row.id,
-        ]);
-      } catch (err) {
-        console.error('Could not claim phone_e164 for existing customer:', (err as Error).message);
-      }
-    }
-    // The number has just been proved, and `phone` may be empty on an account
-    // that registered by email alone.
-    await pool.query(
-      'UPDATE customers SET phone_verified = true, phone = COALESCE(phone, $1) WHERE id = $2',
-      [displayPhone, row.id]
-    );
-  } else {
-    const id = 'cust-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-    // password_hash is NOT NULL and this account has no password — the same
-    // random, never-shared hash the Google sign-up path uses satisfies it
-    // without creating a credential anyone could guess.
-    const passwordHash = bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), bcrypt.genSaltSync(10));
-    // No name is collected during OTP sign-in; the customer sets a real one
-    // in their profile. email stays NULL rather than being faked, so order
-    // mail is never addressed to an invented address.
-    const placeholderName = 'Glamirk Customer';
-
-    await pool.query(
-      `INSERT INTO customers (id, name, first_name, phone, phone_e164, phone_verified, password_hash)
-       VALUES ($1, $2, $3, $4, $5, true, $6)`,
-      [id, placeholderName, placeholderName, displayPhone, verifiedE164, passwordHash]
-    );
-    await grantSignupBonus(id);
-    const created = await pool.query('SELECT * FROM customers WHERE id = $1', [id]);
-    row = created.rows[0];
+// ==========================================
+// FIREBASE PHONE AUTH — SESSION EXCHANGE
+//
+// The alternative sign-in for accounts without DLT registration. Google sends
+// the SMS and checks the code; the browser then hands us the resulting ID
+// token and this route decides whether it is proof of a verified number.
+//
+// It issues nothing of its own: once the phone is established it runs the SAME
+// account lookup, bonus grant, session and JWT logic the OTP route above uses,
+// so a Firebase session is indistinguishable from an OTP one everywhere
+// downstream — same revocation, same token_version, same /auth/me.
+//
+// Shares otpVerifyLimiter with the OTP route on purpose: the per-number quota
+// lives in customer_otp_codes and does not apply here (Google owns the sends),
+// so the per-IP ceiling is the one throttle this path still has.
+// ==========================================
+router.post('/auth/otp/firebase/verify', otpVerifyLimiter, async (req: Request, res: Response) => {
+  if (!firebaseOtpSelected()) {
+    return res.status(409).json({ error: 'Firebase sign-in is not enabled on this deployment.' });
   }
 
-  const fresh = await pool.query('SELECT * FROM customers WHERE id = $1', [row.id]);
-  row = fresh.rows[0];
+  const { idToken, phone, countryCode } = req.body || {};
+  if (!idToken) {
+    return res.status(400).json({ error: 'Verification failed. Please try again.' });
+  }
 
-  const sessionId = await createSession(row.id, req);
-  const token = signCustomerToken(row.id, row.email, Number(row.token_version) || 0, sessionId);
-  res.json({ token, user: toSessionUser(row), isNewAccount });
+  const verification = await verifyFirebasePhoneToken(idToken);
+  if (verification.status !== 'verified') {
+    // One wording for every rejection reason. The distinctions matter to the
+    // operator in the log, not to the customer, and spelling them out would
+    // tell an attacker which of their forgeries got closest.
+    if (verification.status !== 'no_phone') {
+      console.error(`[firebase-auth] rejected (${verification.status})`);
+    } else {
+      console.error('[firebase-auth] rejected: token carried no phone_number');
+    }
+    const status = verification.status === 'unconfigured' ? 503 : 401;
+    return res.status(status).json({ error: 'Verification failed. Please request a new code.' });
+  }
+
+  // Identity comes ONLY from the signed token. Re-validated through the same
+  // normaliser the OTP path uses, so an unsupported country cannot enter here
+  // by a side door even though Firebase was asked to restrict to India.
+  const normalized = normalizePhone(verification.phoneRaw);
+  if (!normalized || !SUPPORTED_COUNTRY_CODES.includes(normalized.countryCode as any)) {
+    console.error('[firebase-auth] verified number is not a supported mobile');
+    return res.status(400).json({ error: 'This mobile number is not supported.' });
+  }
+
+  // If the browser told us which number it was signing in as, it must agree
+  // with the token. The claim is never the source of truth — it is only used
+  // to catch a mismatch, which would mean the client and the token disagree
+  // about who is signing in.
+  if (phone) {
+    const claimed = normalizePhone(phone, countryCode || DEFAULT_COUNTRY_CODE);
+    if (!claimed || claimed.e164 !== normalized.e164) {
+      console.error('[firebase-auth] claimed number does not match the verified token');
+      return res.status(400).json({ error: 'Verification failed. Please request a new code.' });
+    }
+  }
+
+  // The number comes from the signed token, re-normalised above — never from
+  // the `phone` the client sent, which was only used to catch a mismatch.
+  const { token, user, isNewAccount } = await establishPhoneSession(normalized.e164, req);
+  res.json({ token, user, isNewAccount });
 });
+
+// ==========================================
+// CHANGING THE VERIFIED MOBILE NUMBER
+//
+// The number IS the identity: it is what findCustomerByVerifiedPhone keys on
+// and what signs the customer in. So this is not a profile edit — it moves the
+// account to a different credential, and it only happens on the same proof
+// sign-in requires: a Firebase ID token for the new number.
+//
+// Requires an existing session as well, so changing the number needs both the
+// old account and control of the new handset. A stolen phone alone cannot take
+// an account over, and a stolen session alone cannot move it somewhere the
+// thief can receive codes.
+//
+// The free-text `phone` column is deliberately left alone — that is a courier
+// contact number and is not proof of anything.
+// ==========================================
+router.post(
+  '/auth/otp/firebase/change-phone',
+  requireCustomer,
+  otpVerifyLimiter,
+  async (req: AuthenticatedCustomerRequest, res: Response) => {
+    // 503, not 409. On this route a 409 already means "that number belongs to
+    // someone else" — a conflict the customer fixes by entering a different
+    // number. A deployment with Firebase switched off is the opposite: nothing
+    // the customer types will help, and it may well be fixed by the time they
+    // retry. Reusing 409 here made the UI tell them their number was taken when
+    // the real cause was server configuration. Matches the 'unconfigured'
+    // branch below, which already answers 503.
+    if (!firebaseOtpSelected()) {
+      return res.status(503).json({ error: 'Firebase sign-in is not enabled on this deployment.' });
+    }
+
+    const { idToken } = req.body || {};
+    if (!idToken) {
+      return res.status(400).json({ error: 'Verification failed. Please try again.' });
+    }
+
+    const verification = await verifyFirebasePhoneToken(idToken);
+    if (verification.status !== 'verified') {
+      // One wording for every rejection reason, as on the sign-in route: the
+      // distinctions matter to the operator in the log, not to the customer.
+      console.error(`[firebase-auth] change-phone rejected (${verification.status})`);
+      const status = verification.status === 'unconfigured' ? 503 : 401;
+      return res.status(status).json({ error: 'Verification failed. Please request a new code.' });
+    }
+
+    // Identity comes ONLY from the signed token, re-validated through the same
+    // normaliser and country allow-list the sign-in path uses.
+    const normalized = normalizePhone(verification.phoneRaw);
+    if (!normalized || !SUPPORTED_COUNTRY_CODES.includes(normalized.countryCode as any)) {
+      return res.status(400).json({ error: 'This mobile number is not supported.' });
+    }
+    const newE164 = normalized.e164;
+
+    const current = await pool.query('SELECT phone_e164 FROM customers WHERE id = $1', [req.customer!.id]);
+    if (!current.rows[0]) return res.status(404).json({ error: 'Account not found.' });
+
+    // Idempotent: verifying the number the account already has is a no-op
+    // success, so a retry after a dropped response cannot fail confusingly.
+    if (current.rows[0].phone_e164 === newE164) {
+      const unchanged = await pool.query('SELECT * FROM customers WHERE id = $1', [req.customer!.id]);
+      return res.json({ success: true, unchanged: true, user: toSessionUser(unchanged.rows[0]) });
+    }
+
+    // Guarded before the write so the common case is a clear 409 — and caught
+    // again below, because the check and the write are not atomic.
+    const owner = await pool.query('SELECT id FROM customers WHERE phone_e164 = $1 AND id <> $2', [
+      newE164,
+      req.customer!.id,
+    ]);
+    if (owner.rows.length) {
+      return res.status(409).json({ error: 'That mobile number is already in use on another account.' });
+    }
+
+    const displayPhone = `${normalized.countryCode} ${normalized.national}`;
+
+    try {
+      // One statement, so the number and its verified flag can never disagree.
+      await pool.query(
+        `UPDATE customers
+            SET phone_e164 = $1, phone_verified = true, phone = COALESCE(phone, $2)
+          WHERE id = $3`,
+        [newE164, displayPhone, req.customer!.id]
+      );
+    } catch (err) {
+      // The partial unique index is the real authority; another request may
+      // have claimed the number between the check above and this write.
+      const pgErr = err as { code?: string; constraint?: string };
+      if (pgErr.code === '23505' && String(pgErr.constraint || '').includes('phone_e164')) {
+        return res.status(409).json({ error: 'That mobile number is already in use on another account.' });
+      }
+      throw err;
+    }
+
+    // The credential moved, so every other device must sign in again — on the
+    // new number. The device that made the change keeps working: it just
+    // proved control, and signing it out would strand the customer mid-flow.
+    const tokenVersion = await bumpTokenVersion(req.customer!.id);
+    await deleteAllSessions(req.customer!.id, req.customer!.sessionId);
+    invalidateAccountCache(req.customer!.id);
+
+    const sessionId = req.customer!.sessionId || (await createSession(req.customer!.id, req));
+    const fresh = await pool.query('SELECT * FROM customers WHERE id = $1', [req.customer!.id]);
+    const row = fresh.rows[0];
+    // bumpTokenVersion invalidated the caller's old token too; this replaces it.
+    const token = signCustomerToken(row.id, row.email, tokenVersion, sessionId);
+
+    res.json({ success: true, token, user: toSessionUser(row) });
+  }
+);
 
 router.get('/auth/me', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
   const result = await pool.query('SELECT * FROM customers WHERE id = $1', [req.customer!.id]);

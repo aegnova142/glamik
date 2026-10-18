@@ -1,13 +1,16 @@
 // ==========================================
-// OTP DELIVERY — SMS AND WHATSAPP
+// OTP DELIVERY — SMS ONLY
 //
-//   sendOtpMessage({ phone, otp, method })
-//        ├── method 'sms'      → SMS_PROVIDER      (twilio | msg91)
-//        └── method 'whatsapp' → WHATSAPP_PROVIDER (meta | twilio)
+//   sendOtpMessage({ phone, otp }) → firebase (client-side) or the dev console
 //
-// The login route knows only this function and the result it returns; it has
-// no idea which vendor is behind either channel. Swapping providers is an
-// env change plus a ~30-line function here, and touches no auth code.
+// SMS is the only OTP channel. WhatsApp and email are deliberately NOT OTP
+// transports: WhatsApp carries order updates only (see
+// whatsappNotifications.service.ts), and a sign-in code must not arrive on a
+// channel the customer did not prove control of.
+//
+// Firebase is client-side, so with it selected this module sends nothing at
+// all — the browser talks to Google and the backend only verifies the ID
+// token afterwards.
 //
 // Two rules this module exists to enforce:
 //
@@ -22,7 +25,12 @@
 // list and what each provider needs.
 // ==========================================
 
-export type OtpChannel = 'sms' | 'whatsapp';
+import { firebaseSignInReady } from './firebaseAuth.service';
+
+/** SMS is the only OTP channel. Kept as a named type rather than inlined so
+ * the stored `delivery_method` column and every signature still say what they
+ * carry, and so adding a channel later is a union edit rather than a hunt. */
+export type OtpChannel = 'sms';
 
 export interface OtpMessage {
   /** E.164, e.g. "+919876543210". */
@@ -48,16 +56,8 @@ export type DeliveryResult =
   /** Credentials exist but the provider rejected or could not be reached. */
   | { status: 'error'; provider: string; detail: string };
 
-interface ProviderConfig {
-  smsProvider: string;
-  whatsappProvider: string;
-}
-
-function providerNames(): ProviderConfig {
-  return {
-    smsProvider: (process.env.SMS_PROVIDER || '').trim().toLowerCase(),
-    whatsappProvider: (process.env.WHATSAPP_PROVIDER || '').trim().toLowerCase(),
-  };
+function smsProviderName(): string {
+  return (process.env.SMS_PROVIDER || '').trim().toLowerCase();
 }
 
 /** "60 seconds" / "2 minutes" — whichever reads naturally for the configured
@@ -66,13 +66,6 @@ function describeValidity(seconds: number): string {
   if (seconds % 60 === 0 && seconds >= 120) return `${seconds / 60} minutes`;
   if (seconds === 60) return '1 minute';
   return `${seconds} seconds`;
-}
-
-/** Message text for SMS. Kept short — one segment, and the code is first so
- * it shows in a notification preview without opening the app. */
-function smsBody(otp: string, expiresInSeconds: number): string {
-  const brand = process.env.OTP_SMS_BRAND || 'Glamirk Beauty';
-  return `${otp} is your ${brand} verification code. It expires in ${describeValidity(expiresInSeconds)}. Do not share it with anyone.`;
 }
 
 // Provider calls should fail fast: the customer is watching a spinner, and a
@@ -104,205 +97,123 @@ function briefly(text: string): string {
   return collapsed.length > 300 ? `${collapsed.slice(0, 300)}…` : collapsed;
 }
 
-// ------------------------------------------
-// SMS — Twilio
-// ------------------------------------------
-
-async function sendSmsViaTwilio(msg: OtpMessage): Promise<DeliveryResult> {
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  // Either a plain sender number or a Messaging Service; Twilio accepts one
-  // or the other, and the Messaging Service is what gives sender rotation.
-  const from = process.env.TWILIO_SMS_FROM;
-  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
-
-  if (!sid || !token || (!from && !messagingServiceSid)) {
-    return { status: 'unconfigured', provider: 'twilio' };
-  }
-
-  const body = new URLSearchParams({ To: msg.phone, Body: smsBody(msg.otp, msg.expiresInSeconds) });
-  if (messagingServiceSid) body.set('MessagingServiceSid', messagingServiceSid);
-  else body.set('From', from!);
-
-  try {
-    const res = await fetch(
-      `${apiBase('TWILIO_API_BASE_URL', 'https://api.twilio.com')}/2010-04-01/Accounts/${encodeURIComponent(sid)}/Messages.json`,
-      {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body,
-      signal: timeoutSignal(),
-    });
-    const payload: any = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      return { status: 'error', provider: 'twilio', detail: briefly(payload?.message || `HTTP ${res.status}`) };
-    }
-    return { status: 'sent', provider: 'twilio', providerMessageId: payload?.sid };
-  } catch (err) {
-    return { status: 'error', provider: 'twilio', detail: briefly((err as Error).message) };
-  }
-}
-
-// ------------------------------------------
-// SMS — MSG91
-//
-// Uses the Flow API rather than MSG91's own OTP endpoint on purpose: the OTP
-// endpoint generates and verifies the code itself, which would move
-// authentication out of this application and into a vendor. We generate and
-// verify our own code and use MSG91 purely as a transport.
-// ------------------------------------------
-
-async function sendSmsViaMsg91(msg: OtpMessage): Promise<DeliveryResult> {
-  const authKey = process.env.MSG91_AUTH_KEY;
-  const templateId = process.env.MSG91_OTP_TEMPLATE_ID;
-
-  if (!authKey || !templateId) {
-    return { status: 'unconfigured', provider: 'msg91' };
-  }
-
-  // MSG91 wants the number without a leading '+'.
-  const recipient = msg.phone.replace(/^\+/, '');
-  // The variable name has to match the ##placeholder## in the approved DLT
-  // template, which differs per account — hence the override.
-  const otpVariable = process.env.MSG91_OTP_VARIABLE || 'otp';
-
-  const body: Record<string, unknown> = {
-    template_id: templateId,
-    short_url: '0',
-    recipients: [{ mobiles: recipient, [otpVariable]: msg.otp }],
-  };
-  if (process.env.MSG91_SENDER_ID) body.sender = process.env.MSG91_SENDER_ID;
-
-  try {
-    const res = await fetch(`${apiBase('MSG91_API_BASE_URL', 'https://control.msg91.com')}/api/v5/flow/`, {
-      method: 'POST',
-      headers: { authkey: authKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: timeoutSignal(),
-    });
-    const payload: any = await res.json().catch(() => ({}));
-    // MSG91 answers 200 with {type:'error'} for template and DLT problems, so
-    // the status code alone is not enough to call this a success.
-    if (!res.ok || payload?.type === 'error') {
-      return { status: 'error', provider: 'msg91', detail: briefly(payload?.message || `HTTP ${res.status}`) };
-    }
-    return { status: 'sent', provider: 'msg91', providerMessageId: payload?.request_id };
-  } catch (err) {
-    return { status: 'error', provider: 'msg91', detail: briefly((err as Error).message) };
-  }
-}
-
-// ------------------------------------------
-// WhatsApp — Meta WhatsApp Cloud API (official)
-//
-// Business-initiated OTP messages must use an approved template of category
-// AUTHENTICATION; free-form text to a user who hasn't messaged first is
-// rejected by Meta. So this sends a template, and the template name/language
-// are configuration rather than constants.
-// ------------------------------------------
-
-async function sendWhatsAppViaMeta(msg: OtpMessage): Promise<DeliveryResult> {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const template = process.env.WHATSAPP_OTP_TEMPLATE_NAME;
-
-  if (!phoneNumberId || !accessToken || !template) {
-    return { status: 'unconfigured', provider: 'meta' };
-  }
-
-  const language = process.env.WHATSAPP_OTP_TEMPLATE_LANGUAGE || 'en_US';
-  const apiVersion = process.env.WHATSAPP_API_VERSION || 'v21.0';
-
-  const components: unknown[] = [
-    { type: 'body', parameters: [{ type: 'text', text: msg.otp }] },
+/**
+ * Provider-supplied text, made safe to keep and log.
+ *
+ * Error messages come from a third party and end up in our logs, so they are
+ * treated as untrusted input rather than as our own words: anything matching
+ * a credential this process holds — or the code we just sent — is replaced
+ * before the string goes anywhere. Providers do quote what you sent them back
+ * at you in validation errors, and a 401 reading "authkey <key> is invalid"
+ * would otherwise write that key to disk, where log shipping and support
+ * screenshots take it from there.
+ *
+ * Length is bounded first so a single huge page can't make this slow.
+ */
+function safeDetail(text: string, otp?: string): string {
+  let out = briefly(text);
+  const secrets = [
+    process.env.WHATSAPP_ACCESS_TOKEN,
+    otp,
   ];
-  // Meta's authentication templates normally carry a one-tap / copy-code
-  // button, and when they do the code must be repeated as the button's
-  // parameter or the send is rejected. Templates without one set this false.
-  if ((process.env.WHATSAPP_OTP_TEMPLATE_COPY_CODE_BUTTON || 'true').toLowerCase() !== 'false') {
-    components.push({
-      type: 'button',
-      sub_type: 'url',
-      index: '0',
-      parameters: [{ type: 'text', text: msg.otp }],
-    });
+  for (const secret of secrets) {
+    // Short values would redact ordinary words out of the message and make it
+    // useless; a real credential is never this short.
+    if (secret && secret.length >= 4) out = out.split(secret).join('[redacted]');
   }
-
-  try {
-    const res = await fetch(
-      `${apiBase('WHATSAPP_API_BASE_URL', 'https://graph.facebook.com')}/${apiVersion}/${encodeURIComponent(phoneNumberId)}/messages`,
-      {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: msg.phone.replace(/^\+/, ''),
-        type: 'template',
-        template: { name: template, language: { code: language }, components },
-      }),
-      signal: timeoutSignal(),
-    });
-    const payload: any = await res.json().catch(() => ({}));
-    if (!res.ok || payload?.error) {
-      return { status: 'error', provider: 'meta', detail: briefly(payload?.error?.message || `HTTP ${res.status}`) };
-    }
-    return { status: 'sent', provider: 'meta', providerMessageId: payload?.messages?.[0]?.id };
-  } catch (err) {
-    return { status: 'error', provider: 'meta', detail: briefly((err as Error).message) };
-  }
+  return out;
 }
 
 // ------------------------------------------
-// WhatsApp — Twilio (WhatsApp Business API reseller)
+// Gates
+//
+// Three independent switches, checked in this order by sendOtpMessage:
+// the dev console bypass, the master kill switch, then provider selection.
 // ------------------------------------------
 
-async function sendWhatsAppViaTwilio(msg: OtpMessage): Promise<DeliveryResult> {
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_WHATSAPP_FROM;
+/**
+ * Master switch for REAL outbound OTP delivery. Defaults to OFF.
+ *
+ * Off-by-default is deliberate: relying on provider names being blank means a
+ * vendor starts sending the moment somebody pastes credentials into an .env,
+ * which is how a "disabled" integration quietly turns itself back on. It also
+ * keeps a deployment disabled without anyone editing a file there.
+ *
+ * This does NOT weaken anything: codes are still generated, hashed, expired,
+ * rate-limited and verified exactly as before. The only question it answers is
+ * whether a message is handed to a third party.
+ */
+export function otpDeliveryEnabled(): boolean {
+  const flag = (process.env.OTP_DELIVERY_ENABLED || '').trim().toLowerCase();
+  return flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
+}
 
-  if (!sid || !token || !from) {
-    return { status: 'unconfigured', provider: 'twilio' };
-  }
+/**
+ * Whether Firebase Phone Auth is the selected SMS path.
+ *
+ * In this mode Google sends the SMS and checks the code, so this module sends
+ * nothing: there is no SMS_PROVIDERS entry for it on purpose. The backend's
+ * own issue/verify endpoints refuse rather than pretending, and the browser
+ * hands us an ID token to verify (firebaseAuth.service.ts).
+ */
+export function firebaseOtpSelected(): boolean {
+  return (process.env.SMS_PROVIDER || '').trim().toLowerCase() === 'firebase';
+}
 
-  const body = new URLSearchParams({
-    To: `whatsapp:${msg.phone}`,
-    From: from.startsWith('whatsapp:') ? from : `whatsapp:${from}`,
-  });
-  // A Content SID is Twilio's handle for an approved WhatsApp template. It is
-  // required to open a conversation; plain Body only works inside an existing
-  // 24-hour session, which a login almost never is.
-  const contentSid = process.env.TWILIO_WHATSAPP_OTP_CONTENT_SID;
-  if (contentSid) {
-    body.set('ContentSid', contentSid);
-    body.set('ContentVariables', JSON.stringify({ '1': msg.otp }));
-  } else {
-    body.set('Body', smsBody(msg.otp, msg.expiresInSeconds));
-  }
+/**
+ * Whether the console transport is active. Checked per call, never cached, so
+ * a test can exercise both sides of the gate in one process.
+ *
+ * Requires NODE_ENV to be exactly 'development' — deliberately stricter than
+ * "not production", because a server with NODE_ENV unset (the normal result of
+ * a systemd unit or a Docker image that forgets it) would otherwise print live
+ * customers' codes into the journal. An unset NODE_ENV fails closed, which is
+ * the behaviour an auth bypass has to have.
+ */
+export function devOtpEnabled(): boolean {
+  if (process.env.NODE_ENV !== 'development') return false;
+  const flag = (process.env.OTP_DEV_MODE || '').trim().toLowerCase();
+  return flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
+}
 
-  try {
-    const res = await fetch(
-      `${apiBase('TWILIO_API_BASE_URL', 'https://api.twilio.com')}/2010-04-01/Accounts/${encodeURIComponent(sid)}/Messages.json`,
-      {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body,
-      signal: timeoutSignal(),
-    });
-    const payload: any = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      return { status: 'error', provider: 'twilio', detail: briefly(payload?.message || `HTTP ${res.status}`) };
-    }
-    return { status: 'sent', provider: 'twilio', providerMessageId: payload?.sid };
-  } catch (err) {
-    return { status: 'error', provider: 'twilio', detail: briefly((err as Error).message) };
-  }
+/**
+ * Whether OTP_DEV_MODE is asking for something this environment refuses.
+ *
+ * Reported at boot so the refusal is visible: someone who set the flag in a
+ * production .env and saw sign-in keep working would otherwise have no way to
+ * know the bypass was inert — and might go looking for the code in the logs.
+ */
+export function devOtpRequestedButRefused(): boolean {
+  const flag = (process.env.OTP_DEV_MODE || '').trim().toLowerCase();
+  const asked = flag === '1' || flag === 'true' || flag === 'yes' || flag === 'on';
+  return asked && !devOtpEnabled();
+}
+
+/**
+ * "Delivers" the code by printing it.
+ *
+ * Boxed and loud because it is a security bypass; nobody should be able to see
+ * this scroll past and mistake the server for a normal one. The phone number
+ * is printed in full here — unlike every other log line in this file — because
+ * locally it is the developer's own test number and matching code to number is
+ * the entire point.
+ */
+function deliverOtpToConsole(msg: OtpMessage): DeliveryResult {
+  console.log(
+    '\n' +
+      '  ====================================================================\n' +
+      '   DEVELOPMENT OTP — no SMS was sent\n' +
+      '\n' +
+      `   channel : ${msg.method}\n` +
+      `   to      : ${msg.phone}\n` +
+      `   code    : ${msg.otp}\n` +
+      `   expires : in ${describeValidity(msg.expiresInSeconds)}\n` +
+      '\n' +
+      '   OTP_DEV_MODE is on and NODE_ENV is development. This cannot\n' +
+      '   happen in production.\n' +
+      '  ====================================================================\n'
+  );
+  return { status: 'sent', provider: 'dev-console' };
 }
 
 // ------------------------------------------
@@ -310,56 +221,56 @@ async function sendWhatsAppViaTwilio(msg: OtpMessage): Promise<DeliveryResult> {
 // ------------------------------------------
 
 /**
- * SMS_PROVIDER="console" — local development only. Prints the code to the
- * server terminal instead of sending anything, so sign-in can be exercised
- * without a vendor account. This is the one deliberate exception to "the
- * code is never logged", which is why it refuses to run in production: a
- * stray SMS_PROVIDER="console" on the server must not turn the log file
- * into the OTP channel.
+ * Server-side SMS transports.
+ *
+ * DELIBERATELY EMPTY. Firebase is the only SMS provider, and it does not
+ * belong here: the browser talks to Google directly and this backend never
+ * carries a code. The table is kept rather than deleted because the dispatch
+ * below is written around it, and because adding a server-side vendor later
+ * means one entry here and a ~30-line function above — not a rewrite.
+ *
+ * With nothing in it, any SMS_PROVIDER value other than "firebase" reports the
+ * channel unconfigured, which is the honest answer.
  */
-function consoleProviderAllowed(): boolean {
-  // An allow-list, not "anything but production": a staging box with
-  // NODE_ENV=staging must not log codes. Unset counts as development, the
-  // same default env.nodeEnv uses.
-  return ['development', 'test'].includes(process.env.NODE_ENV || 'development');
-}
-
-async function sendSmsViaConsole(msg: OtpMessage): Promise<DeliveryResult> {
-  if (!consoleProviderAllowed()) return { status: 'unconfigured', provider: 'console' };
-  console.log(`[otp:dev] ${msg.method.toUpperCase()} to ${msg.phone} — code ${msg.otp} (SMS_PROVIDER=console, nothing was sent)`);
-  return { status: 'sent', provider: 'console' };
-}
-
-const SMS_PROVIDERS: Record<string, (msg: OtpMessage) => Promise<DeliveryResult>> = {
-  twilio: sendSmsViaTwilio,
-  msg91: sendSmsViaMsg91,
-  console: sendSmsViaConsole,
-};
-
-const WHATSAPP_PROVIDERS: Record<string, (msg: OtpMessage) => Promise<DeliveryResult>> = {
-  meta: sendWhatsAppViaMeta,
-  twilio: sendWhatsAppViaTwilio,
-};
+const SMS_PROVIDERS: Record<string, (msg: OtpMessage) => Promise<DeliveryResult>> = {};
 
 /** Whether a channel has a provider selected and credentialled. Used to hide
  * a dead option on the sign-in screen rather than letting the customer pick
  * it and hit an error. */
 export function channelConfigured(method: OtpChannel): boolean {
-  const names = providerNames();
+  // In dev mode every channel can deliver, because the transport is a
+  // console.log that cannot fail. Without this the sign-in screen would hide
+  // SMS — the very thing being tested — whenever credentials are absent,
+  // which locally is the normal state.
+  if (devOtpEnabled()) return true;
+
+  // With real delivery switched off, no channel is offered — however complete
+  // the credentials happen to be. The sign-in screen then shows its
+  // "unavailable" state instead of taking a number it cannot send to.
+  if (!otpDeliveryEnabled()) return false;
+
   if (method === 'sms') {
-    const send = SMS_PROVIDERS[names.smsProvider];
-    if (!send) return false;
-    if (names.smsProvider === 'console') return consoleProviderAllowed();
-    return names.smsProvider === 'twilio'
-      ? !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN &&
-           (process.env.TWILIO_SMS_FROM || process.env.TWILIO_MESSAGING_SERVICE_SID))
-      : !!(process.env.MSG91_AUTH_KEY && process.env.MSG91_OTP_TEMPLATE_ID);
+    // Firebase has no entry in SMS_PROVIDERS — the browser talks to Google
+    // directly — so it must be answered before the table lookup below, which
+    // would otherwise report the channel dead. It still honours the kill
+    // switch above: with delivery off, firebase mode offers nothing either, so
+    // no SMS can leave by any route.
+    //
+    // The full readiness check, not just FIREBASE_PROJECT_ID: the server half
+    // being configured says nothing about whether the browser can actually
+    // reach Firebase. Answering "available" on the strength of the server half
+    // alone is what produces an enabled sign-in button that dead-ends — the
+    // client falls back to the server OTP path, which answers 409, and the
+    // customer is told to reload a page that will do the same thing again.
+    if (firebaseOtpSelected()) return firebaseSignInReady();
+
+    // SMS_PROVIDERS is empty, so anything other than firebase lands here and
+    // reports the channel dead — which is correct: there is no server-side SMS
+    // vendor left to carry a code.
+    return !!SMS_PROVIDERS[smsProviderName()];
   }
-  const send = WHATSAPP_PROVIDERS[names.whatsappProvider];
-  if (!send) return false;
-  return names.whatsappProvider === 'meta'
-    ? !!(process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_OTP_TEMPLATE_NAME)
-    : !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_WHATSAPP_FROM);
+  // No other channel carries an OTP.
+  return false;
 }
 
 /**
@@ -367,13 +278,37 @@ export function channelConfigured(method: OtpChannel): boolean {
  *
  * Never throws: every failure comes back as a DeliveryResult so the caller
  * can decide what the customer sees. Never switches channel on its own —
- * if WhatsApp fails the customer is told, and chooses.
+ * if delivery fails the customer is told rather than silently rerouted.
  */
 export async function sendOtpMessage(msg: OtpMessage): Promise<DeliveryResult> {
-  const names = providerNames();
-  const providerName = msg.method === 'sms' ? names.smsProvider : names.whatsappProvider;
-  const table = msg.method === 'sms' ? SMS_PROVIDERS : WHATSAPP_PROVIDERS;
-  const send = table[providerName];
+  // Checked before any provider is selected, so dev mode works with
+  // SMS_PROVIDER unset entirely and never reaches a vendor's network.
+  if (devOtpEnabled()) return deliverOtpToConsole(msg);
+
+  // The kill switch sits in front of provider selection, so with delivery off
+  // no vendor is contacted on any code path — not even one with complete
+  // credentials. Reported as 'unconfigured' rather than 'error' because this
+  // is a deliberate state, not a failure, and the route tells the customer
+  // the channel is unavailable rather than asking them to retry.
+  if (!otpDeliveryEnabled()) {
+    return { status: 'unconfigured', provider: null };
+  }
+
+  // Firebase mode must never reach here: issueOtp bypasses delivery entirely
+  // (see otp.service.ts), because Google both sends the code and checks it.
+  // If a caller does arrive, say so rather than returning 'sent' for a message
+  // nobody sent — a cheerful lie here is exactly what this module exists to
+  // prevent.
+  if (firebaseOtpSelected()) {
+    return {
+      status: 'error',
+      provider: 'firebase',
+      detail: 'firebase phone auth sends its own SMS; the backend must not be asked to deliver one',
+    };
+  }
+
+  const providerName = smsProviderName();
+  const send = SMS_PROVIDERS[providerName];
 
   if (!send) {
     return { status: 'unconfigured', provider: providerName || null };
@@ -390,5 +325,7 @@ export async function sendOtpMessage(msg: OtpMessage): Promise<DeliveryResult> {
 
 /** Logged once at boot alongside the other configuration warnings. */
 export function describeOtpChannels(): { sms: boolean; whatsapp: boolean } {
-  return { sms: channelConfigured('sms'), whatsapp: channelConfigured('whatsapp') };
+  // whatsapp is reported false, not omitted: the sign-in screen still reads the
+  // field, and saying "not available" is clearer than a missing key.
+  return { sms: channelConfigured('sms'), whatsapp: false };
 }

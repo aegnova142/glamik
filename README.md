@@ -115,10 +115,8 @@ The VPS pulls `main`, runs `npm ci && npm run build`, and reloads pm2 from the v
 `backend/dist/server.cjs`, and the old copy on the server must be replaced once** after the
 monorepo split, or pm2 will keep launching a path that no longer exists.
 
-`render.yaml` is kept in sync for Render deploys.
-
 ## Environment
 
 Everything is documented inline in [`.env.example`](.env.example). `DATABASE_URL` and
-`CLOUDINARY_URL` are required; `JWT_SECRET` is strongly recommended; SMTP and
-`VITE_GOOGLE_CLIENT_ID` are optional and degrade gracefully when absent.
+`CLOUDINARY_URL` are required; `JWT_SECRET` is strongly recommended; SMTP is
+optional and degrades gracefully when absent.

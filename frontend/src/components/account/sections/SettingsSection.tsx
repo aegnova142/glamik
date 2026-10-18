@@ -5,7 +5,6 @@
 
 import React, { useEffect, useState } from 'react';
 import {
-  KeyRound,
   Monitor,
   LogOut,
   ShieldAlert,
@@ -48,25 +47,16 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
     loadProfile,
     sessions,
     loadSessions,
-    changePassword,
     revokeSession,
     logoutAllDevices,
     requestAccountDeletion,
     cancelAccountDeletion,
   } = useAccount();
 
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordBusy, setPasswordBusy] = useState(false);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
-
   const [logoutAllBusy, setLogoutAllBusy] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deletePassword, setDeletePassword] = useState('');
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -75,36 +65,6 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
     loadProfile();
     loadSessions();
   }, [loadProfile, loadSessions]);
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPasswordError(null);
-    setPasswordSuccess(null);
-
-    if (newPassword.length < 8) {
-      setPasswordError('Your new password must be at least 8 characters.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordError('The two new passwords do not match.');
-      return;
-    }
-
-    setPasswordBusy(true);
-    const res = await changePassword(currentPassword, newPassword);
-    setPasswordBusy(false);
-
-    if (!res.success) {
-      setPasswordError(res.error || 'Could not change your password.');
-      return;
-    }
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setPasswordSuccess('Password changed. Every other device has been signed out.');
-    showToast('Password changed');
-    loadSessions(true);
-  };
 
   const handleLogoutAll = async () => {
     setLogoutAllBusy(true);
@@ -125,7 +85,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
     e.preventDefault();
     setDeleteError(null);
     setDeleteBusy(true);
-    const res = await requestAccountDeletion(deletePassword, deleteConfirmation);
+    const res = await requestAccountDeletion(deleteConfirmation);
     setDeleteBusy(false);
 
     if (!res.success) {
@@ -133,7 +93,6 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
       return;
     }
     setDeleteOpen(false);
-    setDeletePassword('');
     setDeleteConfirmation('');
     showToast('Account closure scheduled.');
   };
@@ -197,59 +156,6 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
             );
           })}
         </ul>
-      </AccountCard>
-
-      {/* Password */}
-      <AccountCard className="overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#E8D5A8] flex items-center gap-2.5">
-          <KeyRound className="w-4 h-4 text-[#C9972B]" />
-          <h2 className="font-serif text-lg text-[#121212]">Change Password</h2>
-        </div>
-        <form onSubmit={handleChangePassword} className="p-5 space-y-4">
-          <AccountField label="Current Password" htmlFor="current-password" required className="sm:max-w-sm">
-            <input
-              id="current-password"
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className={inputClass}
-            />
-          </AccountField>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <AccountField label="New Password" htmlFor="new-password" required hint="At least 8 characters">
-              <input
-                id="new-password"
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className={inputClass}
-              />
-            </AccountField>
-            <AccountField label="Confirm New Password" htmlFor="confirm-password" required>
-              <input
-                id="confirm-password"
-                type="password"
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className={inputClass}
-              />
-            </AccountField>
-          </div>
-
-          <p className="text-[11px] text-[#6B6B6B]">
-            Changing your password signs you out everywhere else — this device stays signed in.
-          </p>
-
-          <AccountFormMessage tone="error" message={passwordError} />
-          <AccountFormMessage tone="success" message={passwordSuccess} />
-
-          <AccountButton type="submit" loading={passwordBusy} disabled={!currentPassword || !newPassword}>
-            Update Password
-          </AccountButton>
-        </form>
       </AccountCard>
 
       {/* Devices */}
@@ -348,16 +254,6 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
             </AccountButton>
           ) : (
             <form onSubmit={handleRequestDeletion} className="space-y-4 pt-2 border-t border-[#F1EBDD]">
-              <AccountField label="Confirm your password" htmlFor="delete-password" required className="sm:max-w-sm">
-                <input
-                  id="delete-password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={deletePassword}
-                  onChange={(e) => setDeletePassword(e.target.value)}
-                  className={inputClass}
-                />
-              </AccountField>
               <AccountField
                 label="Type DELETE to confirm"
                 htmlFor="delete-confirm"
@@ -381,7 +277,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
                   type="submit"
                   variant="danger"
                   loading={deleteBusy}
-                  disabled={deleteConfirmation.trim().toUpperCase() !== 'DELETE' || !deletePassword}
+                  disabled={deleteConfirmation.trim().toUpperCase() !== 'DELETE'}
                 >
                   Schedule Account Closure
                 </AccountButton>

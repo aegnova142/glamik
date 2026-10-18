@@ -14,14 +14,25 @@ interface CustomerAuthContextType {
   customerLoading: boolean;
   /** `identifier` accepts an email address or a registered mobile number. */
   customerLogin: (identifier: string, password: string, remember?: boolean) => Promise<{ success: boolean; error?: string }>;
-  customerLoginWithGoogle: (accessToken: string, remember?: boolean) => Promise<{ success: boolean; error?: string }>;
   customerRegister: (name: string, email: string, password: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
   customerLogout: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<{ success: boolean; resetToken?: string; error?: string }>;
+  resetPassword: (token: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   /** Re-reads the signed-in customer from the server — used after a profile
    * edit so the navbar greeting and avatar update without a page reload. */
   refreshCustomerUser: () => Promise<void>;
-  requestPasswordReset: (email: string) => Promise<{ success: boolean; resetToken?: string; error?: string }>;
-  resetPassword: (token: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  /**
+   * Swaps in a session the SERVER issued to replace the current one.
+   *
+   * Changing the verified mobile number bumps token_version, which kills
+   * the token this tab is holding. The replacement has to be stored before
+   * the next request goes out, or the customer is signed out moments after
+   * a change that actually succeeded.
+   *
+   * Not a login: it never creates a session, it only adopts one the server
+   * just handed back for an already-authenticated customer.
+   */
+  applyReplacementToken: (token: string, user: CustomerUser) => void;
 
   // --- Mobile + OTP sign-in ---
   /** Which OTP channels the server can actually deliver on, so the picker
@@ -37,6 +48,15 @@ interface CustomerAuthContextType {
    * customer in. The phone number is NOT sent — the server reads it from the
    * challenge, so the client cannot nominate which account it signs into. */
   verifyOtp: (params: { challengeId: string; code: string; remember?: boolean }) => Promise<OtpVerifyOutcome>;
+  /** Exchanges a Firebase ID token for a Glamirk session. The token is proof
+   * of a verified phone number; the backend validates its signature before
+   * issuing anything. */
+  verifyFirebaseToken: (params: {
+    idToken: string;
+    phone?: string;
+    countryCode?: string;
+    remember?: boolean;
+  }) => Promise<OtpVerifyOutcome>;
 }
 
 export type OtpDeliveryMethod = 'sms' | 'whatsapp';
@@ -125,6 +145,17 @@ export const CustomerAuthProvider: React.FC<{ children: ReactNode }> = ({ childr
     }
   };
 
+  const applyReplacementToken = (token: string, user: CustomerUser): void => {
+    // Guarded rather than trusted: a caller passing an absent token would
+    // overwrite a working session and sign the customer out on the next
+    // request.
+    if (!token) return;
+    // Whether this session was 'remember me' is a property of the session,
+    // not of the change, so it is read from where the old token lived.
+    const remembered = !!localStorage.getItem('glamirk_customer_jwt_token');
+    setCustomerAuth(token, user, remembered);
+    setCustomerUser(user);
+  };
   const customerLogin = async (identifier: string, password: string, remember: boolean = true): Promise<{ success: boolean; error?: string }> => {
     const res = await customerApiFetch<{ token: string; user: CustomerUser }>('/api/customer/auth/login', {
       method: 'POST',
@@ -138,19 +169,6 @@ export const CustomerAuthProvider: React.FC<{ children: ReactNode }> = ({ childr
       return { success: true };
     }
     return { success: false, error: res.error || 'Invalid email or password.' };
-  };
-
-  const customerLoginWithGoogle = async (accessToken: string, remember: boolean = true): Promise<{ success: boolean; error?: string }> => {
-    const res = await customerApiFetch<{ token: string; user: CustomerUser }>('/api/customer/auth/google', {
-      method: 'POST',
-      body: JSON.stringify({ accessToken }),
-    });
-    if (res.data?.token) {
-      setCustomerAuth(res.data.token, res.data.user, remember);
-      setCustomerUser(res.data.user);
-      return { success: true };
-    }
-    return { success: false, error: res.error || 'Google sign-in failed.' };
   };
 
   const customerRegister = async (
@@ -193,34 +211,6 @@ export const CustomerAuthProvider: React.FC<{ children: ReactNode }> = ({ childr
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       }).catch(() => undefined);
     }
-  };
-
-  const requestPasswordReset = async (email: string): Promise<{ success: boolean; resetToken?: string; error?: string }> => {
-    const res = await customerApiFetch<{ success: boolean; resetToken: string }>('/api/customer/auth/forgot-password', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-    if (res.data?.success) {
-      return { success: true, resetToken: res.data.resetToken };
-    }
-    return { success: false, error: res.error || 'Could not process your request.' };
-  };
-
-  const resetPassword = async (token: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
-    const res = await customerApiFetch<{ success: boolean; token: string; user: CustomerUser }>('/api/customer/auth/reset-password', {
-      method: 'POST',
-      body: JSON.stringify({ token, newPassword }),
-    });
-    if (res.data?.success) {
-      // The server signs the user straight back in on a successful reset —
-      // no need to make them retype the password they just set.
-      if (res.data.token && res.data.user) {
-        setCustomerAuth(res.data.token, res.data.user, true);
-        setCustomerUser(res.data.user);
-      }
-      return { success: true };
-    }
-    return { success: false, error: res.error || 'Could not reset your password.' };
   };
 
   // ------------------------------------------
@@ -313,6 +303,66 @@ export const CustomerAuthProvider: React.FC<{ children: ReactNode }> = ({ childr
     };
   };
 
+  const requestPasswordReset = async (email: string): Promise<{ success: boolean; resetToken?: string; error?: string }> => {
+    const res = await customerApiFetch<{ success: boolean; resetToken: string }>('/api/customer/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+    if (res.data?.success) {
+      return { success: true, resetToken: res.data.resetToken };
+    }
+    return { success: false, error: res.error || 'Could not process your request.' };
+  };
+
+  const resetPassword = async (token: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    const res = await customerApiFetch<{ success: boolean; token: string; user: CustomerUser }>('/api/customer/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    });
+    if (res.data?.success) {
+      // The server signs the user straight back in on a successful reset —
+      // no need to make them retype the password they just set.
+      if (res.data.token && res.data.user) {
+        setCustomerAuth(res.data.token, res.data.user, true);
+        setCustomerUser(res.data.user);
+      }
+      return { success: true };
+    }
+    return { success: false, error: res.error || 'Could not reset your password.' };
+  };
+
+  const verifyFirebaseToken = async (params: {
+    idToken: string;
+    phone?: string;
+    countryCode?: string;
+    remember?: boolean;
+  }): Promise<OtpVerifyOutcome> => {
+    const { remember = true, ...body } = params;
+    const res = await customerApiFetch<{
+      token: string;
+      user: CustomerUser;
+      isNewAccount: boolean;
+    }>('/api/customer/auth/otp/firebase/verify', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+
+    if (res.data?.token) {
+      // Identical storage and session shape to every other sign-in path, so a
+      // Firebase customer is indistinguishable downstream.
+      setCustomerAuth(res.data.token, res.data.user, remember);
+      setCustomerUser(res.data.user);
+      return { success: true, isNewAccount: res.data.isNewAccount };
+    }
+    return {
+      success: false,
+      error: res.error || 'Verification failed. Please request a new code.',
+      // Every backend rejection here is terminal for that code — the only way
+      // forward is a fresh one.
+      mustResend: true,
+    };
+  };
+
   return (
     <CustomerAuthContext.Provider
       value={{
@@ -320,13 +370,14 @@ export const CustomerAuthProvider: React.FC<{ children: ReactNode }> = ({ childr
         isCustomerLoggedIn: !!customerUser,
         customerLoading,
         customerLogin,
-        customerLoginWithGoogle,
         customerRegister,
         customerLogout,
-        refreshCustomerUser,
         requestPasswordReset,
         resetPassword,
+        refreshCustomerUser,
+        applyReplacementToken,
         fetchOtpChannels,
+        verifyFirebaseToken,
         requestOtp,
         verifyOtp,
       }}

@@ -27,8 +27,74 @@ export function onlyDigits(value: string): string {
 }
 
 // Use on every phone input's onChange so users can never type letters/symbols.
+//
+// NOTE: this truncates blindly. For the sign-in field use
+// normalizePhoneInput() instead, which strips a pasted dial code and trunk
+// prefix FIRST — truncating "+919876543210" to ten digits yields
+// "9198765432", a different number that still looks valid.
 export function sanitizePhoneDigits(value: string, maxDigits: number): string {
   return onlyDigits(value).slice(0, maxDigits);
+}
+
+/**
+ * What the customer meant, from what they actually typed or pasted.
+ *
+ * People paste numbers in every shape a contact card or a WhatsApp message
+ * produces: "+91 98765 43210", "(+91) 98765-43210", "0 98765 43210",
+ * "919876543210". Each of those is the SAME number, and the field must end up
+ * holding the ten subscriber digits — not a truncation of the longer string.
+ *
+ * Trunk and dial prefixes are only removed when the length makes them
+ * unambiguous, and only for a country whose rules allow it. A leading zero is
+ * a legitimate digit in plenty of numbering plans, so it is never stripped on
+ * sight — only when the total length says it is India's trunk prefix.
+ *
+ * Mirrors normalizePhone() in backend/src/utils/phone.ts on purpose: the
+ * backend re-derives this independently and is the authority. This exists so
+ * the customer sees their own number in the box and gets an inline error,
+ * rather than a late failure on a number they never entered.
+ */
+export function normalizePhoneInput(value: string, countryCode: string): string {
+  const rule = getCountryRule(countryCode);
+  let digits = onlyDigits(value);
+  if (!digits) return '';
+
+  const dial = countryCode.replace(/\D/g, ''); // "+91" -> "91"
+
+  if (countryCode === '+91') {
+    // Peel prefixes only while the number is LONGER than a subscriber number
+    // and removing one still leaves a full-length one. That condition is what
+    // makes this safe: it cannot eat into the ten digits that matter, so a
+    // number already at the right length is never touched.
+    //
+    // A loop rather than fixed-length guards because prefixes get doubled —
+    // "+91 919876543210" happens when a saved contact already carries the
+    // code and the field adds it again. Bounded to keep it obviously finite.
+    for (let i = 0; i < 4 && digits.length > rule.maxDigits; i++) {
+      if (digits.startsWith('91') && digits.length - 2 >= rule.maxDigits) {
+        digits = digits.slice(2);
+        continue;
+      }
+      // Domestic trunk prefix. Removed only on this length evidence — a
+      // leading zero is a real digit in plenty of other numbering plans.
+      if (digits.startsWith('0') && digits.length - 1 >= rule.maxDigits) {
+        digits = digits.slice(1);
+        continue;
+      }
+      break;
+    }
+    return digits.slice(0, rule.maxDigits);
+  }
+
+  // Other countries: strip only a dial code that is unambiguously present,
+  // i.e. the remainder still fits the country's own length rule. Without that
+  // check, a national number that happens to begin with its own dial code
+  // would be mangled.
+  if (dial && digits.startsWith(dial)) {
+    const rest = digits.slice(dial.length);
+    if (rest.length >= rule.minDigits && rest.length <= rule.maxDigits) digits = rest;
+  }
+  return digits.slice(0, rule.maxDigits);
 }
 
 export function getCountryRule(code: string): CountryPhoneRule {
@@ -46,6 +112,14 @@ export function validatePhoneNumber(countryCode: string, digits: string): { vali
   } else if (clean.length < rule.minDigits || clean.length > rule.maxDigits) {
     return { valid: false, error: `${rule.label} mobile number must be ${rule.minDigits}-${rule.maxDigits} digits.` };
   }
+
+  // India: mobile ranges start 6-9. Landlines and short codes are the right
+  // length but cannot receive an app OTP, and the backend rejects them — so
+  // accepting them here only moves the failure later and makes it vaguer.
+  if (countryCode === '+91' && !/^[6-9]/.test(clean)) {
+    return { valid: false, error: 'Indian mobile numbers start with 6, 7, 8 or 9.' };
+  }
+
   return { valid: true };
 }
 

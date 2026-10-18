@@ -415,13 +415,33 @@ export const Navbar: React.FC<NavbarProps> = ({
                     ? 'text-[#F05A7E] bg-[#FCE8ED]'
                     : 'text-[#121212] hover:text-[#F05A7E]'
                 }`}
-                title={isCustomerLoggedIn ? `Signed in as ${customerUser?.name}` : 'Account & Sign In'}
-                aria-label={accountMenuOpen ? 'Close account menu' : 'Open account menu'}
+                title={isCustomerLoggedIn ? `Signed in as ${customerUser?.name}` : 'Login'}
+                // Signed out the button shows the word "Login", so the
+                // accessible name has to contain it (WCAG 2.5.3): a voice-
+                // control user saying "click Login" must reach this button.
+                //
+                // "Login menu" rather than bare "Login" because the dropdown
+                // this opens has its own Login button — two controls sharing
+                // one accessible name is the ambiguity 2.5.3 exists to avoid.
+                // Signed in there is no visible word, so the generic name stays.
+                aria-label={isCustomerLoggedIn ? 'Account' : 'Login menu'}
               >
                 {isCustomerLoggedIn && customerUser?.avatarUrl ? (
                   <img src={cloudinaryImageUrl(customerUser.avatarUrl, 'avatar')} alt="" loading="lazy" decoding="async" className="w-5 h-5 rounded-full object-cover border border-[#E8D5A8]" />
                 ) : (
                   <User className="w-5 h-5 stroke-[1.75]" />
+                )}
+                {/* Signed out, the icon alone does not say what it does. The
+                    word carries it. Hidden below sm: the header is tight on a
+                    phone and the icon is the familiar affordance there. */}
+                {!isCustomerLoggedIn && (
+                  <>
+                    <span className="hidden sm:inline text-[12px] font-medium">Login</span>
+                    <ChevronDown
+                      className={`hidden sm:block w-3 h-3 transition-transform ${accountMenuOpen ? 'rotate-180' : ''}`}
+                      aria-hidden
+                    />
+                  </>
                 )}
                 {isCustomerLoggedIn && !customerUser?.avatarUrl && (
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#2E7D32] border border-white rounded-full" aria-hidden />
@@ -521,27 +541,44 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </>
                     ) : (
                       <>
-                        {/* Signing in and creating an account are the same
-                            step now — one mobile number, one code — so this is
-                            one button rather than two that go to the same place. */}
-                        <div className="px-5 pt-4 pb-5 space-y-4">
-                          <p className="text-[13px] text-[#B5B0AA] leading-relaxed">
-                            Sign in with your mobile number. New here? Your account is created automatically.
-                          </p>
+                        {/* Signed out. "New customer?" with Sign Up beside it
+                            sits at the top: returning customers are the
+                            common case and reach for Login in the header, so
+                            the panel leads with the thing that is NOT already
+                            on screen. No order, wishlist or reward data is
+                            rendered here — those links route to sign-in. */}
+                        <div className="p-3.5 bg-[#0B0B0B] flex items-center justify-between gap-3">
+                          <span className="text-[12px] text-[#FAF9F6]">New customer?</span>
+                          <button
+                            onClick={() => closeAccountMenu(() => onOpenAuth?.('register'))}
+                            className="text-[12px] font-bold text-[#C9972B] hover:text-[#E3B84B] transition-colors cursor-pointer"
+                          >
+                            Sign Up
+                          </button>
+                        </div>
 
+                        <div className="p-3.5">
                           <button
                             onClick={() => closeAccountMenu(() => onOpenAuth?.('login'))}
                             className="w-full h-12 sm:h-11 px-4 bg-[#E0265F] hover:bg-[#C81E54] text-white text-[11.5px] font-semibold tracking-[0.16em] uppercase rounded-full border border-[#C9972B] shadow-[0_6px_18px_rgba(224,38,95,0.3)] transition-colors duration-200 cursor-pointer flex items-center justify-center gap-2.5 outline-none focus-visible:ring-2 focus-visible:ring-[#E3B84B] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0B0B0B]"
                           >
-                            <LogIn className="w-4 h-4" />
-                            Sign In / Create Account
+                            <LogIn className="w-3.5 h-3.5" />
+                            Login
                           </button>
                         </div>
 
-                        <div className="mx-5 h-px bg-[#C9972B]/30" />
+                        {/* Shown signed out as well, and deliberately not
+                            disabled. Each routes to its account section; the
+                            protected-route guard in App.tsx opens sign-in,
+                            remembers which section was asked for, and lands
+                            the customer there once they are in. Hiding them
+                            would make the menu change shape on sign-in and
+                            lose the destination the visitor actually wanted.
 
-                        <div className="pb-1.5">
+                            No account data is rendered here — only the links. */}
+                        <div className="p-2 space-y-0.5">
                           {[
+                            { label: 'My Profile', icon: User, section: 'profile' as AccountSection },
                             { label: 'Orders', icon: Package, section: 'orders' as AccountSection },
                             { label: 'Wishlist', icon: Heart, section: 'wishlist' as AccountSection },
                             { label: 'Coupons & Rewards', icon: Ticket, section: 'rewards' as AccountSection },
@@ -1009,10 +1046,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                           }}
                           className="w-full text-left font-semibold text-sm text-[#121212] hover:text-[#F05A7E] transition-colors flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-white cursor-pointer"
                         >
-                          <span>Sign In / Create Account</span>
+                          <span>Login</span>
                           <LogIn className="w-4 h-4 text-[#F05A7E]" />
                         </button>
+                        {/* Same pairing as the desktop dropdown, so the two
+                            menus do not name the same two actions differently. */}
+                        <button
+                          onClick={() => {
+                            setMobileMenuOpen(false);
+                            onOpenAuth?.('register');
+                          }}
+                          className="w-full text-left text-[12.5px] text-[#6B6B6B] flex items-center justify-between px-3 py-2 rounded-xl hover:bg-white cursor-pointer"
+                        >
+                          <span>New customer?</span>
+                          <span className="font-bold text-[#C9972B]">Sign Up</span>
+                        </button>
                         {[
+                          { label: 'My Profile', section: 'profile' as AccountSection },
                           { label: 'Orders', section: 'orders' as AccountSection },
                           { label: 'Wishlist', section: 'wishlist' as AccountSection },
                           { label: 'Coupons & Rewards', section: 'rewards' as AccountSection },

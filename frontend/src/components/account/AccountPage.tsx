@@ -53,7 +53,7 @@ export interface AccountPageProps {
 
   onAddAddress: (address: Address) => Promise<{ success: boolean; addressId?: string; error?: string }>;
   onEditAddress: (addressId: string, address: Omit<Address, 'id'>) => Promise<{ success: boolean; error?: string }>;
-  onDeleteAddress: (addressId: string) => Promise<void> | void;
+  onDeleteAddress: (addressId: string) => Promise<void | { success: boolean; error?: string }> | void;
   onSetDefaultAddress: (addressId: string) => Promise<void> | void;
 
   onCancelOrder: (orderId: string, reason: string) => Promise<{ success: boolean; error?: string }>;

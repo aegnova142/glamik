@@ -60,7 +60,7 @@ interface MyGlamDashboardProps {
   reviews?: Review[];
   returnRequests?: ReturnRequest[];
   onAddNewAddress?: (address: Address) => void;
-  onDeleteAddress?: (addressId: string) => void;
+  onDeleteAddress?: (addressId: string) => Promise<void | { success: boolean; error?: string }> | void;
   onEditAddress?: (addressId: string, address: Omit<Address, 'id'>) => Promise<{ success: boolean; error?: string }>;
   onSetDefaultAddress?: (addressId: string) => void;
   onOpenShadeFinder: () => void;

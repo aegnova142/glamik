@@ -198,11 +198,10 @@ function AppContent() {
     }
   }, []);
   const pendingActionRef = React.useRef<(() => void) | null>(null);
-  // Which tab the auth modal should open on. Both values now land on the same
-  // mobile + OTP screen — verifying a number signs you in or creates the
-  // account as needed — so nothing passes 'register' any more. The parameter
-  // is kept because the legacy email/password form behind
-  // LEGACY_EMAIL_AUTH_ENABLED (AuthModal.tsx) still distinguishes the two.
+  // Which entry point the auth modal opens on. 'login' lands on mobile + OTP
+  // — the default and the one that both signs in and signs up — while
+  // 'register' opens the email/password registration form for customers who
+  // want an account keyed to an address rather than a number.
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
   const requireLogin = (action: () => void, mode: 'login' | 'register' = 'login') => {
     if (isCustomerLoggedIn) {
@@ -888,9 +887,14 @@ function AppContent() {
     if (res.data) {
       setSavedAddresses(res.data.addresses || []);
       showToast('Address removed');
-    } else {
-      showToast(res.error || 'Could not remove this address.');
+      return { success: true };
     }
+    // Reported back as well as toasted: the card needs to know it failed so
+    // it can stay on screen instead of disappearing on a delete that did not
+    // happen.
+    const error = res.error || 'Could not remove this address.';
+    showToast(error);
+    return { success: false, error };
   };
 
   const handleEditAddress = async (addressId: string, address: Omit<Address, 'id'>) => {

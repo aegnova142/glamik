@@ -6,7 +6,12 @@ import {
   ChannelResult,
 } from './notificationEngine.service';
 import { getMailTransporter } from './mailer';
-import { channelConfigured } from './messaging.service';
+import {
+  whatsappNotificationsConfigured,
+  orderTemplateFor,
+  anyOrderTemplateConfigured,
+  sendOrderWhatsApp,
+} from './whatsappNotifications.service';
 import { pool, loadDatabase } from '../db/db';
 import { mapNotificationRow } from './notifications.service';
 import { broadcastEvent } from '../db/db';
@@ -419,22 +424,43 @@ function wrap(heading: string, body: string, trackUrl?: string, ctaLabel = 'Trac
     if (!adminNumber) {
       return { ok: false, skip: true, reason: 'No admin WhatsApp number set (Admin → Settings → WhatsApp order number).' };
     }
-    if (!channelConfigured('whatsapp')) {
+    if (!whatsappNotificationsConfigured()) {
       return {
         ok: false,
         skip: true,
         reason:
-          'WhatsApp is not connected: WHATSAPP_PROVIDER and its credentials are unset. ' +
+          'WhatsApp is not connected: WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN are unset. ' +
           'The admin number is configured, but there is no API to send through.',
       };
     }
-    return {
-      ok: false,
-      skip: true,
-      reason:
-        'WhatsApp provider is configured but no approved admin order template is registered. ' +
-        'Meta requires a named, pre-approved utility template; the OTP template cannot be reused.',
-    };
+    if (!orderTemplateFor(eventType)) {
+      return {
+        ok: false,
+        skip: true,
+        reason:
+          `No approved WhatsApp template registered for ${eventType}. ` +
+          `Set WHATSAPP_ORDER_TEMPLATE_${eventType} to a Meta-approved UTILITY template; ` +
+          'the OTP template cannot be reused.',
+      };
+    }
+
+    // Same send path as the customer channel — the only difference is who it
+    // goes to. The store alert names the order and the customer it came from.
+    const result = await sendOrderWhatsApp({
+      toPhone: adminNumber,
+      eventType,
+      variables: [payload.orderNumber || '', payload.customerName || ''],
+    });
+    switch (result.status) {
+      case 'sent':
+        return { ok: true };
+      case 'unconfigured':
+        return { ok: false, skip: true, reason: 'WhatsApp credentials are unset.' };
+      case 'no_template':
+        return { ok: false, skip: true, reason: `No approved WhatsApp template for ${result.eventType}.` };
+      case 'error':
+        return { ok: false, retryable: result.retryable, reason: result.detail };
+    }
   });
 
 // ------------------------------------------
@@ -442,39 +468,62 @@ function wrap(heading: string, body: string, trackUrl?: string, ctaLabel = 'Trac
 // ------------------------------------------
 
 /**
- * Registered but INERT.
+ * Order updates over WhatsApp. Never OTP — sign-in codes go through Firebase
+ * Phone Auth and nowhere else, and nothing in this file is reachable from the
+ * authentication path.
  *
- * There is no WhatsApp provider configured on this deployment, and the
- * existing integration is OTP-only: it sends one hardcoded template with the
- * code as its single parameter. Order notifications need different templates,
- * each approved by Meta separately, with their own parameter order.
- *
- * So this adapter exists to make the wiring real and the gap visible — every
- * WhatsApp delivery records a SKIPPED row naming exactly what is missing —
- * without pretending the channel works. It will start sending the day
- * credentials and approved templates exist, and not before.
+ * Sends through whatsappNotifications.service, which requires a Meta-approved
+ * UTILITY template registered per event. Two outcomes are deliberately kept
+ * apart: a missing credential or template is a SKIPPED row naming exactly what
+ * is absent — retrying cannot register a template — while a refusal from Meta
+ * is a real failure the engine may retry. Only a confirmed acceptance is
+ * reported as sent.
  */
-  registerChannel('whatsapp', async (payload): Promise<ChannelResult> => {
-  if (!channelConfigured('whatsapp')) {
-    return {
-      ok: false,
-      skip: true,
-      reason: 'WhatsApp is not connected: WHATSAPP_PROVIDER and its credentials are unset.',
-    };
-  }
-  if (!payload.toPhone) return { ok: false, skip: true, reason: 'No phone number on this order.' };
+  registerChannel('whatsapp', async (payload, eventType): Promise<ChannelResult> => {
+    if (!whatsappNotificationsConfigured()) {
+      return {
+        ok: false,
+        skip: true,
+        reason: 'WhatsApp is not connected: WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN are unset.',
+      };
+    }
+    if (!payload.toPhone) return { ok: false, skip: true, reason: 'No phone number on this order.' };
 
-  // Reached only once a provider is configured. Deliberately still a skip
-  // rather than a send: the OTP template is the only approved one, and using
-  // it for an order update would be both wrong and a template violation.
-  return {
-    ok: false,
-    skip: true,
-    reason:
-      'WhatsApp provider is configured but no approved order-notification template is registered. ' +
-      'Add Meta-approved utility templates per event before enabling this channel.',
-  };
-});
+    // A configuration gap, not a delivery failure: retrying cannot register a
+    // template. Named explicitly so the panel says which event is missing one.
+    if (!orderTemplateFor(eventType)) {
+      return {
+        ok: false,
+        skip: true,
+        reason:
+          `No approved WhatsApp template registered for ${eventType}. ` +
+          `Set WHATSAPP_ORDER_TEMPLATE_${eventType} to a Meta-approved UTILITY template. ` +
+          'An OTP template cannot be reused — Meta rejects an AUTHENTICATION template used this way.',
+      };
+    }
+
+    const result = await sendOrderWhatsApp({
+      toPhone: payload.toPhone,
+      eventType,
+      // Order number first, then the customer's name — the ordering the
+      // utility templates are registered with. Anything absent becomes an
+      // empty string rather than "undefined" appearing in a real message.
+      variables: [payload.orderNumber || '', payload.customerName || ''],
+    });
+
+    switch (result.status) {
+      case 'sent':
+        // ok only once Meta has accepted it. A queued-but-rejected send must
+        // never be recorded as delivered.
+        return { ok: true };
+      case 'unconfigured':
+        return { ok: false, skip: true, reason: 'WhatsApp credentials are unset.' };
+      case 'no_template':
+        return { ok: false, skip: true, reason: `No approved WhatsApp template for ${result.eventType}.` };
+      case 'error':
+        return { ok: false, retryable: result.retryable, reason: result.detail };
+    }
+  });
 
   // ------------------------------------------------------------------
   // Retry block probes
@@ -487,16 +536,23 @@ function wrap(heading: string, body: string, trackUrl?: string, ctaLabel = 'Trac
   // for.
   // ------------------------------------------------------------------
   const whatsappBlock = async (): Promise<string | null> => {
-    if (!channelConfigured('whatsapp')) {
+    if (!whatsappNotificationsConfigured()) {
       return (
-        'WhatsApp is not connected. Set WHATSAPP_PROVIDER and its credentials, then retry. ' +
+        'WhatsApp is not connected. Set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN, then retry. ' +
         'Retrying now would skip again without sending.'
       );
     }
-    return (
-      'WhatsApp has a provider but no approved order-notification template. ' +
-      'Meta requires a named, pre-approved utility template per event; the OTP template cannot be reused.'
-    );
+    if (!anyOrderTemplateConfigured()) {
+      return (
+        'WhatsApp is connected but no approved order-notification template is registered. ' +
+        'Meta requires a named, pre-approved UTILITY template per event ' +
+        '(WHATSAPP_ORDER_TEMPLATE_<EVENT>); the OTP template cannot be reused.'
+      );
+    }
+    // Credentials and at least one template exist, so nothing blocks the
+    // channel as a whole. A missing template for one event surfaces as that
+    // delivery's skip reason, which can name the event.
+    return null;
   };
 
   registerChannelBlockProbe('whatsapp', whatsappBlock);

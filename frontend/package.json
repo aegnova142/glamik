@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
+    "test:buildguard": "tsx src/test/buildGuard.e2e.ts",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit"

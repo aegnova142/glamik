@@ -14,15 +14,50 @@ import { defineConfig, loadEnv } from 'vite';
  * and mobile login is dead with nothing anywhere saying why.
  *
  * Failing the build is the right severity: a deploy that cannot sign customers
- * in should not reach production quietly. Only enforced when Firebase is
- * actually the selected provider, so a deployment that does not use it builds
- * exactly as before.
+ * in should not reach production quietly.
+ *
+ * Two ways the configuration can be wrong, and both throw:
+ *   - SMS_PROVIDER=firebase but the client keys are missing
+ *   - the client keys are present but SMS_PROVIDER does not select firebase
+ *
+ * A deployment that carries no VITE_FIREBASE_* keys at all wants no mobile
+ * sign-in and builds exactly as before.
  */
-function assertFirebaseClientConfig(mode: string, envDir: string): void {
+export function assertFirebaseClientConfig(mode: string, envDir: string): void {
   // Vite does not expose non-VITE_ keys without the third argument, and
   // SMS_PROVIDER is the one that says whether any of this is required.
   const env = loadEnv(mode, envDir, '');
-  if ((env.SMS_PROVIDER || '').trim().toLowerCase() !== 'firebase') return;
+  const provider = (env.SMS_PROVIDER || '').trim().toLowerCase();
+
+  if (provider !== 'firebase') {
+    // The check below is gated on the very variable most likely to be wrong,
+    // which left the worst case uncovered: Firebase credentials provisioned,
+    // SMS_PROVIDER unset or stale, assertion skipped, bundle ships with
+    // isFirebaseConfigured() false, and every sign-in dead-ends silently.
+    //
+    // Provisioned client credentials ARE the statement of intent. If they are
+    // present, the provider switch disagreeing with them is a misconfiguration,
+    // not a second opinion — and since SMS_PROVIDERS is empty, no other value
+    // selects a working OTP path. Fail closed.
+    //
+    // A deployment that genuinely does not use mobile sign-in carries none of
+    // these keys, falls through, and builds exactly as before.
+    const configured = ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_PROJECT_ID', 'VITE_FIREBASE_AUTH_DOMAIN'].filter(
+      (key) => (env[key] || '').trim()
+    );
+    if (configured.length) {
+      throw new Error(
+        `${configured.join(', ')} ${configured.length === 1 ? 'is' : 'are'} set, but SMS_PROVIDER is ` +
+          `${provider ? `"${provider}"` : 'not set'} — so the build would ship a bundle with Firebase ` +
+          'sign-in switched off and nothing saying why.\n' +
+          'Firebase is the only OTP provider this app has; no other SMS_PROVIDER value selects a working one.\n' +
+          'Set SMS_PROVIDER=firebase in the .env on the machine that runs `npm run build` — on the VPS that ' +
+          'is the server itself, whose .env is separate from your local one. To build without mobile sign-in, ' +
+          'remove the VITE_FIREBASE_* keys instead.'
+      );
+    }
+    return;
+  }
 
   const required = ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_PROJECT_ID', 'VITE_FIREBASE_AUTH_DOMAIN'];
   const missing = required.filter((key) => !(env[key] || '').trim());
@@ -42,7 +77,8 @@ function assertFirebaseClientConfig(mode: string, envDir: string): void {
   // getting a 401 from verifyIdToken's audience check and nothing in the log.
   if (env.FIREBASE_PROJECT_ID && env.FIREBASE_PROJECT_ID !== env.VITE_FIREBASE_PROJECT_ID) {
     throw new Error(
-      'FIREBASE_PROJECT_ID and VITE_FIREBASE_PROJECT_ID name different projects.\n' +
+      'FIREBASE_PROJECT_ID and VITE_FIREBASE_PROJECT_ID name different projects ' +
+        `in the .env at ${envDir}.\n` +
         'The browser would mint tokens for one and the backend would verify against the other, ' +
         'so every sign-in would fail its audience check.'
     );

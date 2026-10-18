@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, MotionConfig } from 'motion/react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
   Mail,
@@ -13,14 +13,10 @@ import {
   CheckCircle,
   Eye,
   EyeOff,
+  Check,
 } from 'lucide-react';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { MobileOtpSignIn } from './MobileOtpSignIn';
-<<<<<<< HEAD
-=======
-import { Leaf, Petal, OrnamentDefs } from '../marketing/BotanicalOrnaments';
-import { isGoogleSignInConfigured, requestGoogleAccessToken } from '../../utils/googleAuth';
->>>>>>> main
 import {
   normalizeEmail,
   isValidEmail,
@@ -119,60 +115,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialMode]);
 
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  // Dialog plumbing: lock page scroll, close on Escape, keep Tab inside the
-  // dialog, and hand focus back to whatever opened it.
-  useEffect(() => {
-    if (!isOpen) return;
-    const trigger = document.activeElement as HTMLElement | null;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (e.key !== 'Tab' || !dialogRef.current) return;
-      const focusable = Array.from(
-        dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
-        )
-      ).filter((el) => el.offsetParent !== null);
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && (document.activeElement === first || !dialogRef.current.contains(document.activeElement))) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    // autoFocus on the phone field usually wins; this covers the other forms.
-    const raf = requestAnimationFrame(() => {
-      if (!dialogRef.current?.contains(document.activeElement)) dialogRef.current?.focus();
-    });
-
-    return () => {
-      cancelAnimationFrame(raf);
-      document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = prevOverflow;
-      // The usual trigger lives inside the account dropdown, which is gone by
-      // now; fall back to the button that owns that dropdown.
-      const returnTo = trigger?.isConnected
-        ? trigger
-        : document.querySelector<HTMLElement>('[aria-label="Open account menu"]');
-      returnTo?.focus();
-    };
-  }, [isOpen]);
-
   if (!isOpen) return null;
 
   const handleVerifyCustomer = async (e: React.FormEvent) => {
@@ -268,45 +210,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setForgotStep('done');
   };
 
-  const isSignInTab = customerFormMode !== 'register';
-  const selectTab = (tab: 'signin' | 'register') => {
-    setCustomerFormMode(tab === 'register' ? 'register' : 'otp');
-    setCustomerError(null);
-  };
-
   return (
-    <MotionConfig reducedMotion="user">
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.2 }}
-        className="fixed inset-0 z-[var(--auth-z)] flex items-start sm:items-center justify-center overflow-y-auto overscroll-contain bg-[var(--auth-overlay)] backdrop-blur-[6px] px-3 py-4 sm:p-6"
-      >
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0B0B]/80 backdrop-blur-sm overflow-y-auto">
         <motion.div
-          ref={dialogRef}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="auth-modal-title"
-          aria-describedby="auth-modal-desc"
-          tabIndex={-1}
-          initial={{ opacity: 0, scale: 0.97, y: 10 }}
+          initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-<<<<<<< HEAD
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
           className="relative w-full max-w-md sm:max-w-3xl bg-[#171717] border border-[#E8D5A8]/30 rounded-2xl shadow-2xl overflow-hidden my-8 sm:flex sm:items-stretch"
-=======
-          transition={{ duration: 0.28, ease: [0.2, 0.7, 0.2, 1] }}
-          className="relative w-full max-w-[var(--auth-modal-w)] my-auto bg-[radial-gradient(120%_60%_at_50%_0%,#161412_0%,var(--auth-bg)_55%)] border-[1.5px] border-[var(--auth-border)] rounded-[var(--auth-radius-modal)] shadow-[var(--auth-shadow)] overflow-hidden font-sans text-[var(--auth-text)] focus:outline-none"
->>>>>>> main
         >
-          <BotanicalCorners />
-
           {/* Close button */}
           <button
             type="button"
             onClick={onClose}
-<<<<<<< HEAD
             // The icon carries no text, so without this the control is
             // announced as an unlabelled button.
             aria-label="Close"
@@ -331,26 +247,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 : 'Login to access your orders, saved shades, Privé rewards and recommendations made for you.'}
             </p>
             <p className="sm:hidden text-xs text-[#6B6B6B] mt-1">
-=======
-            aria-label="Close sign in"
-            className="auth-focus absolute top-4 right-4 sm:top-6 sm:right-6 z-20 p-2 rounded-full text-[var(--auth-text)] hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer"
-          >
-            <X className="w-6 h-6" strokeWidth={1.75} />
-          </button>
-
-          {/* Header */}
-          <div className="relative z-10 px-9 sm:px-20 pt-9 sm:pt-[34px] pb-6 sm:pb-[22px] text-center border-b border-[var(--auth-divider)]">
-            <span className="block text-xs sm:text-[13px] font-medium uppercase tracking-[0.28em] sm:tracking-[0.32em] text-[var(--auth-gold)]">
-              GLAMIRK ATELIER AUTHENTICATION
-            </span>
-            <h2
-              id="auth-modal-title"
-              className="font-serif !font-semibold text-[27px] min-[380px]:text-[34px] sm:text-[46px] leading-[1.1] text-[var(--auth-text)] mt-2"
-            >
-              {customerFormMode === 'forgot' ? 'Reset Your Password' : 'Customer Sign In'}
-            </h2>
-            <p id="auth-modal-desc" className="text-[15px] sm:text-[17px] text-[#D9D4CD] mt-2 leading-snug">
->>>>>>> main
               {customerFormMode === 'forgot'
                 ? 'We’ll help you get back into your account'
                 : 'Access your orders, saved shades and rewards'}
@@ -372,35 +268,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </p>
           </div>
 
-          <div className="relative z-10 px-5 sm:px-[34px] pt-2 sm:pt-3 pb-8 sm:pb-9">
+          <div className="p-6">
             {LEGACY_EMAIL_AUTH_ENABLED && customerFormMode === 'forgot' ? (
               <div className="space-y-4">
                 {forgotStep === 'request' && (
                   <form onSubmit={handleRequestReset} className="space-y-4">
-                    <p className="text-xs text-[var(--auth-text-secondary)] leading-relaxed">
+                    <p className="text-xs text-[#6B6B6B] leading-relaxed">
                       Enter the email address on your account and we’ll get you a reset link.
                     </p>
 
                     {forgotError && (
-                      <div role="alert" className="p-3 rounded-[var(--auth-radius-control)] bg-[var(--auth-banner-bg)] text-[var(--auth-error)] border border-[var(--auth-banner-border)] text-sm">
+                      <div className="p-2.5 rounded bg-[#F05A7E]/20 text-[#F05A7E] border border-[#F05A7E]/30 text-xs">
                         {forgotError}
                       </div>
                     )}
 
                     <div>
-                      <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
+                      <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
                         Email Address
                       </label>
                       <div className="relative">
-                        <Mail className="w-4 h-4 text-[var(--auth-text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
+                        <Mail className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                           type="email"
-                          autoComplete="email"
                           required
                           placeholder="you@example.com"
                           value={customerEmail}
                           onChange={(e) => setCustomerEmail(e.target.value)}
-                          className="w-full pl-9 pr-3 py-3 bg-[var(--auth-input-bg)] border border-[var(--auth-input-border)] rounded-[var(--auth-radius-control)] text-sm text-[var(--auth-text)] placeholder:text-[var(--auth-text-muted)] focus:outline-none focus:border-[var(--auth-gold-soft)] focus:ring-2 focus:ring-[#C9972B]/25"
+                          className="w-full pl-9 pr-3 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
                         />
                       </div>
                     </div>
@@ -408,7 +303,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <button
                       type="submit"
                       disabled={forgotLoading}
-                      className="auth-cta w-full py-4 font-medium text-[15px] uppercase tracking-[0.16em] cursor-pointer disabled:opacity-50"
+                      className="w-full py-3 bg-[#C9972B] hover:bg-[#E3B84B] text-[#0B0B0B] font-bold text-xs uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-md disabled:opacity-50"
                     >
                       {forgotLoading ? 'Sending...' : 'Send Reset Link'}
                     </button>
@@ -419,7 +314,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         setCustomerFormMode('login');
                         setForgotError(null);
                       }}
-                      className="w-full text-center text-xs text-[var(--auth-text-secondary)] hover:text-[#FAF9F6] cursor-pointer"
+                      className="w-full text-center text-[11px] text-[#6B6B6B] hover:text-[#FAF9F6] cursor-pointer"
                     >
                       Back to Sign In
                     </button>
@@ -428,39 +323,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                 {forgotStep === 'reset' && (
                   <form onSubmit={handleResetPassword} className="space-y-4">
-                    <div className="p-2.5 rounded-lg bg-[#0B0B0B]/60 border border-[#E8D5A8]/15 text-xs text-[var(--auth-text-secondary)] leading-relaxed">
+                    <div className="p-2.5 rounded-lg bg-[#0B0B0B]/60 border border-[#E8D5A8]/15 text-[10.5px] text-[#6B6B6B] leading-relaxed">
                       Email delivery isn’t configured in this environment, so instead of emailing your reset
                       link we’ve unlocked the next step right here — just set your new password below.
                     </div>
 
                     {forgotError && (
-                      <div role="alert" className="p-3 rounded-[var(--auth-radius-control)] bg-[var(--auth-banner-bg)] text-[var(--auth-error)] border border-[var(--auth-banner-border)] text-sm">
+                      <div className="p-2.5 rounded bg-[#F05A7E]/20 text-[#F05A7E] border border-[#F05A7E]/30 text-xs">
                         {forgotError}
                       </div>
                     )}
 
                     <div>
-                      <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
+                      <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
                         New Password
                       </label>
                       <div className="relative">
-                        <Lock className="w-4 h-4 text-[var(--auth-text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
+                        <Lock className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                           type={showNewPassword ? 'text' : 'password'}
-                          autoComplete="new-password"
                           required
                           minLength={8}
                           placeholder="••••••••"
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
                           onFocus={() => setShowNewPasswordChecklist(true)}
-                          className="w-full pl-9 pr-9 py-3 bg-[var(--auth-input-bg)] border border-[var(--auth-input-border)] rounded-[var(--auth-radius-control)] text-sm text-[var(--auth-text)] placeholder:text-[var(--auth-text-muted)] focus:outline-none focus:border-[var(--auth-gold-soft)] focus:ring-2 focus:ring-[#C9972B]/25"
+                          className="w-full pl-9 pr-9 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
                         />
                         <button
                           type="button"
                           onClick={() => setShowNewPassword(!showNewPassword)}
-                          aria-label="Show or hide password"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--auth-text-secondary)] hover:text-[#FAF9F6]"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B6B6B] hover:text-[#FAF9F6]"
                         >
                           {showNewPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
@@ -471,8 +364,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           {newPasswordRequirements.map((req) => (
                             <li
                               key={req.id}
-                              className={`flex items-center gap-1.5 text-xs transition-colors ${
-                                req.met ? 'text-[#C9972B]' : 'text-[var(--auth-text-secondary)]'
+                              className={`flex items-center gap-1.5 text-[10.5px] transition-colors ${
+                                req.met ? 'text-[#C9972B]' : 'text-[#6B6B6B]'
                               }`}
                             >
                               <CheckCircle className={`w-3 h-3 shrink-0 ${req.met ? 'opacity-100' : 'opacity-30'}`} />
@@ -484,32 +377,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
+                      <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
                         Confirm New Password
                       </label>
                       <div className="relative">
-                        <Lock className="w-4 h-4 text-[var(--auth-text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
+                        <Lock className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                           type={showNewPassword ? 'text' : 'password'}
-                          autoComplete="new-password"
                           required
                           placeholder="••••••••"
                           value={newPasswordConfirm}
                           onChange={(e) => setNewPasswordConfirm(e.target.value)}
-                          className={`w-full pl-9 pr-3 py-3 bg-[var(--auth-input-bg)] border rounded-[var(--auth-radius-control)] text-sm text-[var(--auth-text)] placeholder:text-[var(--auth-text-muted)] focus:outline-none focus:border-[var(--auth-gold-soft)] focus:ring-2 focus:ring-[#C9972B]/25 ${
-                            newPasswordConfirm && newPasswordConfirm !== newPassword ? 'border-[#F05A7E]/60' : 'border-[var(--auth-input-border)]'
+                          className={`w-full pl-9 pr-3 py-2.5 bg-[#0B0B0B] border rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B] ${
+                            newPasswordConfirm && newPasswordConfirm !== newPassword ? 'border-[#F05A7E]/60' : 'border-[#E8D5A8]/30'
                           }`}
                         />
                       </div>
                       {newPasswordConfirm && newPasswordConfirm !== newPassword && (
-                        <p className="text-xs text-[#F05A7E] mt-1">Passwords do not match.</p>
+                        <p className="text-[10.5px] text-[#F05A7E] mt-1">Passwords do not match.</p>
                       )}
                     </div>
 
                     <button
                       type="submit"
                       disabled={forgotLoading}
-                      className="auth-cta w-full py-4 font-medium text-[15px] uppercase tracking-[0.16em] cursor-pointer disabled:opacity-50"
+                      className="w-full py-3 bg-[#C9972B] hover:bg-[#E3B84B] text-[#0B0B0B] font-bold text-xs uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-md disabled:opacity-50"
                     >
                       {forgotLoading ? 'Resetting...' : 'Reset Password'}
                     </button>
@@ -521,7 +413,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <CheckCircle className="w-10 h-10 text-[#C9972B] mx-auto" />
                     <div>
                       <h3 className="font-serif text-lg text-[#FAF9F6]">Password Reset!</h3>
-                      <p className="text-xs text-[var(--auth-text-secondary)] mt-1">
+                      <p className="text-xs text-[#6B6B6B] mt-1">
                         Your password has been updated and you’re signed in.
                       </p>
                     </div>
@@ -531,7 +423,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         onCustomerLoginSuccess?.({ name: '', email: customerEmail, phone: '' });
                         onClose();
                       }}
-                      className="auth-cta w-full py-4 font-medium text-[15px] uppercase tracking-[0.16em] cursor-pointer"
+                      className="w-full py-3 bg-[#C9972B] hover:bg-[#E3B84B] text-[#0B0B0B] font-bold text-xs uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-md"
                     >
                       Continue
                     </button>
@@ -539,65 +431,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 )}
               </div>
             ) : (
-<<<<<<< HEAD
               <div className="space-y-4">
-=======
-              <div className="space-y-5">
-                {/* Login / Register mode selector — only meaningful when
-                    there is more than one way in (see LEGACY_EMAIL_AUTH_ENABLED). */}
-                {LEGACY_EMAIL_AUTH_ENABLED && (
-                <div
-                  role="tablist"
-                  aria-label="Sign in or create an account"
-                  className="flex justify-center border-b border-[var(--auth-divider)]"
-                  onKeyDown={(e) => {
-                    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-                    e.preventDefault();
-                    const next = isSignInTab ? 'register' : 'signin';
-                    selectTab(next);
-                    document.getElementById(`auth-tab-${next}`)?.focus();
-                  }}
-                >
-                  {([
-                    // The password form lives under Sign In too, so the tab
-                    // stays highlighted when the customer switches to it.
-                    { key: 'signin' as const, label: 'Sign In', active: isSignInTab },
-                    { key: 'register' as const, label: 'Create Account', active: !isSignInTab },
-                  ]).map((tab) => (
-                    <button
-                      key={tab.key}
-                      id={`auth-tab-${tab.key}`}
-                      type="button"
-                      role="tab"
-                      aria-selected={tab.active}
-                      aria-controls="auth-tabpanel"
-                      tabIndex={tab.active ? 0 : -1}
-                      onClick={() => selectTab(tab.key)}
-                      className={`auth-focus relative whitespace-nowrap px-4 sm:px-6 pt-2 pb-3.5 text-[16px] sm:text-[18px] rounded-t-md transition-colors cursor-pointer ${
-                        tab.active
-                          ? 'text-[var(--auth-pink)] font-medium'
-                          : 'text-[#E4DFD8] hover:text-[var(--auth-text)]'
-                      }`}
-                    >
-                      {tab.label}
-                      <span
-                        aria-hidden="true"
-                        className={`auth-tab-indicator absolute left-3 right-3 sm:left-5 sm:right-5 -bottom-px h-[3px] rounded-full bg-[var(--auth-pink)] origin-center ${
-                          tab.active ? 'scale-x-100' : 'scale-x-0'
-                        }`}
-                      />
-                    </button>
-                  ))}
-                </div>
-                )}
-
-                <div
-                  id="auth-tabpanel"
-                  role={LEGACY_EMAIL_AUTH_ENABLED ? 'tabpanel' : undefined}
-                  aria-labelledby={LEGACY_EMAIL_AUTH_ENABLED ? (isSignInTab ? 'auth-tab-signin' : 'auth-tab-register') : undefined}
-                  className="space-y-5"
-                >
->>>>>>> main
                 {!LEGACY_EMAIL_AUTH_ENABLED || customerFormMode === 'otp' ? (
                   <MobileOtpSignIn
                     remember={rememberMe}
@@ -625,223 +459,86 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 ) : (
                   <>
                 {customerError && (
-                  <div role="alert" className="p-3 rounded-[var(--auth-radius-control)] bg-[var(--auth-banner-bg)] text-[var(--auth-error)] border border-[var(--auth-banner-border)] text-sm">
+                  <div className="p-2.5 rounded bg-[#F05A7E]/20 text-[#F05A7E] border border-[#F05A7E]/30 text-xs">
                     {customerError}
                   </div>
                 )}
 
                 <form onSubmit={handleVerifyCustomer} className="space-y-3">
-<<<<<<< HEAD
-=======
-                  {customerFormMode === 'register' && (
-                    <div>
-                      <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
-                        Full Name
-                      </label>
-                      <div className="relative">
-                        <User className="w-4 h-4 text-[var(--auth-text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          required
-                          placeholder="Enter your full name"
-                          value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
-                          className="w-full pl-9 pr-3 py-3 bg-[var(--auth-input-bg)] border border-[var(--auth-input-border)] rounded-[var(--auth-radius-control)] text-sm text-[var(--auth-text)] placeholder:text-[var(--auth-text-muted)] focus:outline-none focus:border-[var(--auth-gold-soft)] focus:ring-2 focus:ring-[#C9972B]/25"
-                        />
-                      </div>
-                    </div>
-                  )}
->>>>>>> main
 
                   <div>
-                    <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
+                    <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
                       Email Address
                     </label>
                     <div className="relative">
-                      <Mail className="w-4 h-4 text-[var(--auth-text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Mail className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="email"
-                          autoComplete="email"
                         required
                         placeholder="you@example.com"
                         value={customerEmail}
                         onChange={(e) => setCustomerEmail(e.target.value)}
-                        className="w-full pl-9 pr-3 py-3 bg-[var(--auth-input-bg)] border border-[var(--auth-input-border)] rounded-[var(--auth-radius-control)] text-sm text-[var(--auth-text)] placeholder:text-[var(--auth-text-muted)] focus:outline-none focus:border-[var(--auth-gold-soft)] focus:ring-2 focus:ring-[#C9972B]/25"
+                        className="w-full pl-9 pr-3 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
                       />
                     </div>
                   </div>
 
-<<<<<<< HEAD
-=======
-                  {customerFormMode === 'register' && (
-                    <div>
-                      <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
-                        Mobile Number <span className="normal-case text-[var(--auth-text-secondary)]">(optional)</span>
-                      </label>
-                      <div className="flex gap-2">
-                        <select
-                          value={customerCountryCode}
-                          onChange={(e) => {
-                            setCustomerCountryCode(e.target.value);
-                            setCustomerPhone((prev) => sanitizePhoneDigits(prev, getCountryRule(e.target.value).maxDigits));
-                          }}
-                          className="shrink-0 px-2 py-3 bg-[var(--auth-input-bg)] border border-[var(--auth-input-border)] rounded-[var(--auth-radius-control)] text-sm text-[var(--auth-text)] placeholder:text-[var(--auth-text-muted)] focus:outline-none focus:border-[var(--auth-gold-soft)] focus:ring-2 focus:ring-[#C9972B]/25"
-                        >
-                          {COUNTRY_PHONE_RULES.map((c) => (
-                            <option key={c.code} value={c.code}>
-                              {c.code} {c.label}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="relative flex-1">
-                          <Phone className="w-4 h-4 text-[var(--auth-text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="tel"
-                            inputMode="numeric"
-                            placeholder={activePhoneRule.minDigits === activePhoneRule.maxDigits ? `${activePhoneRule.minDigits} digit number` : 'Mobile number'}
-                            value={customerPhone}
-                            onChange={(e) => setCustomerPhone(sanitizePhoneDigits(e.target.value, activePhoneRule.maxDigits))}
-                            className="w-full pl-9 pr-3 py-3 bg-[var(--auth-input-bg)] border border-[var(--auth-input-border)] rounded-[var(--auth-radius-control)] text-sm text-[var(--auth-text)] placeholder:text-[var(--auth-text-muted)] focus:outline-none focus:border-[var(--auth-gold-soft)] focus:ring-2 focus:ring-[#C9972B]/25"
-                          />
-                        </div>
-                      </div>
-                      <p className="text-xs text-[var(--auth-text-secondary)] mt-1">
-                        {activePhoneRule.minDigits === activePhoneRule.maxDigits
-                          ? `${activePhoneRule.label}: exactly ${activePhoneRule.minDigits} digits, numbers only.`
-                          : `${activePhoneRule.label}: ${activePhoneRule.minDigits}-${activePhoneRule.maxDigits} digits, numbers only.`}
-                      </p>
-                    </div>
-                  )}
->>>>>>> main
 
                   <div>
-                    <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
+                    <label className="block text-xs font-semibold text-[#E8D5A8] uppercase tracking-wider mb-1">
                       Password
                     </label>
                     <div className="relative">
-                      <Lock className="w-4 h-4 text-[var(--auth-text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Lock className="w-4 h-4 text-[#6B6B6B] absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type={showPassword ? 'text' : 'password'}
-                        autoComplete={customerFormMode === 'register' ? 'new-password' : 'current-password'}
                         required
                         placeholder="••••••••"
                         value={customerPassword}
                         onChange={(e) => setCustomerPassword(e.target.value)}
-<<<<<<< HEAD
                         className="w-full pl-9 pr-9 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
-=======
-                        onFocus={() => customerFormMode === 'register' && setShowPasswordChecklist(true)}
-                        className="w-full pl-9 pr-9 py-3 bg-[var(--auth-input-bg)] border border-[var(--auth-input-border)] rounded-[var(--auth-radius-control)] text-sm text-[var(--auth-text)] placeholder:text-[var(--auth-text-muted)] focus:outline-none focus:border-[var(--auth-gold-soft)] focus:ring-2 focus:ring-[#C9972B]/25"
->>>>>>> main
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        aria-label="Show or hide password"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--auth-text-secondary)] hover:text-[#FAF9F6]"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B6B6B] hover:text-[#FAF9F6]"
                       >
                         {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                       </button>
                     </div>
 
-<<<<<<< HEAD
-=======
-                    {customerFormMode === 'register' && showPasswordChecklist && (
-                      <ul className="mt-2 space-y-1 p-2.5 rounded-lg bg-[#0B0B0B]/60 border border-[#E8D5A8]/15">
-                        {passwordRequirements.map((req) => (
-                          <li
-                            key={req.id}
-                            className={`flex items-center gap-1.5 text-xs transition-colors ${
-                              req.met ? 'text-[#C9972B]' : 'text-[var(--auth-text-secondary)]'
-                            }`}
-                          >
-                            <CheckCircle className={`w-3 h-3 shrink-0 ${req.met ? 'opacity-100' : 'opacity-30'}`} />
-                            <span>{req.label}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
->>>>>>> main
                   </div>
 
                   {customerFormMode === 'login' && (
                     <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-3 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          className="auth-check"
-                          checked={rememberMe}
-                          onChange={(e) => setRememberMe(e.target.checked)}
-                        />
-                        <span className="text-sm text-[#E4DFD8]">Keep me signed in on this device</span>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <button
+                          type="button"
+                          onClick={() => setRememberMe(!rememberMe)}
+                          className={`w-4 h-4 shrink-0 rounded border flex items-center justify-center transition-colors cursor-pointer ${
+                            rememberMe ? 'bg-[#C9972B] border-[#C9972B]' : 'border-[#E8D5A8]/40 bg-[#0B0B0B]'
+                          }`}
+                        >
+                          {rememberMe && <Check className="w-3 h-3 text-[#0B0B0B]" />}
+                        </button>
+                        <span className="text-[11px] text-[#6B6B6B]">Remember me</span>
                       </label>
                       <button
                         type="button"
                         onClick={openForgotPassword}
-                        className="auth-focus rounded text-sm font-semibold text-[var(--auth-gold)] hover:underline cursor-pointer"
+                        className="text-[11px] font-semibold text-[#C9972B] hover:underline cursor-pointer"
                       >
                         Forgot Password?
                       </button>
                     </div>
                   )}
 
-<<<<<<< HEAD
 
-=======
-                  {customerFormMode === 'register' && (
-                    <div>
-                      <label className="block text-sm font-semibold text-[var(--auth-gold)] uppercase tracking-wider mb-1.5">
-                        Confirm Password
-                      </label>
-                      <div className="relative">
-                        <Lock className="w-4 h-4 text-[var(--auth-text-secondary)] absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type={showConfirmPassword ? 'text' : 'password'}
-                          autoComplete="new-password"
-                          required
-                          placeholder="••••••••"
-                          value={customerConfirmPassword}
-                          onChange={(e) => setCustomerConfirmPassword(e.target.value)}
-                          className={`w-full pl-9 pr-9 py-3 bg-[var(--auth-input-bg)] border rounded-[var(--auth-radius-control)] text-sm text-[var(--auth-text)] placeholder:text-[var(--auth-text-muted)] focus:outline-none focus:border-[var(--auth-gold-soft)] focus:ring-2 focus:ring-[#C9972B]/25 ${
-                            customerConfirmPassword && customerConfirmPassword !== customerPassword
-                              ? 'border-[#F05A7E]/60'
-                              : 'border-[var(--auth-input-border)]'
-                          }`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          aria-label="Show or hide password"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--auth-text-secondary)] hover:text-[#FAF9F6]"
-                        >
-                          {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                      {customerConfirmPassword && customerConfirmPassword !== customerPassword && (
-                        <p className="text-xs text-[#F05A7E] mt-1">Passwords do not match.</p>
-                      )}
-                    </div>
-                  )}
-
-                  {customerFormMode === 'register' && (
-                    <label className="flex items-start gap-3 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        className="auth-check"
-                        checked={agreedToTerms}
-                        onChange={(e) => setAgreedToTerms(e.target.checked)}
-                      />
-                      <span className="text-sm text-[#E4DFD8] leading-snug pt-0.5">
-                        I agree to the <span className="text-[#E8D5A8] font-medium">Terms &amp; Privacy Policy</span>
-                      </span>
-                    </label>
-                  )}
->>>>>>> main
 
                   <button
                     type="submit"
                     disabled={customerLoading}
-                    className="auth-cta w-full py-4 font-medium text-[15px] uppercase tracking-[0.16em] cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="w-full py-3 bg-[#C9972B] hover:bg-[#E3B84B] text-[#0B0B0B] font-bold text-xs uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {/* This form only ever signs in, so there is no second
                         wording to choose between. */}
@@ -859,9 +556,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </form>
                   </>
                 )}
-                </div>
 
-<<<<<<< HEAD
                 {/* Only the method toggle. There is no "Create Account" link
                     here on purpose: signing up is the mobile number, where
                     verifying a new one creates the account. Offering a second
@@ -883,101 +578,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       </button>
                     </div>
                   </div>
-=======
-                {LEGACY_EMAIL_AUTH_ENABLED && (
-                <>
-                {GOOGLE_SIGN_IN_ENABLED && (
-                <>
-                {/* OR divider */}
-                <div className="flex items-center gap-3">
-                  <span className="flex-1 h-px bg-[#E8D5A8]/15" />
-                  <span className="text-xs uppercase tracking-wider text-[var(--auth-text-secondary)]">Or</span>
-                  <span className="flex-1 h-px bg-[#E8D5A8]/15" />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleGoogleSignIn}
-                  disabled={googleLoading}
-                  className="w-full py-2.5 px-3 bg-[#0B0B0B] hover:bg-[#171717] border border-[#E8D5A8]/30 rounded-lg text-xs font-semibold text-[#FAF9F6] flex items-center justify-center gap-2 cursor-pointer transition-colors disabled:opacity-50"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#C9972B">
-                    <path d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.63h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.57-5.17 3.57-8.81z" />
-                    <path d="M12 24c3.24 0 5.95-1.07 7.94-2.92l-3.88-3c-1.08.72-2.45 1.15-4.06 1.15-3.13 0-5.78-2.11-6.73-4.96H1.26v3.1A12 12 0 0 0 12 24z" />
-                    <path d="M5.27 14.27a7.2 7.2 0 0 1 0-4.54v-3.1H1.26a12 12 0 0 0 0 10.74z" />
-                    <path d="M12 4.77c1.77 0 3.35.61 4.6 1.8l3.44-3.44C17.94 1.19 15.24 0 12 0 7.31 0 3.26 2.69 1.26 6.63l4.01 3.1C6.22 6.88 8.87 4.77 12 4.77z" />
-                  </svg>
-                  <span>{googleLoading ? 'Connecting to Google...' : 'Continue with Google'}</span>
-                </button>
-                {googleComingSoon && (
-                  <p className="text-xs text-center text-[var(--auth-text-secondary)]">Google sign-in is coming soon — please use email for now.</p>
-                )}
-                {googleError && (
-                  <p className="text-xs text-center text-[#F05A7E]">{googleError}</p>
-                )}
-                </>
-                )}
-
-                <p className="text-center text-[15px] sm:text-[17px] text-[#E4DFD8] pt-1">
-                  {customerFormMode === 'register' ? 'Already have an account? ' : 'Don’t have an account? '}
-                  <button
-                    type="button"
-                    // Leaving registration returns to OTP, the default way in.
-                    onClick={() => selectTab(customerFormMode === 'register' ? 'signin' : 'register')}
-                    className="auth-focus group inline-flex items-center gap-2 ml-1 rounded font-semibold text-[var(--auth-gold)] hover:text-[#E3B84B] cursor-pointer transition-colors"
-                  >
-                    {customerFormMode === 'register' ? 'Sign In' : 'Create Account'}
-                    <ArrowRight className="w-5 h-5 text-[var(--auth-pink)] transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" strokeWidth={1.75} />
-                  </button>
-                </p>
-                </>
->>>>>>> main
                 )}
               </div>
             )}
           </div>
           </div>
         </motion.div>
-      </motion.div>
+      </div>
     </AnimatePresence>
-    </MotionConfig>
   );
 };
-
-/** Gold-leaf and pink-petal ornaments for the two upper corners. Purely decorative. */
-const BotanicalCorners: React.FC = () => (
-  <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0">
-    <svg
-      className="absolute left-0 top-0 w-[80px] sm:w-[124px] h-auto drop-shadow-[0_0_6px_rgba(227,184,75,0.35)]"
-      viewBox="0 0 120 160"
-      fill="none"
-    >
-      <OrnamentDefs id="orn-tl" />
-      <Leaf id="orn-tl" transform="translate(-6 -4) rotate(12) scale(1.05)" />
-      <Leaf id="orn-tl" transform="translate(-8 0) rotate(38) scale(1.1)" />
-      <Leaf id="orn-tl" transform="translate(-4 4) rotate(62) scale(0.95)" />
-      <Leaf id="orn-tl" transform="translate(-2 2) rotate(86) scale(0.8)" />
-      <Petal id="orn-tl" transform="translate(60 66) rotate(-42) scale(0.95)" />
-      <Petal id="orn-tl" transform="translate(28 84) rotate(62) scale(1.05)" />
-      <g fill="#E8D5A8">
-        <circle cx="70" cy="22" r="1.1" />
-        <circle cx="52" cy="40" r="0.8" />
-        <circle cx="84" cy="44" r="0.7" />
-        <circle cx="20" cy="70" r="0.9" />
-      </g>
-    </svg>
-    <svg
-      className="absolute right-0 top-[64px] sm:top-[86px] w-[46px] sm:w-[66px] h-auto drop-shadow-[0_0_6px_rgba(227,184,75,0.3)]"
-      viewBox="0 0 66 124"
-      fill="none"
-    >
-      <OrnamentDefs id="orn-tr" />
-      <Leaf id="orn-tr" transform="translate(70 118) rotate(-118) scale(1.05)" />
-      <Petal id="orn-tr" transform="translate(6 104) rotate(-52) scale(1.25)" />
-      <g fill="#E8D5A8">
-        <circle cx="40" cy="20" r="0.9" />
-        <circle cx="22" cy="62" r="0.7" />
-      </g>
-    </svg>
-  </div>
-);

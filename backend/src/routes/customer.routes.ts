@@ -32,8 +32,6 @@ import { issueOtp, verifyOtp, otpPolicy } from '../services/otp.service';
 import { channelConfigured, OtpChannel, firebaseOtpSelected } from '../services/messaging.service';
 import { verifyFirebasePhoneToken } from '../services/firebaseAuth.service';
 import { grantSignupBonus, grantReviewPoints, recordCouponRedemption } from '../services/rewards.service';
-import { channelConfigured, OtpChannel } from '../services/messaging.service';
-import { grantSignupBonus, recordCouponRedemption } from '../services/rewards.service';
 import { resolveAvailableStock } from '../services/inventory.service';
 import {
   getPaymentGateway,

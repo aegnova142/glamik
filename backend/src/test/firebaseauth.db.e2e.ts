@@ -113,6 +113,9 @@ async function cartCandidates(): Promise<Array<{ productId: string; variantId?: 
 }
 const PHONE_NATIONAL = '9876590001';
 /** Obviously not a real token — the mock never parses it. */
+/** Bearer header, so the change-phone section does not repeat it ten times. */
+const authHeader = (token: string) => ({ Authorization: 'Bearer ' + token });
+
 const FAKE_TOKEN = 'fake.id.token-NOT-A-REAL-CREDENTIAL';
 
 function nowSeconds() {
@@ -185,6 +188,21 @@ async function api(method: string, path: string, body?: unknown, headers: Record
     if (payload) req.write(payload);
     req.end();
   });
+}
+
+/** Numbers used only by the change-phone section. */
+const PHONE_NEW = '+919123966101';
+const PHONE_TAKEN = '+919123966102';
+
+async function clearChangePhoneRows() {
+  const nums = [PHONE_NEW, PHONE_TAKEN];
+  await pool
+    .query(
+      'DELETE FROM customer_sessions WHERE customer_id IN (SELECT id FROM customers WHERE phone_e164 = ANY($1))',
+      [nums]
+    )
+    .catch(() => undefined);
+  await pool.query('DELETE FROM customers WHERE phone_e164 = ANY($1)', [nums]);
 }
 
 async function clearRows() {
@@ -1009,6 +1027,202 @@ async function main() {
   }
 
   await pool.query('DELETE FROM customers WHERE email = $1', [EMAIL]).catch(() => undefined);
+  // ==========================================
+  // 14. CHANGING THE VERIFIED MOBILE NUMBER
+  //
+  // The number is the identity, so this is a credential change rather than a
+  // profile edit. It needs BOTH an existing session and a Firebase token for
+  // the new number: a stolen handset alone cannot take an account over, and a
+  // stolen session alone cannot move it somewhere the thief receives codes.
+  // ==========================================
+  section('14. Changing the verified mobile number');
+
+  await clearRows();
+  await clearChangePhoneRows();
+  {
+    process.env.SMS_PROVIDER = 'firebase';
+
+    resolveWith(phoneToken());
+    const signIn = await api('POST', '/api/customer/auth/otp/firebase/verify', { idToken: FAKE_TOKEN });
+    const token = signIn.body.token;
+    const customerId = signIn.body.user.id;
+    check('signed in on the original number', signIn.status === 200);
+
+    // A second device on the same account — it must be signed out by the change.
+    resolveWith(phoneToken());
+    const second = await api('POST', '/api/customer/auth/otp/firebase/verify', { idToken: FAKE_TOKEN });
+    const secondToken = second.body.token;
+    check('a second device is signed in too', second.status === 200);
+    check('both devices are the same account', second.body.user.id === customerId);
+
+    const beforeMe = await api('GET', '/api/customer/auth/me', undefined, authHeader(secondToken));
+    check('the second device works before the change', beforeMe.status === 200);
+
+    resolveWith(phoneToken({ phone_number: PHONE_NEW }));
+    const anon = await api('POST', '/api/customer/auth/otp/firebase/change-phone', { idToken: FAKE_TOKEN });
+    check('changing the number requires a session', anon.status === 401 || anon.status === 403);
+
+    rejectWith('Firebase ID token has invalid signature');
+    const badToken = await api(
+      'POST',
+      '/api/customer/auth/otp/firebase/change-phone',
+      { idToken: FAKE_TOKEN },
+      authHeader(token)
+    );
+    check('an invalid token is refused with 401', badToken.status === 401);
+    const unchanged = await pool.query('SELECT phone_e164 FROM customers WHERE id = $1', [customerId]);
+    check('and the number is unchanged', unchanged.rows[0].phone_e164 === PHONE_E164);
+
+    // A number owned by someone else.
+    resolveWith(phoneToken({ phone_number: PHONE_TAKEN }));
+    const other = await api('POST', '/api/customer/auth/otp/firebase/verify', { idToken: FAKE_TOKEN });
+    check('another customer exists on a different number', other.status === 200);
+
+    resolveWith(phoneToken({ phone_number: PHONE_TAKEN }));
+    const dupe = await api(
+      'POST',
+      '/api/customer/auth/otp/firebase/change-phone',
+      { idToken: FAKE_TOKEN },
+      authHeader(token)
+    );
+    check('a number owned by another customer returns 409', dupe.status === 409, String(dupe.status));
+    check('with a clear reason', /already in use/i.test(dupe.body.error || ''));
+    const stillOurs = await pool.query('SELECT phone_e164 FROM customers WHERE id = $1', [customerId]);
+    check('and our number is untouched', stillOurs.rows[0].phone_e164 === PHONE_E164);
+    const theirs = await pool.query('SELECT count(*)::int AS n FROM customers WHERE phone_e164 = $1', [PHONE_TAKEN]);
+    check('the other account keeps its number', theirs.rows[0].n === 1);
+
+    // The real change.
+    resolveWith(phoneToken({ phone_number: PHONE_NEW }));
+    const changed = await api(
+      'POST',
+      '/api/customer/auth/otp/firebase/change-phone',
+      { idToken: FAKE_TOKEN },
+      authHeader(token)
+    );
+    check('the change succeeds', changed.status === 200, JSON.stringify(changed.body));
+    check('and returns a replacement token', typeof changed.body.token === 'string');
+
+    const after = await pool.query('SELECT phone_e164, phone_verified FROM customers WHERE id = $1', [customerId]);
+    check('phone_e164 moved to the new number', after.rows[0].phone_e164 === PHONE_NEW);
+    check('and it is marked verified', after.rows[0].phone_verified === true);
+    const holders = await pool.query('SELECT count(*)::int AS n FROM customers WHERE phone_e164 = $1', [PHONE_NEW]);
+    check('no second account was created', holders.rows[0].n === 1);
+
+    const newMe = await api('GET', '/api/customer/auth/me', undefined, authHeader(changed.body.token));
+    check('the replacement token still works on this device', newMe.status === 200);
+
+    const oldMe = await api('GET', '/api/customer/auth/me', undefined, authHeader(token));
+    check('the pre-change token is rejected', oldMe.status === 401, String(oldMe.status));
+
+    const otherDevice = await api('GET', '/api/customer/auth/me', undefined, authHeader(secondToken));
+    check('the other device is signed out', otherDevice.status === 401, String(otherDevice.status));
+
+    resolveWith(phoneToken({ phone_number: PHONE_NEW }));
+    const viaNew = await api('POST', '/api/customer/auth/otp/firebase/verify', { idToken: FAKE_TOKEN });
+    check('the new number signs into the SAME account', viaNew.body.user?.id === customerId);
+    check('and is not treated as a new account', viaNew.body.isNewAccount === false);
+
+    resolveWith(phoneToken());
+    const viaOld = await api('POST', '/api/customer/auth/otp/firebase/verify', { idToken: FAKE_TOKEN });
+    check('the old number no longer reaches the account', viaOld.body.user?.id !== customerId);
+
+    resolveWith(phoneToken({ phone_number: PHONE_NEW }));
+    const retry = await api(
+      'POST',
+      '/api/customer/auth/otp/firebase/change-phone',
+      { idToken: FAKE_TOKEN },
+      authHeader(changed.body.token)
+    );
+    check('repeating the change is a no-op success', retry.status === 200, String(retry.status));
+    check('reported as unchanged', retry.body.unchanged === true);
+  }
+
+  {
+    // "Firebase is switched off here" and "that number belongs to someone
+    // else" are different problems with different remedies, so they must not
+    // share a status code. They used to: both answered 409, and the UI reads
+    // 409 as the second one — telling a customer their number was taken when
+    // the deployment simply had Firebase disabled.
+    await clearRows();
+    await clearChangePhoneRows();
+
+    resolveWith(phoneToken());
+    const mine = await api('POST', '/api/customer/auth/otp/firebase/verify', { idToken: FAKE_TOKEN });
+    const myToken = mine.body.token;
+    const myId = mine.body.user.id;
+
+    resolveWith(phoneToken({ phone_number: PHONE_TAKEN }));
+    const rival = await api('POST', '/api/customer/auth/otp/firebase/verify', { idToken: FAKE_TOKEN });
+    check('a rival account holds PHONE_TAKEN', rival.status === 200);
+
+    // --- taken number: still 409 ---
+    resolveWith(phoneToken({ phone_number: PHONE_TAKEN }));
+    const taken = await api(
+      'POST',
+      '/api/customer/auth/otp/firebase/change-phone',
+      { idToken: FAKE_TOKEN },
+      authHeader(myToken)
+    );
+    check('a number held by another account is 409', taken.status === 409, String(taken.status));
+    check('and says so', /already in use/i.test(taken.body.error || ''));
+
+    // --- provider switched off: 503, not 409 ---
+    process.env.SMS_PROVIDER = 'meta-whatsapp-only';
+    resolveWith(phoneToken({ phone_number: PHONE_NEW }));
+    const off = await api(
+      'POST',
+      '/api/customer/auth/otp/firebase/change-phone',
+      { idToken: FAKE_TOKEN },
+      authHeader(myToken)
+    );
+    check('with Firebase not selected the route answers 503', off.status === 503, String(off.status));
+    check('and NOT 409, which the UI reads as a taken number', off.status !== 409);
+    check(
+      'the reason is configuration, not a conflict',
+      /not enabled/i.test(off.body.error || ''),
+      off.body.error
+    );
+
+    // The gate must refuse before touching anything.
+    const afterOff = await pool.query('SELECT phone_e164 FROM customers WHERE id = $1', [myId]);
+    check('the number is untouched when the provider is off', afterOff.rows[0].phone_e164 === PHONE_E164);
+    const claimed = await pool.query('SELECT count(*)::int AS n FROM customers WHERE phone_e164 = $1', [PHONE_NEW]);
+    check('and the new number was not claimed', claimed.rows[0].n === 0);
+
+    // The two codes genuinely differ — the point of the fix.
+    check('taken and disabled no longer share a status', taken.status !== off.status);
+
+    process.env.SMS_PROVIDER = 'firebase';
+  }
+
+  {
+    // Two devices racing for the same free number. The partial unique index is
+    // the authority: exactly one may win, and the loser must get a 409 rather
+    // than a 500 from the raw constraint violation.
+    await clearRows();
+    await clearChangePhoneRows();
+
+    resolveWith(phoneToken());
+    const a = await api('POST', '/api/customer/auth/otp/firebase/verify', { idToken: FAKE_TOKEN });
+    resolveWith(phoneToken({ phone_number: PHONE_TAKEN }));
+    const b = await api('POST', '/api/customer/auth/otp/firebase/verify', { idToken: FAKE_TOKEN });
+
+    resolveWith(phoneToken({ phone_number: PHONE_NEW }));
+    const [r1, r2] = await Promise.all([
+      api('POST', '/api/customer/auth/otp/firebase/change-phone', { idToken: FAKE_TOKEN }, authHeader(a.body.token)),
+      api('POST', '/api/customer/auth/otp/firebase/change-phone', { idToken: FAKE_TOKEN }, authHeader(b.body.token)),
+    ]);
+
+    const statuses = [r1.status, r2.status].sort();
+    check('exactly one concurrent claim succeeds', statuses[0] === 200 && statuses[1] === 409, statuses.join(','));
+    check('neither returns a 500', !(r1.status === 500 || r2.status === 500));
+
+    const holders = await pool.query('SELECT count(*)::int AS n FROM customers WHERE phone_e164 = $1', [PHONE_NEW]);
+    check('and only one account holds the number', holders.rows[0].n === 1);
+  }
+
+  await clearChangePhoneRows();
   await clearRows();
   process.env.SMS_PROVIDER = '';
 }

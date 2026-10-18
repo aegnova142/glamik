@@ -97,8 +97,38 @@ interface AccountContextType {
   }) => Promise<MutationResult>;
   uploadAvatar: (file: File) => Promise<MutationResult>;
   removeAvatar: () => Promise<MutationResult>;
-  sendEmailVerification: () => Promise<MutationResult & { emailSent?: boolean; verificationToken?: string }>;
-  verifyEmail: (token: string) => Promise<MutationResult>;
+  /** Issues a six-digit code to the address on the profile. `devCode` is only
+   * populated when SMTP is unconfigured, so the flow still completes locally. */
+  sendEmailVerification: () => Promise<
+    MutationResult & {
+      emailSent?: boolean;
+      alreadyVerified?: boolean;
+      maskedEmail?: string;
+      expiresAt?: string;
+      resendAvailableAt?: string;
+      retryAfterSeconds?: number;
+      devCode?: string;
+    }
+  >;
+  /** Checks the six-digit code. `mustResend` means this code is dead. */
+  verifyEmail: (code: string) => Promise<MutationResult & { attemptsRemaining?: number; mustResend?: boolean }>;
+  /**
+   * Exchanges a Firebase ID token for a change of the verified mobile
+   * number. The number comes from the signed token, never from the client.
+   *
+   * `status` is passed through because the caller has to tell 409 (number
+   * belongs to someone else, retry with a different one) from 401 (code
+   * expired, request a new one) from 503 (try later) - three different
+   * things to say to the customer.
+   */
+  changePhone: (idToken: string) => Promise<{
+    success: boolean;
+    status: number;
+    token?: string;
+    unchanged?: boolean;
+    user?: any;
+    error?: string;
+  }>;
 
   saveGlamProfile: (input: GlamProfile) => Promise<MutationResult>;
   recordShadeResult: (entry: Partial<ShadeHistoryEntry>) => Promise<MutationResult>;
@@ -350,26 +380,54 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   const sendEmailVerification = async () => {
-    const res = await customerApiFetch<{ success: boolean; emailSent: boolean; verificationToken?: string }>(
-      '/api/customer/account/profile/send-email-verification',
-      { method: 'POST' }
-    );
+    const res = await customerApiFetch<{
+      success: boolean;
+      emailSent: boolean;
+      alreadyVerified?: boolean;
+      maskedEmail?: string;
+      expiresAt?: string;
+      resendAvailableAt?: string;
+      devCode?: string;
+      retryAfterSeconds?: number;
+    }>('/api/customer/account/profile/send-email-code', { method: 'POST' });
+
     if (res.data?.success) {
-      return { success: true, emailSent: res.data.emailSent, verificationToken: res.data.verificationToken };
+      return {
+        success: true,
+        emailSent: res.data.emailSent,
+        alreadyVerified: res.data.alreadyVerified,
+        maskedEmail: res.data.maskedEmail,
+        expiresAt: res.data.expiresAt,
+        resendAvailableAt: res.data.resendAvailableAt,
+        devCode: res.data.devCode,
+      };
     }
-    return { success: false, error: res.error || 'Could not send the verification email.' };
+    return {
+      success: false,
+      error: res.error || 'Could not send the verification code.',
+      retryAfterSeconds: res.data?.retryAfterSeconds,
+    };
   };
 
-  const verifyEmail = async (token: string): Promise<MutationResult> => {
-    const res = await customerApiFetch<{ profile: CustomerProfile }>('/api/customer/account/profile/verify-email', {
+  const verifyEmail = async (code: string) => {
+    const res = await customerApiFetch<{
+      profile: CustomerProfile;
+      attemptsRemaining?: number;
+      mustResend?: boolean;
+    }>('/api/customer/account/profile/verify-email-code', {
       method: 'POST',
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ code }),
     });
     if (res.data?.profile) {
       setProfile({ data: res.data.profile, loading: false, error: null, loaded: true });
       return { success: true };
     }
-    return { success: false, error: res.error || 'Could not verify your email address.' };
+    return {
+      success: false,
+      error: res.error || 'Could not verify your email address.',
+      attemptsRemaining: res.data?.attemptsRemaining,
+      mustResend: res.data?.mustResend,
+    };
   };
 
   // ------------------------------------------
@@ -531,6 +589,32 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
   // Security
   // ------------------------------------------
 
+  const changePhone = async (idToken: string) => {
+    const res = await customerApiFetch<{
+      success: boolean;
+      token?: string;
+      unchanged?: boolean;
+      user?: any;
+    }>('/api/customer/auth/otp/firebase/change-phone', {
+      method: 'POST',
+      body: JSON.stringify({ idToken }),
+    });
+
+    if (res.data?.success) {
+      return {
+        success: true,
+        status: res.status,
+        token: res.data.token,
+        unchanged: res.data.unchanged,
+        user: res.data.user,
+      };
+    }
+    return {
+      success: false,
+      status: res.status,
+      error: res.error || 'Could not change your mobile number.',
+    };
+  };
   const revokeSession = async (sessionId: string): Promise<MutationResult> => {
     const res = await customerApiFetch<{ success: boolean }>(`/api/customer/account/sessions/${sessionId}`, {
       method: 'DELETE',
@@ -675,6 +759,7 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
     removeAvatar,
     sendEmailVerification,
     verifyEmail,
+    changePhone,
     saveGlamProfile,
     recordShadeResult,
     deleteShadeResult,

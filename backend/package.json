@@ -37,6 +37,7 @@
     "test:firebaseauth": "tsx src/test/firebaseauth.db.e2e.ts",
     "test:otpdev": "tsx src/test/otpdev.db.e2e.ts",
     "test:accountprofile": "tsx src/test/accountprofile.db.e2e.ts",
+    "test:addresses": "tsx src/test/addresses.db.e2e.ts",
     "test:whatsappnotify": "tsx src/test/whatsappnotify.e2e.ts",
     "test:otproutes": "tsx src/test/otproutes.db.e2e.ts",
     "test:otpflow": "tsx src/test/otpflow.db.e2e.ts",

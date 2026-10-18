@@ -6,7 +6,7 @@ import { getMailTransporter } from '../services/mailer';
 import { pool, loadDatabase, saveDatabase, withStockLock, evaluateOffers, InternalCMSDatabaseSchema } from '../db/db';
 import { requireCustomer, AuthenticatedCustomerRequest } from '../middleware/requireCustomer';
 import { rateLimit } from '../middleware/rateLimit';
-import { signCustomerToken, bumpTokenVersion } from '../auth/tokens';
+import { signCustomerToken, bumpTokenVersion, invalidateAccountCache } from '../auth/tokens';
 import { createSession, deleteSession, deleteAllSessions } from '../auth/sessions';
 import { clientIp } from '../utils/request';
 // Sellability, price and stock are all resolved by the shared helpers so the
@@ -419,6 +419,19 @@ router.post('/auth/otp/request', otpRequestLimiter, async (req: Request, res: Re
     return res.status(400).json({ error: 'Please enter a valid mobile number.' });
   }
 
+  // The country the number actually resolved to must be one this store
+  // serves. normalizePhone has a generic branch for dial codes it does not
+  // know in detail, so without this a client could ask for a code to any
+  // country simply by sending a different countryCode — the sign-in screen
+  // only offers +91, but nothing stops a direct POST.
+  //
+  // Checked against the resolved value rather than the submitted one, so a
+  // mismatched pair cannot slip through either. The same guard already
+  // protects /auth/otp/firebase/verify.
+  if (!SUPPORTED_COUNTRY_CODES.includes(normalized.countryCode as any)) {
+    return res.status(400).json({ error: 'This mobile number is not supported.' });
+  }
+
   // SMS is the only OTP channel. A client asking for anything else — a stale
   // bundle offering the old WhatsApp option — gets SMS rather than an error,
   // because the channel it asked for no longer exists on any code path.
@@ -776,6 +789,117 @@ router.post('/auth/otp/firebase/verify', otpVerifyLimiter, async (req: Request, 
   const { token, user, isNewAccount } = await establishPhoneSession(normalized.e164, req);
   res.json({ token, user, isNewAccount });
 });
+
+// ==========================================
+// CHANGING THE VERIFIED MOBILE NUMBER
+//
+// The number IS the identity: it is what findCustomerByVerifiedPhone keys on
+// and what signs the customer in. So this is not a profile edit — it moves the
+// account to a different credential, and it only happens on the same proof
+// sign-in requires: a Firebase ID token for the new number.
+//
+// Requires an existing session as well, so changing the number needs both the
+// old account and control of the new handset. A stolen phone alone cannot take
+// an account over, and a stolen session alone cannot move it somewhere the
+// thief can receive codes.
+//
+// The free-text `phone` column is deliberately left alone — that is a courier
+// contact number and is not proof of anything.
+// ==========================================
+router.post(
+  '/auth/otp/firebase/change-phone',
+  requireCustomer,
+  otpVerifyLimiter,
+  async (req: AuthenticatedCustomerRequest, res: Response) => {
+    // 503, not 409. On this route a 409 already means "that number belongs to
+    // someone else" — a conflict the customer fixes by entering a different
+    // number. A deployment with Firebase switched off is the opposite: nothing
+    // the customer types will help, and it may well be fixed by the time they
+    // retry. Reusing 409 here made the UI tell them their number was taken when
+    // the real cause was server configuration. Matches the 'unconfigured'
+    // branch below, which already answers 503.
+    if (!firebaseOtpSelected()) {
+      return res.status(503).json({ error: 'Firebase sign-in is not enabled on this deployment.' });
+    }
+
+    const { idToken } = req.body || {};
+    if (!idToken) {
+      return res.status(400).json({ error: 'Verification failed. Please try again.' });
+    }
+
+    const verification = await verifyFirebasePhoneToken(idToken);
+    if (verification.status !== 'verified') {
+      // One wording for every rejection reason, as on the sign-in route: the
+      // distinctions matter to the operator in the log, not to the customer.
+      console.error(`[firebase-auth] change-phone rejected (${verification.status})`);
+      const status = verification.status === 'unconfigured' ? 503 : 401;
+      return res.status(status).json({ error: 'Verification failed. Please request a new code.' });
+    }
+
+    // Identity comes ONLY from the signed token, re-validated through the same
+    // normaliser and country allow-list the sign-in path uses.
+    const normalized = normalizePhone(verification.phoneRaw);
+    if (!normalized || !SUPPORTED_COUNTRY_CODES.includes(normalized.countryCode as any)) {
+      return res.status(400).json({ error: 'This mobile number is not supported.' });
+    }
+    const newE164 = normalized.e164;
+
+    const current = await pool.query('SELECT phone_e164 FROM customers WHERE id = $1', [req.customer!.id]);
+    if (!current.rows[0]) return res.status(404).json({ error: 'Account not found.' });
+
+    // Idempotent: verifying the number the account already has is a no-op
+    // success, so a retry after a dropped response cannot fail confusingly.
+    if (current.rows[0].phone_e164 === newE164) {
+      const unchanged = await pool.query('SELECT * FROM customers WHERE id = $1', [req.customer!.id]);
+      return res.json({ success: true, unchanged: true, user: toSessionUser(unchanged.rows[0]) });
+    }
+
+    // Guarded before the write so the common case is a clear 409 — and caught
+    // again below, because the check and the write are not atomic.
+    const owner = await pool.query('SELECT id FROM customers WHERE phone_e164 = $1 AND id <> $2', [
+      newE164,
+      req.customer!.id,
+    ]);
+    if (owner.rows.length) {
+      return res.status(409).json({ error: 'That mobile number is already in use on another account.' });
+    }
+
+    const displayPhone = `${normalized.countryCode} ${normalized.national}`;
+
+    try {
+      // One statement, so the number and its verified flag can never disagree.
+      await pool.query(
+        `UPDATE customers
+            SET phone_e164 = $1, phone_verified = true, phone = COALESCE(phone, $2)
+          WHERE id = $3`,
+        [newE164, displayPhone, req.customer!.id]
+      );
+    } catch (err) {
+      // The partial unique index is the real authority; another request may
+      // have claimed the number between the check above and this write.
+      const pgErr = err as { code?: string; constraint?: string };
+      if (pgErr.code === '23505' && String(pgErr.constraint || '').includes('phone_e164')) {
+        return res.status(409).json({ error: 'That mobile number is already in use on another account.' });
+      }
+      throw err;
+    }
+
+    // The credential moved, so every other device must sign in again — on the
+    // new number. The device that made the change keeps working: it just
+    // proved control, and signing it out would strand the customer mid-flow.
+    const tokenVersion = await bumpTokenVersion(req.customer!.id);
+    await deleteAllSessions(req.customer!.id, req.customer!.sessionId);
+    invalidateAccountCache(req.customer!.id);
+
+    const sessionId = req.customer!.sessionId || (await createSession(req.customer!.id, req));
+    const fresh = await pool.query('SELECT * FROM customers WHERE id = $1', [req.customer!.id]);
+    const row = fresh.rows[0];
+    // bumpTokenVersion invalidated the caller's old token too; this replaces it.
+    const token = signCustomerToken(row.id, row.email, tokenVersion, sessionId);
+
+    res.json({ success: true, token, user: toSessionUser(row) });
+  }
+);
 
 router.get('/auth/me', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
   const result = await pool.query('SELECT * FROM customers WHERE id = $1', [req.customer!.id]);

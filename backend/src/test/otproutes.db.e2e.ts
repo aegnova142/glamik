@@ -47,14 +47,14 @@ let passed = 0;
 let failed = 0;
 const failures: string[] = [];
 
-function check(label: string, condition: boolean) {
+function check(label: string, condition: boolean, detail?: string) {
   if (condition) {
     passed++;
     console.log(`  PASS  ${label}`);
   } else {
     failed++;
-    failures.push(label);
-    console.log(`  FAIL  ${label}`);
+    failures.push(label + (detail ? ` — ${detail}` : ''));
+    console.log(`  FAIL  ${label}${detail ? ` — ${detail}` : ''}`);
   }
 }
 
@@ -166,6 +166,9 @@ const PHONE = {
   expiry: '9123911004',
   cooldown: '9123911005',
   disabled: '9123911006',
+  /** Used only by the normalisation section, which replays one number in
+   *  many shapes and asserts they all land on the same E.164. */
+  shapes: '9123911007',
 };
 
 async function clearRows() {
@@ -542,6 +545,107 @@ async function main() {
     check('with Retry-After set', Number(immediate.headers.get('retry-after')) > 0);
     check('and retryAfterSeconds in the body', immediate.body.retryAfterSeconds > 0);
     check('and no new challenge', immediate.body.challengeId === undefined);
+  }
+
+  // ==========================================
+  // 9. THE SERVER RE-DERIVES THE NUMBER
+  //
+  // The sign-in field normalises what is pasted, but a request can be made
+  // without it — curl, a stale bundle, a script. So the shapes the client
+  // handles are replayed here RAW against the API.
+  //
+  // Two properties. Every spelling of one number must reach the SAME account,
+  // or a customer who pastes "+91 98765 43210" today and types "9876543210"
+  // tomorrow quietly owns two. And anything that is not a reachable Indian
+  // mobile must be refused here regardless of what the client thought.
+  // ==========================================
+  section('9. Server-side phone normalisation (client bypassed)');
+
+  await clearRows();
+  // This section identifies its requests by IP, and clearRows() only knows
+  // about the PHONE fixtures. Clearing the ranges makes the block
+  // self-cleaning, so a row left by an earlier run cannot fail it.
+  await pool.query(
+    "DELETE FROM customer_otp_codes WHERE request_ip LIKE '203.0.113.%' OR request_ip LIKE '198.51.100.%'"
+  );
+  {
+    const CANONICAL = `+91${PHONE.shapes}`;
+
+    // Every one of these is the same number wearing different clothes.
+    const shapes = [
+      PHONE.shapes,
+      `+91${PHONE.shapes}`,
+      `+91 ${PHONE.shapes.slice(0, 5)} ${PHONE.shapes.slice(5)}`,
+      `91${PHONE.shapes}`,
+      `0${PHONE.shapes}`,
+      `(+91) ${PHONE.shapes.slice(0, 5)}-${PHONE.shapes.slice(5)}`,
+      `   ${PHONE.shapes}   `,
+    ];
+
+    // Each case gets its own client IP. The per-IP limiter is doing its job
+    // — it is tested in section 8 — but sharing one IP here would turn this
+    // section into a second rate-limit test and mask what it is really for.
+    let ipSeq = 0;
+    const freshIp = () => ({ 'x-forwarded-for': `198.51.100.${++ipSeq}` });
+
+    const seen = new Set<string>();
+    for (const shape of shapes) {
+      await clearRows();
+      const res = await api('POST', '/api/customer/auth/otp/request', { phone: shape, countryCode: '+91' }, freshIp());
+      check(`"${shape.trim()}" is accepted`, res.status === 200, `got ${res.status}`);
+
+      const row = await pool.query(
+        'SELECT phone_e164 FROM customer_otp_codes ORDER BY created_at DESC LIMIT 1'
+      );
+      if (row.rows[0]) seen.add(row.rows[0].phone_e164);
+    }
+
+    check('every spelling stored ONE canonical number', seen.size === 1, [...seen].join(' | '));
+    check('and it is the E.164 form', seen.has(CANONICAL), [...seen].join(' | '));
+  }
+
+  {
+    await clearRows();
+    // Shapes the client would have rejected. The server must not rely on it.
+    const refused: Array<[string, string]> = [
+      ['landline-style, right length', '1234567890'],
+      ['starts with 5', '5123456789'],
+      ['too short', '98765'],
+      ['too long for any peeling', '98765432109876'],
+      ['letters', 'ninedigits'],
+      ['empty', ''],
+      ['only symbols', '+-() '],
+      ['all zeroes', '0000000000'],
+    ];
+
+    let badSeq = 0;
+    const badIp = () => ({ 'x-forwarded-for': `203.0.113.${++badSeq}` });
+
+    for (const [label, bad] of refused) {
+      const res = await api('POST', '/api/customer/auth/otp/request', { phone: bad, countryCode: '+91' }, badIp());
+      check(`${label} is refused`, res.status === 400, `"${bad}" got ${res.status} ${JSON.stringify(res.body)}`);
+      check(`  ...and issues no challenge`, res.body.challengeId === undefined);
+    }
+
+    // Scoped to the IPs this block used, so a row left by another section
+    // cannot make this look like a leak.
+    const rows = await pool.query(
+      "SELECT count(*)::int AS n FROM customer_otp_codes WHERE request_ip LIKE '203.0.113.%'"
+    );
+    check('no challenge row was written for any of them', rows.rows[0].n === 0, `found ${rows.rows[0].n}`);
+  }
+
+  {
+    // An unsupported country cannot be smuggled in by the client.
+    await clearRows();
+    const res = await api(
+      'POST',
+      '/api/customer/auth/otp/request',
+      { phone: '612345678', countryCode: '+49' },
+      { 'x-forwarded-for': '203.0.113.200' }
+    );
+    check('an unsupported country code is refused', res.status === 400, `got ${res.status}`);
+    check('with no challenge', res.body.challengeId === undefined);
   }
 
   await clearRows();

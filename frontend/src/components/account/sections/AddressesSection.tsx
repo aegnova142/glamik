@@ -5,7 +5,10 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Plus, Pencil, Trash2, Star, X, Home, Briefcase, Building2, Receipt } from 'lucide-react';
+import {
+  MapPin, Plus, Pencil, Trash2, Star, X, Home, Briefcase, Building2, Receipt,
+  MoreVertical, AlertTriangle,
+} from 'lucide-react';
 import { Address, ADDRESS_TYPE_OPTIONS, AddressType } from '@glamirk/shared/types';
 import { AccountButton, AccountEmpty, AccountField, AccountFormMessage, AccountSectionHeader, inputClass } from '../AccountUI';
 import { useCustomerAuth } from '../../../context/CustomerAuthContext';
@@ -14,7 +17,12 @@ interface AddressesSectionProps {
   addresses: Address[];
   onAddAddress: (address: Address) => Promise<{ success: boolean; addressId?: string; error?: string }>;
   onEditAddress: (addressId: string, address: Omit<Address, 'id'>) => Promise<{ success: boolean; error?: string }>;
-  onDeleteAddress: (addressId: string) => Promise<void> | void;
+  /** May report failure so the card is not removed on a false success.
+   * Returning nothing is still treated as success, so existing callers
+   * keep working unchanged. */
+  onDeleteAddress: (
+    addressId: string
+  ) => Promise<void | { success: boolean; error?: string }> | void;
   onSetDefaultAddress: (addressId: string) => Promise<void> | void;
   showToast: (message: string) => void;
 }
@@ -75,6 +83,11 @@ export const AddressesSection: React.FC<AddressesSectionProps> = ({
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** Which card's three-dot menu is open. */
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  /** Which card is showing "really delete?". */
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<{ id: string; message: string } | null>(null);
   const [form, setForm] = useState<AddressForm>(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -126,10 +139,31 @@ export const AddressesSection: React.FC<AddressesSectionProps> = ({
     closeForm();
   };
 
+  /**
+   * Deleting an address is irreversible and the card carries no undo, so it
+   * asks first. The confirmation lives inside the card rather than in a
+   * window.confirm(): a native dialog cannot say WHICH address is about to
+   * go, and these cards look alike.
+   */
   const handleDelete = async (address: Address) => {
+    setMenuOpenId(null);
     setDeletingId(address.id);
-    await onDeleteAddress(address.id);
-    setDeletingId(null);
+    setDeleteError(null);
+    try {
+      const res = await onDeleteAddress(address.id);
+      // The caller may return nothing (older signature) — absence of an
+      // explicit failure is treated as success, which is what it always was.
+      if (res && res.success === false) {
+        // The card stays put. Removing it optimistically and then restoring
+        // it on failure is how a customer ends up believing an address was
+        // deleted when it was not.
+        setDeleteError({ id: address.id, message: res.error || 'Could not remove this address.' });
+        return;
+      }
+      setConfirmingId(null);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -347,24 +381,91 @@ export const AddressesSection: React.FC<AddressesSectionProps> = ({
                       Set as default
                     </button>
                   )}
-                  <div className="flex items-center gap-2 ml-auto">
+                  <div className="relative ml-auto">
                     <button
-                      onClick={() => openEdit(address)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#E8D5A8] rounded-full text-[10px] font-semibold tracking-[0.1em] uppercase text-[#121212] hover:border-[#C9972B] transition-colors cursor-pointer"
+                      type="button"
+                      onClick={() => setMenuOpenId(menuOpenId === address.id ? null : address.id)}
+                      aria-label={`Actions for ${address.name}'s address`}
+                      aria-expanded={menuOpenId === address.id}
+                      aria-haspopup="menu"
+                      className="p-1.5 rounded-full text-[#6B6B6B] hover:text-[#121212] hover:bg-[#F1EBDD] transition-colors cursor-pointer"
                     >
-                      <Pencil className="w-3 h-3" />
-                      Edit
+                      <MoreVertical className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={() => handleDelete(address)}
-                      disabled={deletingId === address.id}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#E8D5A8] rounded-full text-[10px] font-semibold tracking-[0.1em] uppercase text-[#6B6B6B] hover:text-[#C0392B] hover:border-[#C0392B]/40 transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      Delete
-                    </button>
+
+                    {menuOpenId === address.id && (
+                      <div
+                        role="menu"
+                        className="absolute right-0 bottom-full mb-1 w-36 bg-white border border-[#E8D5A8] rounded-lg shadow-lg overflow-hidden z-20"
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuOpenId(null);
+                            openEdit(address);
+                          }}
+                          className="w-full text-left px-3 py-2 text-[11.5px] text-[#121212] hover:bg-[#FBF7EF] flex items-center gap-2 cursor-pointer"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuOpenId(null);
+                            setDeleteError(null);
+                            setConfirmingId(address.id);
+                          }}
+                          className="w-full text-left px-3 py-2 text-[11.5px] text-[#C0392B] hover:bg-[#FBF7EF] flex items-center gap-2 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                {/* Confirmation, in the card it belongs to. */}
+                {confirmingId === address.id && (
+                  <div className="mt-3 p-3 rounded-lg bg-[#FDF3F2] border border-[#C0392B]/30 space-y-2.5">
+                    <p className="text-[11.5px] text-[#121212] flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-[#C0392B] shrink-0 mt-px" />
+                      <span>
+                        Delete this address? Orders already placed to it keep their own copy and are
+                        not affected.
+                      </span>
+                    </p>
+                    {deleteError?.id === address.id && (
+                      <p className="text-[11px] text-[#C0392B]" role="alert">
+                        {deleteError.message}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(address)}
+                        disabled={deletingId === address.id}
+                        className="px-3 py-1.5 rounded-full bg-[#C0392B] text-white text-[10px] font-semibold tracking-[0.1em] uppercase disabled:opacity-50 cursor-pointer"
+                      >
+                        {deletingId === address.id ? 'Deleting…' : 'Yes, delete'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirmingId(null);
+                          setDeleteError(null);
+                        }}
+                        disabled={deletingId === address.id}
+                        className="px-3 py-1.5 rounded-full border border-[#E8D5A8] text-[10px] font-semibold tracking-[0.1em] uppercase text-[#121212] disabled:opacity-50 cursor-pointer"
+                      >
+                        Keep it
+                      </button>
+                    </div>
+                  </div>
+                )}
               </article>
             );
           })}

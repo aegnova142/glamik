@@ -21,6 +21,18 @@ interface CustomerAuthContextType {
   /** Re-reads the signed-in customer from the server — used after a profile
    * edit so the navbar greeting and avatar update without a page reload. */
   refreshCustomerUser: () => Promise<void>;
+  /**
+   * Swaps in a session the SERVER issued to replace the current one.
+   *
+   * Changing the verified mobile number bumps token_version, which kills
+   * the token this tab is holding. The replacement has to be stored before
+   * the next request goes out, or the customer is signed out moments after
+   * a change that actually succeeded.
+   *
+   * Not a login: it never creates a session, it only adopts one the server
+   * just handed back for an already-authenticated customer.
+   */
+  applyReplacementToken: (token: string, user: CustomerUser) => void;
 
   // --- Mobile + OTP sign-in ---
   /** Which OTP channels the server can actually deliver on, so the picker
@@ -133,6 +145,17 @@ export const CustomerAuthProvider: React.FC<{ children: ReactNode }> = ({ childr
     }
   };
 
+  const applyReplacementToken = (token: string, user: CustomerUser): void => {
+    // Guarded rather than trusted: a caller passing an absent token would
+    // overwrite a working session and sign the customer out on the next
+    // request.
+    if (!token) return;
+    // Whether this session was 'remember me' is a property of the session,
+    // not of the change, so it is read from where the old token lived.
+    const remembered = !!localStorage.getItem('glamirk_customer_jwt_token');
+    setCustomerAuth(token, user, remembered);
+    setCustomerUser(user);
+  };
   const customerLogin = async (identifier: string, password: string, remember: boolean = true): Promise<{ success: boolean; error?: string }> => {
     const res = await customerApiFetch<{ token: string; user: CustomerUser }>('/api/customer/auth/login', {
       method: 'POST',
@@ -352,6 +375,7 @@ export const CustomerAuthProvider: React.FC<{ children: ReactNode }> = ({ childr
         requestPasswordReset,
         resetPassword,
         refreshCustomerUser,
+        applyReplacementToken,
         fetchOtpChannels,
         verifyFirebaseToken,
         requestOtp,

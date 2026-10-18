@@ -730,7 +730,11 @@ export interface Address {
   name: string;
   type: AddressType;
   phone: string;
-  email: string;
+  /** Optional on every layer: the column is nullable, validateAddressPayload
+   * only checks the format when a value is present, and mapAddressRow returns
+   * `undefined` when the column is null — which `email: string` forbade. The
+   * type was the only thing claiming it was required. */
+  email?: string;
   addressLine1: string;
   addressLine2?: string;
   /** Locality / sector / area — kept separate from the street line so it can
@@ -1251,7 +1255,13 @@ export interface CustomerProfile {
   firstName?: string;
   lastName?: string;
   email: string;
+  /** Free text, editable, and NOT proof of anything — a courier contact
+   * number. Distinct from phoneE164 below. */
   phone?: string;
+  /** The number proved by Firebase Phone OTP and used to sign in. Set
+   * only by a successful OTP verification; not editable from the profile
+   * form. Absent on accounts that have never signed in by phone. */
+  phoneE164?: string;
   avatarUrl?: string;
   dateOfBirth?: string;
   gender?: Gender;

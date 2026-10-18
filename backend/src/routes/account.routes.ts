@@ -17,6 +17,12 @@ import { buildOrderTracking } from '../services/shipping.service';
 import { getRewardsSummary, getRewardPoints, getAccountCoupons, countAvailableCoupons } from '../services/rewards.service';
 import { sendAccountEmail } from '../services/email.service';
 import {
+  issueEmailCode,
+  verifyEmailCode,
+  emailCodePolicy,
+  EMAIL_CODE_LENGTH,
+} from '../services/emailVerification.service';
+import {
   AccountOverview,
   CustomerProfile,
   CustomerSession,
@@ -98,6 +104,10 @@ function mapProfileRow(row: any): CustomerProfile {
     lastName: row.last_name || undefined,
     email: row.email,
     phone: row.phone || undefined,
+    // The OTP-proved identity. Exposed so the profile can show which
+    // number actually signs this customer in, instead of implying the
+    // editable free-text one above was verified.
+    phoneE164: row.phone_e164 || undefined,
     avatarUrl: row.avatar_url || undefined,
     dateOfBirth: formatDateOnly(row.date_of_birth),
     gender: row.gender || undefined,
@@ -353,7 +363,17 @@ router.delete('/account/profile/avatar', requireCustomer, async (req: Authentica
 // EMAIL / PHONE VERIFICATION
 // ==========================================
 
-const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * a***a@example.com — enough for the customer to recognise the address they
+ * just typed, without putting a full address in a response body.
+ */
+function maskEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!domain) return '***';
+  const shown = local.length <= 2 ? local.slice(0, 1) : `${local[0]}***${local[local.length - 1]}`;
+  return `${shown}@${domain}`;
+}
+
 
 const verificationLimiter = rateLimit({
   scope: 'account-verify',
@@ -363,78 +383,95 @@ const verificationLimiter = rateLimit({
 });
 
 router.post(
-  '/account/profile/send-email-verification',
+  '/account/profile/send-email-code',
   requireCustomer,
   verificationLimiter,
   async (req: AuthenticatedCustomerRequest, res: Response) => {
-    const userRes = await pool.query('SELECT email, name, email_verified FROM customers WHERE id = $1', [req.customer!.id]);
-    const user = userRes.rows[0];
-    if (!user) return res.status(404).json({ error: 'Account not found.' });
-    // Accounts created by mobile + OTP have no email until the customer adds
-    // one. Said plainly here rather than handing a null recipient to the mail
-    // service, which would fail somewhere far less obvious.
-    if (!user.email) {
-      return res.status(400).json({ error: 'Add an email address to your profile first, then verify it.' });
+    const result = await issueEmailCode(req.customer!.id);
+
+    switch (result.status) {
+      case 'no_email':
+        // Accounts created by mobile + OTP have no email until the customer
+        // adds one. Said plainly rather than handing a null recipient to the
+        // mail service, which would fail somewhere far less obvious.
+        return res.status(400).json({ error: 'Add an email address to your profile first, then verify it.' });
+      case 'already_verified':
+        return res.json({ success: true, alreadyVerified: true });
+      case 'cooldown':
+        return res.status(429).json({
+          error: 'A code was just sent. Please wait before requesting another.',
+          retryAfterSeconds: result.retryAfterSeconds,
+        });
     }
-    if (user.email_verified) return res.json({ success: true, alreadyVerified: true });
 
-    const token = crypto.randomBytes(32).toString('hex');
-    await pool.query(
-      'UPDATE customers SET email_verification_token = $1, email_verification_expiry = $2 WHERE id = $3',
-      [token, new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS), req.customer!.id]
-    );
-
-    const configuredAppUrl = process.env.APP_URL && process.env.APP_URL !== 'MY_APP_URL' ? process.env.APP_URL : null;
-    const appUrl = configuredAppUrl || `${req.protocol}://${req.get('host')}`;
-    const link = `${appUrl}/account/profile?verifyEmail=${token}`;
+    const userRes = await pool.query('SELECT name FROM customers WHERE id = $1', [req.customer!.id]);
+    const name = userRes.rows[0]?.name;
 
     const sent = await sendAccountEmail({
-      toEmail: user.email,
-      subject: 'Confirm your Glamirk email address',
+      toEmail: result.email,
+      subject: 'Your Glamirk verification code',
       heading: 'Confirm your email',
-      message: `Hello ${user.name || 'there'}, please confirm this is your email address so we can send you order updates. This link expires in 24 hours.`,
-      ctaLabel: 'CONFIRM EMAIL',
-      ctaUrl: link,
+      // The code is in the body, not a link: a six-digit code is typed into a
+      // screen the customer already has open, so there is no URL to forward,
+      // mis-click, or have rewritten by a mail scanner.
+      message:
+        `Hello ${name || 'there'}, your verification code is ${result.code}. ` +
+        `It expires in ${Math.round(emailCodePolicy.expirySeconds / 60)} minutes. ` +
+        'If you did not ask to verify this address, you can ignore this email.',
     });
 
-    // With no SMTP configured the token comes back in the response so the
-    // flow still completes end to end. Safe because reaching this route
-    // already required a valid session: the token only confirms an address on
-    // the caller's own account, it cannot be used to sign in.
-    res.json({ success: true, emailSent: sent, verificationToken: sent ? undefined : token });
+    // Masked so the screen can say which address it went to without this
+    // response carrying a full address into logs or a browser history entry.
+    res.json({
+      success: true,
+      emailSent: sent,
+      maskedEmail: maskEmail(result.email),
+      codeLength: EMAIL_CODE_LENGTH,
+      expiresAt: result.expiresAt.toISOString(),
+      resendAvailableAt: result.resendAvailableAt.toISOString(),
+      // With no SMTP configured the code comes back so the flow still
+      // completes end to end in development — the same fallback the reset
+      // flow uses. NEVER returned once mail is actually being sent, and it
+      // confirms an address on the caller's own account rather than signing
+      // anyone in.
+      devCode: sent ? undefined : result.code,
+    });
   }
 );
 
-router.post('/account/profile/verify-email', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
-  const { token } = req.body || {};
-  if (!token) return res.status(400).json({ error: 'A verification token is required.' });
+router.post('/account/profile/verify-email-code', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const result = await verifyEmailCode(req.customer!.id, (req.body || {}).code);
 
-  const result = await pool.query(
-    'SELECT id, email_verification_expiry FROM customers WHERE id = $1 AND email_verification_token = $2',
-    [req.customer!.id, token]
-  );
-  const row = result.rows[0];
-  if (!row || !row.email_verification_expiry || new Date(row.email_verification_expiry).getTime() < Date.now()) {
-    return res.status(400).json({ error: 'This verification link is invalid or has expired. Please request a new one.' });
+  switch (result.status) {
+    case 'verified':
+      return res.json({ success: true, profile: await loadProfile(req.customer!.id) });
+    case 'no_challenge':
+      return res.status(400).json({ error: 'Request a verification code first.', mustResend: true });
+    case 'expired':
+      return res.status(400).json({ error: 'That code has expired. Please request a new one.', mustResend: true });
+    case 'address_changed':
+      return res.status(400).json({
+        error: 'Your email address changed after that code was sent. Please request a new one.',
+        mustResend: true,
+      });
+    case 'too_many_attempts':
+      return res.status(429).json({ error: 'Too many incorrect attempts. Please request a new code.', mustResend: true });
+    case 'incorrect':
+      return res.status(400).json({ error: 'That code is incorrect.', attemptsRemaining: result.attemptsRemaining });
   }
-
-  await pool.query(
-    'UPDATE customers SET email_verified = true, email_verification_token = NULL, email_verification_expiry = NULL WHERE id = $1',
-    [req.customer!.id]
-  );
-  res.json({ profile: await loadProfile(req.customer!.id) });
 });
 
-// Mobile verification needs an SMS gateway, and Glamirk has none configured.
-// This endpoint says so plainly rather than pretending to send a code — the
-// UI reads `available: false` and explains the state instead of showing an
-// OTP box that could never work.
-router.post('/account/profile/send-phone-verification', requireCustomer, async (_req: AuthenticatedCustomerRequest, res: Response) => {
-  res.status(503).json({
-    available: false,
-    error: 'Mobile verification is not available yet — an SMS provider has not been connected to this store.',
-  });
-});
+// There is no phone-verification endpoint here on purpose.
+//
+// A stub used to live at /account/profile/send-phone-verification returning
+// "an SMS provider has not been connected". That stopped being true when
+// Firebase Phone Auth became the sign-in method, and nothing ever called it —
+// so it was a 503 that lied about the system's own capabilities.
+//
+// A phone number is proved in exactly one place: signing in through Firebase
+// (/auth/otp/firebase/verify), which is what sets phone_e164 and
+// phone_verified. Changing the verified number is a change of identity and
+// needs its own reviewed flow; it is deliberately not bolted on here.
 
 // ==========================================
 // SECURITY — sessions and deletion

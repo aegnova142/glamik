@@ -24,7 +24,7 @@
  *
  * Sessions come from the real Firebase sign-in route with a stubbed verifier,
  * so the accounts under test are built exactly the way production builds them.
- * No SMTP is configured here and no mail is sent.
+ * Mail is composed but never transmitted — see the SMTP note below.
  */
 
 process.env.NODE_ENV = 'test';
@@ -37,6 +37,40 @@ if (!/@(localhost|127\.0\.0\.1)[:/]/.test(url) || !/test/i.test(url)) {
 
 process.env.FIREBASE_PROJECT_ID = 'glamirk-test-project';
 process.env.SMS_PROVIDER = 'firebase';
+
+/**
+ * Dummy SMTP settings, present ONLY to get past a configuration gate.
+ *
+ * getMailTransporter() checks smtpConfigured() BEFORE it checks whether
+ * delivery is suppressed (mailer.ts). With no SMTP values it returns null,
+ * sendAccountEmail() silently no-ops, and the assertions that read the message
+ * the mailer COMPOSED have nothing to read. That made this suite pass only on
+ * a machine whose .env happened to configure SMTP — it failed anywhere else,
+ * CI included, for reasons that had nothing to do with the code under test.
+ *
+ * Nothing is transmitted: NODE_ENV is 'test' above, so the transport is the
+ * capturing stub and no socket is opened. The host is in the reserved
+ * .invalid TLD (RFC 2606), which cannot resolve — so if a change ever did
+ * bypass the stub, it would fail loudly instead of reaching a real server.
+ */
+const priorSmtpEnv = {
+  SMTP_HOST: process.env.SMTP_HOST,
+  SMTP_USER: process.env.SMTP_USER,
+  SMTP_PASS: process.env.SMTP_PASS,
+};
+process.env.SMTP_HOST = 'smtp.invalid';
+process.env.SMTP_USER = 'suite@glamirk.invalid';
+process.env.SMTP_PASS = 'unused-by-the-capturing-transport';
+
+/** Puts the inherited values back, so a run leaves no trace in the
+ *  environment. Deleted rather than assigned when they were absent: assigning
+ *  undefined would set the literal string "undefined". */
+function restoreSmtpEnv(): void {
+  for (const [key, value] of Object.entries(priorSmtpEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
 
 import assert from 'node:assert/strict';
 import express from 'express';
@@ -57,6 +91,7 @@ import { pool } from '../db/db';
 import customerRouter from '../routes/customer.routes';
 import accountRouter from '../routes/account.routes';
 import { __setFirebaseAuthForTests } from '../services/firebaseAuth.service';
+import { __getSentTestEmails } from '../services/mailer';
 
 __setFirebaseAuthForTests(authStub as any);
 
@@ -85,7 +120,12 @@ const PHONE_B = '+919876591002';
 const EMAIL_A = 'phone.only.a@glamirk-test.invalid';
 const EMAIL_B = 'phone.only.b@glamirk-test.invalid';
 const ALL_PHONES = [PHONE_A, PHONE_B];
-const ALL_EMAILS = [EMAIL_A, EMAIL_B];
+/** Addresses used only by the verification-code section, so the hand-offs in
+ *  the earlier sections cannot leave them claimed by the wrong account. */
+const CODE_EMAIL = 'code.verify.a@glamirk-test.invalid';
+const CODE_EMAIL_2 = 'code.verify.b@glamirk-test.invalid';
+const MOVED_EMAIL = 'moved@glamirk-test.invalid';
+const ALL_EMAILS = [EMAIL_A, EMAIL_B, CODE_EMAIL, CODE_EMAIL_2, MOVED_EMAIL];
 
 let server: Server;
 let baseUrl = '';
@@ -380,15 +420,173 @@ async function main(): Promise<void> {
     const c = await signInByPhone(PHONE_B);
     check('a fresh phone-only account has no email', (await row(PHONE_B)).email === null);
 
-    const res = await api('POST', '/api/customer/account/profile/send-email-verification', {}, auth(c.token));
-    check('requesting verification returns 400, not a crash', res.status === 400, `got ${res.status}`);
+    const res = await api('POST', '/api/customer/account/profile/send-email-code', {}, auth(c.token));
+    check('requesting a code returns 400, not a crash', res.status === 400, `got ${res.status}`);
     check('and says what to do first', /add an email/i.test(res.body.error || ''));
+  }
+
+  // ==========================================
+  // 10. EMAIL VERIFICATION BY SIX-DIGIT CODE
+  //
+  // Replaces the emailed link. It proves an address, it does NOT sign anyone
+  // in — every route here is behind requireCustomer, and a correct code marks
+  // email_verified and nothing else.
+  //
+  // The code is stored as a keyed HMAC, never as digits, so the assertions
+  // below check the database directly: a dump must not contain anything that
+  // can be typed into the box.
+  // ==========================================
+  section('10. Email verification by six-digit code');
+
+  {
+    const c = await signInByPhone(PHONE_B);
+    // A fresh address: earlier sections hand EMAIL_A and EMAIL_B between the
+    // two accounts, and a PUT that 409s would leave this with no email at all.
+    const setEmail = await api('PUT', '/api/customer/account/profile', { email: CODE_EMAIL }, auth(c.token));
+    check('the address is set before verifying it', setEmail.status === 200, JSON.stringify(setEmail.body));
+
+    const sent = await api('POST', '/api/customer/account/profile/send-email-code', {}, auth(c.token));
+    check('a code can be requested', sent.status === 200, JSON.stringify(sent.body));
+    check('six digits is the stated length', sent.body.codeLength === 6);
+    check('with an expiry', !!sent.body.expiresAt);
+    check('and a resend time', !!sent.body.resendAvailableAt);
+    check('the address is masked in the response', /\*/.test(sent.body.maskedEmail || ''));
+    check('and is not returned in full', (sent.body.maskedEmail || '') !== CODE_EMAIL);
+
+    // The code is read from the message the mailer COMPOSED. Under NODE_ENV
+    // =test the transport captures instead of opening a socket, so nothing
+    // leaves the process — and reading it here proves the code actually
+    // reaches the customer rather than only being stored.
+    const outbox = __getSentTestEmails();
+    const last = outbox[outbox.length - 1];
+    check('an email was composed for the customer', !!last);
+    check('addressed to the right inbox', last?.to === CODE_EMAIL);
+    // Anchored on the phrase, not on "six digits anywhere" — the HTML
+    // template is full of hex colours like #121212 that match a bare \d{6}.
+    const codeFrom = (m: { text?: string; html?: string } | undefined) =>
+      String(m?.text || m?.html || '').match(/verification code is (\d{6})/)?.[1] || '';
+    const code: string = codeFrom(last);
+    check('a six-digit code was issued and is in the message', /^\d{6}$/.test(code));
+    check('and no code is echoed in the API response', sent.body.devCode === undefined);
+
+    const stored = await pool.query('SELECT email_verification_token FROM customers WHERE id = $1', [c.id]);
+    const raw: string = stored.rows[0].email_verification_token || '';
+    check('the digits are NOT stored', !raw.includes(code));
+    check('a keyed hash is stored instead', /"h":"[0-9a-f]{64}"/.test(raw));
+
+    // Wrong code costs an attempt and says how many remain.
+    const wrong = await api('POST', '/api/customer/account/profile/verify-email-code',
+      { code: code === '000000' ? '111111' : '000000' }, auth(c.token));
+    check('a wrong code is refused', wrong.status === 400);
+    check('reporting the attempts left', typeof wrong.body.attemptsRemaining === 'number');
+    check('and does not verify the address', (await row(PHONE_B)).email_verified === false);
+
+    const ok = await api('POST', '/api/customer/account/profile/verify-email-code', { code }, auth(c.token));
+    check('the right code verifies the address', ok.status === 200, JSON.stringify(ok.body));
+    const after = await row(PHONE_B);
+    check('email_verified is set', after.email_verified === true);
+    check('and the challenge is cleared', after.email_verification_token === null);
+
+    // Replay must fail — the challenge is gone.
+    const replay = await api('POST', '/api/customer/account/profile/verify-email-code', { code }, auth(c.token));
+    check('the same code cannot be replayed', replay.status >= 400);
+  }
+
+  {
+    // Changing the address after a code was issued must kill the code:
+    // otherwise it would verify an address it was never sent to.
+    const c = await signInByPhone(PHONE_A);
+    const setA = await api('PUT', '/api/customer/account/profile', { email: CODE_EMAIL_2 }, auth(c.token));
+    check('the first address is set', setA.status === 200, JSON.stringify(setA.body));
+    await api('POST', '/api/customer/account/profile/send-email-code', {}, auth(c.token));
+    const box = __getSentTestEmails();
+    const code: string =
+      String(box[box.length - 1]?.html || '').match(/verification code is (\d{6})/)?.[1] || '';
+    check('a code was issued for the first address', /^\d{6}$/.test(code));
+
+    await api('PUT', '/api/customer/account/profile', { email: MOVED_EMAIL }, auth(c.token));
+    const stale = await api('POST', '/api/customer/account/profile/verify-email-code', { code }, auth(c.token));
+    check('the old code no longer verifies the new address', stale.status >= 400);
+    const r = await row(PHONE_A);
+    check('and the new address stays unverified', r.email_verified === false);
+
+  }
+
+  {
+    // No address, nothing to verify.
+    const c = await signInByPhone(PHONE_B);
+    await api('PUT', '/api/customer/account/profile', { email: '' }, auth(c.token));
+    const res = await api('POST', '/api/customer/account/profile/send-email-code', {}, auth(c.token));
+    check('requesting a code with no address returns 400', res.status === 400);
+    check('and says what to do first', /add an email/i.test(res.body.error || ''));
+  }
+
+  {
+    const anon = await api('POST', '/api/customer/account/profile/send-email-code', {});
+    check('the code routes still require a session', anon.status === 401 || anon.status === 403);
+  }
+
+  // ==========================================
+  // 11. THE VERIFIED NUMBER IS THE ONE OTP PROVED
+  //
+  // Two phone values exist and they mean different things. `phone_e164` is set
+  // only by a successful Firebase sign-in and is what the account is keyed on.
+  // `phone` is free text the customer can edit and nothing ever checks.
+  //
+  // The profile used to show the editable one under a "Verified" badge, so a
+  // customer could type any number and watch the app call it verified. These
+  // assertions pin the distinction at the API boundary, which is where the UI
+  // reads it from.
+  // ==========================================
+  section('11. Verified phone identity vs. free-text contact number');
+
+  {
+    const c = await signInByPhone(PHONE_A);
+
+    const profile = await api('GET', '/api/customer/account/profile', undefined, auth(c.token));
+    check('the profile loads', profile.status === 200);
+    check('and exposes the OTP-verified number', profile.body.profile?.phoneE164 === PHONE_A,
+      String(profile.body.profile?.phoneE164));
+    check('which is flagged verified', profile.body.profile?.phoneVerified === true);
+
+    // Edit the free-text contact number to something completely different.
+    const edited = await api(
+      'PUT',
+      '/api/customer/account/profile',
+      { phone: '9811111111' },
+      auth(c.token)
+    );
+    check('the contact number can be edited', edited.status === 200);
+
+    const after = await api('GET', '/api/customer/account/profile', undefined, auth(c.token));
+    check('the contact number changed', after.body.profile?.phone === '9811111111');
+    // The identity is untouched: editing a text field cannot move the account.
+    check('the sign-in identity did NOT change', after.body.profile?.phoneE164 === PHONE_A);
+
+    const row = await pool.query('SELECT phone_e164, phone_verified FROM customers WHERE id = $1', [c.id]);
+    check('phone_e164 is unchanged in the database', row.rows[0].phone_e164 === PHONE_A);
+
+    // Signing in on the ORIGINAL number still resolves the same account —
+    // proof that the identity, not the edited text, is what logs you in.
+    const again = await signInByPhone(PHONE_A);
+    check('the original number still signs into the same account', again.id === c.id);
+    check('and is not treated as a new account', again.isNewAccount === false);
+  }
+
+  {
+    // The dead stub is gone. A 503 claiming "no SMS provider" contradicted a
+    // system whose only sign-in method is phone OTP.
+    const c = await signInByPhone(PHONE_A);
+    const res = await api('POST', '/api/customer/account/profile/send-phone-verification', {}, auth(c.token));
+    check('the removed phone-verification stub is gone (404)', res.status === 404, `got ${res.status}`);
+    check('and it does not answer with the old 503', res.status !== 503);
   }
 
   await clearRows();
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await pool.end();
   __setFirebaseAuthForTests(null);
+  restoreSmtpEnv();
 
   if (failed > 0) {
     console.log(`\n${failed} FAILED, ${passed} passed\n`);
@@ -402,5 +600,6 @@ async function main(): Promise<void> {
 main().catch(async (err) => {
   console.error('\nTest run crashed:', err);
   await pool.end().catch(() => undefined);
+  restoreSmtpEnv();
   process.exit(1);
 });

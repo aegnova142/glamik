@@ -32,7 +32,7 @@ import {
 import {
   COUNTRY_PHONE_RULES,
   DEFAULT_COUNTRY_CODE,
-  sanitizePhoneDigits,
+  normalizePhoneInput,
   getCountryRule,
 } from '@glamirk/shared/utils/formValidation';
 
@@ -98,6 +98,45 @@ function writePersisted(value: PersistedChallenge | null): void {
   }
 }
 
+/**
+ * The number being typed, before any code has been requested.
+ *
+ * Kept in a SEPARATE key from the challenge, and deliberately carrying no
+ * challengeId, expiry or method: a draft can restore what someone typed but it
+ * can never resurrect a code. Switching to the email screen unmounts this
+ * component, and without this a half-typed number was gone on the way back —
+ * the toggle behaved like a reset button.
+ */
+const DRAFT_STORAGE_KEY = 'glamirk_otp_draft';
+
+interface PersistedDraft {
+  countryCode: string;
+  phone: string;
+}
+
+function readDraft(): PersistedDraft | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Shape-checked so a value written by anything else is ignored rather
+    // than trusted into the form.
+    if (typeof parsed?.phone !== 'string' || typeof parsed?.countryCode !== 'string') return null;
+    return { countryCode: parsed.countryCode, phone: parsed.phone };
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(value: PersistedDraft | null): void {
+  try {
+    if (value) sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(value));
+    else sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    /* Same tolerance as the challenge above. */
+  }
+}
+
 interface MobileOtpSignInProps {
   /** Fired once the customer is signed in and the session is stored. */
   onSuccess: (info: { isNewAccount: boolean }) => void;
@@ -150,9 +189,14 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
     return { ...saved, dead: false as const };
   }, []);
 
+  /** Only consulted when no challenge is restoring a number of its own. */
+  const draft = useMemo(() => readDraft(), []);
+
   const [step, setStep] = useState<Step>(restored && !restored.dead ? 'code' : 'phone');
-  const [countryCode, setCountryCode] = useState(restored?.countryCode || DEFAULT_COUNTRY_CODE);
-  const [phone, setPhone] = useState(restored?.phone || '');
+  const [countryCode, setCountryCode] = useState(
+    restored?.countryCode || draft?.countryCode || DEFAULT_COUNTRY_CODE
+  );
+  const [phone, setPhone] = useState(restored?.phone || draft?.phone || '');
   // SMS is the default and stays selected unless the customer changes it.
   const [method, setMethod] = useState<OtpDeliveryMethod>(restored?.method || 'sms');
   const [channels, setChannels] = useState<OtpChannelAvailability | null>(null);
@@ -186,6 +230,20 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
 
   const activeRule = getCountryRule(countryCode);
+
+  /**
+   * Mirrors what is typed into the draft, so unmounting this component — which
+   * is exactly what "Use Email ID" does — does not throw it away. Written on
+   * change rather than in each handler so the country select and the number
+   * field can never disagree about what was saved.
+   *
+   * An empty field clears the draft: a deliberately emptied box should come
+   * back empty, not refill itself.
+   */
+  useEffect(() => {
+    if (phone) writeDraft({ countryCode, phone });
+    else writeDraft(null);
+  }, [countryCode, phone]);
 
   // Which channels the server can actually deliver on. Fetched once so the
   // picker never offers an option that would fail after the customer chose it.
@@ -396,8 +454,11 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
         return;
       }
 
-      // The challenge is spent — don't leave it where a refresh would resume it.
+      // The challenge is spent — don't leave it where a refresh would resume
+      // it. The draft goes too: they are signed in, so there is no number
+      // left to finish typing.
       writePersisted(null);
+      writeDraft(null);
       setSucceeded(true);
       window.setTimeout(() => onSuccess({ isNewAccount: !!result.isNewAccount }), 700);
     },
@@ -457,6 +518,8 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
   };
 
   const resetToPhone = () => {
+    // Deliberately keeps the draft: Edit exists to correct the number, and
+    // clearing it here would empty the field the customer came back to fix.
     writePersisted(null);
     setStep('phone');
     setError(null);
@@ -541,7 +604,9 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                   value={countryCode}
                   onChange={(e) => {
                     setCountryCode(e.target.value);
-                    setPhone((prev) => sanitizePhoneDigits(prev, getCountryRule(e.target.value).maxDigits));
+                    // Re-normalised against the NEW country: a number
+                    // pasted with its old dial code must not keep it.
+                    setPhone((prev) => normalizePhoneInput(prev, e.target.value));
                     setError(null);
                   }}
                   className="shrink-0 px-2 py-2.5 bg-[#0B0B0B] border border-[#E8D5A8]/30 rounded-lg text-xs text-[#FAF9F6] focus:outline-none focus:border-[#C9972B]"
@@ -566,7 +631,11 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                     placeholder={`${activeRule.minDigits} digit number`}
                     value={phone}
                     onChange={(e) => {
-                      setPhone(sanitizePhoneDigits(e.target.value, activeRule.maxDigits));
+                      // Strips a pasted dial code and trunk prefix BEFORE
+                      // limiting the length. Truncating first turns
+                      // "+919876543210" into "9198765432" — a different
+                      // number that still passes every length check.
+                      setPhone(normalizePhoneInput(e.target.value, countryCode));
                       setError(null);
                       setDailyLimitReached(false);
                     }}
@@ -603,6 +672,13 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                 Use Email ID
               </button>
             )}
+
+            {/* Said before the code is sent, not after: this is the point
+                at which continuing is the agreement. */}
+            <p className="text-center text-[10.5px] text-[#6B6B6B] leading-relaxed">
+              By continuing you confirm you are 18 or older and agree to Glamirk&rsquo;s Terms of Use and
+              Privacy Policy.
+            </p>
 
             <p className="text-center text-[10.5px] text-[#6B6B6B] leading-relaxed">
               New here? No need to sign up separately — verifying your number creates your account.

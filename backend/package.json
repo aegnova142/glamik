@@ -39,6 +39,7 @@
     "test:accountprofile": "tsx src/test/accountprofile.db.e2e.ts",
     "test:addresses": "tsx src/test/addresses.db.e2e.ts",
     "test:whatsappnotify": "tsx src/test/whatsappnotify.e2e.ts",
+    "test:envconfig": "tsx src/test/envconfig.e2e.ts",
     "test:otproutes": "tsx src/test/otproutes.db.e2e.ts",
     "test:otpflow": "tsx src/test/otpflow.db.e2e.ts",
     "test:producttypes": "tsx src/test/producttypes.e2e.ts",

@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from 'cloudinary';
-import { pool, loadDatabase, saveDatabase } from '../db/db';
-import { Review, ReviewMedia } from '@glamirk/shared/types';
+import { pool, loadDatabase, saveDatabase, broadcastEvent } from '../db/db';
+import { mapNotificationRow } from './notifications.service';
+import { Review, ReviewMedia, REVIEW_SKIN_TONES, REVIEW_UNDERTONES } from '@glamirk/shared/types';
 
 // Reads CLOUDINARY_URL from the environment, same as the account router.
 cloudinary.config();
@@ -55,8 +56,10 @@ export async function isVerifiedPurchase(customerId: string, productId: string):
 // live reviews table. Products live in the cms_state JSONB blob, not a SQL
 // row, so this goes through the same load-mutate-save path as every other
 // product mutation (see server/routes.ts admin product routes).
+// Only approved reviews count: a pending or rejected rating must not move the
+// stars shown on product cards.
 export async function recomputeProductRating(productId: string): Promise<void> {
-  const res = await pool.query('SELECT rating FROM reviews WHERE product_id = $1', [productId]);
+  const res = await pool.query("SELECT rating FROM reviews WHERE product_id = $1 AND status = 'approved'", [productId]);
   const ratings = res.rows.map((r) => Number(r.rating));
   const reviewCount = ratings.length;
   const average = reviewCount > 0 ? Math.round((ratings.reduce((a, b) => a + b, 0) / reviewCount) * 10) / 10 : 0;
@@ -87,6 +90,30 @@ function buildReviewMedia(row: any): ReviewMedia[] {
   return [{ type: 'image', url: row.photo_url }, ...stored];
 }
 
+/** Beauty details are picked from fixed lists (and the product's own shades),
+ * so anything else is dropped rather than stored as free text. Shared by the
+ * customer and admin review routes. */
+export function pickReviewDetails(
+  product: { shades?: { name: string }[] },
+  body: any
+): { shadeName: string | null; skinTone: string | null; undertone: string | null } {
+  const pick = (value: unknown, allowed: readonly string[]) =>
+    typeof value === 'string' && allowed.includes(value) ? value : null;
+  return {
+    shadeName: pick(body?.shadeName, (product.shades || []).map((s) => s.name)),
+    skinTone: pick(body?.skinTone, REVIEW_SKIN_TONES),
+    undertone: pick(body?.undertone, REVIEW_UNDERTONES),
+  };
+}
+
+/** "Priya Sharma" -> "Priya S." for public listings, so storefront visitors
+ * never receive a reviewer's full surname. */
+export function publicReviewerName(name: unknown): string {
+  const [first = '', ...rest] = String(name || '').trim().split(/\s+/);
+  const last = rest.pop();
+  return last ? `${first} ${last[0].toUpperCase()}.` : first || 'Glamirk customer';
+}
+
 export function mapReviewRow(row: any, productName?: string): Review {
   const media = buildReviewMedia(row);
   return {
@@ -101,5 +128,43 @@ export function mapReviewRow(row: any, productName?: string): Review {
     isVerifiedPurchase: row.is_verified_purchase,
     photoUrl: row.photo_url || undefined,
     media,
+    status: row.status,
+    moderationNote: row.moderation_note || undefined,
+    shadeName: row.shade_name || undefined,
+    skinTone: row.skin_tone || undefined,
+    undertone: row.undertone || undefined,
+    helpfulCount: row.helpful_count !== undefined ? Number(row.helpful_count) : undefined,
   };
 }
+
+/** Tells the author their review went live or was turned down. In-app only,
+ * written straight to the bell's table: it is not an order event, so the
+ * order-keyed notification outbox does not fit. Best-effort, like every
+ * notification — moderation must not fail because of it. */
+export async function notifyReviewModerated(
+  customerId: string,
+  productName: string,
+  status: 'approved' | 'rejected',
+  note: string | null
+): Promise<void> {
+  const title = status === 'approved' ? 'Your review is live' : 'Your review was not published';
+  const body =
+    status === 'approved'
+      ? `Thank you! Your review of ${productName} is now visible to other shoppers.`
+      : `Your review of ${productName} wasn't published${note ? `: ${note}` : '.'} You can edit it and submit again from My Reviews.`;
+  try {
+    const id = 'notif-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    const inserted = await pool.query(
+      `INSERT INTO notifications (id, user_id, type, title, body) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [id, customerId, status === 'approved' ? 'REVIEW_APPROVED' : 'REVIEW_REJECTED', title, body]
+    );
+    broadcastEvent('NEW_NOTIFICATION', 'customer', { userId: customerId, notification: mapNotificationRow(inserted.rows[0]) });
+  } catch (err) {
+    console.error('[reviews] could not notify review author:', err);
+  }
+}
+
+/** `SELECT r.*` plus its helpful-vote count, for any public listing. */
+export const REVIEW_WITH_HELPFUL_SQL = `SELECT r.*,
+  (SELECT COUNT(*) FROM review_helpful_votes v WHERE v.review_id = r.id)::int AS helpful_count
+  FROM reviews r`;

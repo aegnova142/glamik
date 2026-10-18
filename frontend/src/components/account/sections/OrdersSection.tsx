@@ -5,7 +5,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Package, Truck, RotateCcw, FileDown, Headphones, Star, XCircle, Eye, RefreshCw, CreditCard } from 'lucide-react';
-import { Order, OrderItem, Product, ReviewMedia, Shade } from '@glamirk/shared/types';
+import { Order, OrderItem, Product, Shade, SubmitReviewFn } from '@glamirk/shared/types';
 import { useAccount } from '../../../context/AccountContext';
 import { useCommerce } from '../../../context/CommerceContext';
 import { openRazorpayCheckout } from '../../../utils/razorpayCheckout';
@@ -34,13 +34,7 @@ interface OrdersSectionProps {
   onAddToBag: (product: Product, shade?: Shade, size?: string, quantity?: number) => void;
   onCancelOrder: (orderId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
   onSubmitReturn: (orderId: string, productId: string, reason: string, comment?: string) => Promise<{ success: boolean; error?: string }>;
-  onSubmitReview: (
-    productId: string,
-    rating: number,
-    title: string,
-    comment: string,
-    media?: ReviewMedia[]
-  ) => Promise<{ success: boolean; error?: string }>;
+  onSubmitReview: SubmitReviewFn;
   showToast: (message: string) => void;
 }
 

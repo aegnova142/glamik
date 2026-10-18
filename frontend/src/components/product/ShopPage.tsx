@@ -628,6 +628,8 @@ export const ShopPage: React.FC<ShopPageProps> = ({
       <RecentlyViewed
         recentlyViewedIds={recentlyViewedIds}
         onSelectProduct={onSelectProduct}
+        wishlist={wishlist}
+        onToggleWishlist={onToggleWishlist}
       />
 
       {/* Mobile Sort Sheet — opened from the toolbar Sort button above. */}

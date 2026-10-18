@@ -60,6 +60,17 @@ jobs:
             # frontend, admin and backend, and installs every workspace's deps.
             npm ci
 
+            # Apply pending database migrations BEFORE building and before the
+            # new code starts. Production deliberately refuses to auto-migrate
+            # at boot (see backend/src/config/databaseTarget.ts) and instead
+            # fails startup when a migration is pending — so without this step,
+            # any release that adds a migration would reload pm2 into a crash.
+            # Running it ahead of the build, under `set -e`, means a failed
+            # migration stops the deploy while the old dist/ bundles are still
+            # on disk and serving. Migrations run while the old code is live,
+            # so each must stay compatible with it (additive changes only).
+            npm run migrate
+
             # Builds in dependency order: storefront -> admin -> backend bundle.
             # Both dist/ folders must exist before the server starts, because it
             # serves them as static assets.

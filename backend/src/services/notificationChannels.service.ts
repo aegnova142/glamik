@@ -200,6 +200,14 @@ const COPY: Record<NotificationEventType, Copy> = {
     body: (p) => `Your refund for order #${p.orderNumber} has been completed.`,
   },
 
+  REVIEW_REMINDER: {
+    subject: 'How are you liking your Glamirk order? ⭐',
+    heading: 'Rate Your Order',
+    body: (p) =>
+      `How is everything from order #${p.orderNumber}? A quick star rating helps other shoppers — ` +
+      `it takes a few seconds, and verified reviews earn Glam points.`,
+  },
+
   // --- Store-facing ---
   ADMIN_NEW_ORDER: {
     subject: 'New order received',
@@ -257,10 +265,29 @@ const ADMIN_NOTIFICATION_TYPE: Partial<Record<NotificationEventType, string>> = 
  * swaps in a stub channel can put the real ones back — module-level side
  * effects cannot be re-run, since ES modules execute their body exactly once.
  */
+/** A review reminder is pointless once every product in the order has a
+ * review (in any status), so both channels check at send time. */
+async function reviewReminderNotNeeded(eventType: NotificationEventType, orderNumber: string): Promise<ChannelResult | null> {
+  if (eventType !== 'REVIEW_REMINDER') return null;
+  const res = await pool.query(
+    `SELECT 1 FROM orders o JOIN order_items oi ON oi.order_id = o.id
+     WHERE o.order_number = $1 AND o.status = 'DELIVERED'
+       AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r.product_id = oi.product_id
+                       AND (r.customer_id = o.user_id OR r.order_id = o.id))
+     LIMIT 1`,
+    [orderNumber]
+  );
+  return res.rows.length === 0
+    ? { ok: false, skip: true, reason: 'Everything in this order is already reviewed (or it is no longer delivered).' }
+    : null;
+}
+
 export function registerDefaultChannels(): void {
   registerChannel('inapp', async (payload, eventType): Promise<ChannelResult> => {
   const copy = COPY[eventType];
   if (!copy) return { ok: false, skip: true, reason: `No copy defined for ${eventType}.` };
+  const notNeeded = await reviewReminderNotNeeded(eventType, payload.orderNumber);
+  if (notNeeded) return notNeeded;
 
   // Resolved from the event's order rather than carried on the payload: the
   // recipient is a fact about the order, not about the message.
@@ -288,9 +315,9 @@ export function registerDefaultChannels(): void {
 // Email
 // ------------------------------------------
 
-function wrap(heading: string, body: string, trackUrl?: string): string {
+function wrap(heading: string, body: string, trackUrl?: string, ctaLabel = 'Track your order'): string {
   const cta = trackUrl
-    ? `<p style="margin:28px 0 0"><a href="${trackUrl}" style="background:#0B0B0B;color:#FAF9F6;text-decoration:none;padding:12px 22px;letter-spacing:.14em;font-size:11px;font-weight:700;text-transform:uppercase">Track your order</a></p>`
+    ? `<p style="margin:28px 0 0"><a href="${trackUrl}" style="background:#0B0B0B;color:#FAF9F6;text-decoration:none;padding:12px 22px;letter-spacing:.14em;font-size:11px;font-weight:700;text-transform:uppercase">${ctaLabel}</a></p>`
     : '';
   return `<!doctype html><html><body style="margin:0;background:#FAF9F6;font-family:Helvetica,Arial,sans-serif;color:#121212">
   <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #E8D5A8;padding:36px">
@@ -314,16 +341,26 @@ function wrap(heading: string, body: string, trackUrl?: string): string {
   // absent transport tells an operator nothing they did not already know.
   if (!transporter) return { ok: false, skip: true, reason: 'SMTP is not configured on this deployment.' };
   if (!payload.toEmail) return { ok: false, skip: true, reason: 'No email address on this order.' };
+  const notNeeded = await reviewReminderNotNeeded(eventType, payload.orderNumber);
+  if (notNeeded) return notNeeded;
 
   const appUrl = process.env.APP_URL && process.env.APP_URL !== 'MY_APP_URL' ? process.env.APP_URL : null;
-  const trackUrl = appUrl && payload.orderNumber ? `${appUrl}/?trackOrder=${encodeURIComponent(payload.orderNumber)}` : undefined;
+  const isReminder = eventType === 'REVIEW_REMINDER';
+  const ctaUrl = !appUrl || !payload.orderNumber ? undefined
+    : isReminder ? `${appUrl}/account/reviews`
+    : `${appUrl}/?trackOrder=${encodeURIComponent(payload.orderNumber)}`;
 
   try {
     await transporter.sendMail({
       from: process.env.SMTP_FROM || 'Glamirk Beauty <no-reply@glamirk.com>',
       to: payload.toEmail,
       subject: copy.subject,
-      html: wrap(copy.heading, `Hello ${payload.customerName || 'there'}, ${copy.body(payload)}`, trackUrl),
+      html: wrap(
+        copy.heading,
+        `Hello ${payload.customerName || 'there'}, ${copy.body(payload)}`,
+        ctaUrl,
+        isReminder ? 'Rate your products' : undefined
+      ),
     });
     return { ok: true };
   } catch (err: any) {

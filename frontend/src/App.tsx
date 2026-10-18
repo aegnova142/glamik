@@ -17,6 +17,8 @@ import { GlamirkEdit } from './components/home/GlamirkEdit';
 import { CleanserShowcase } from './components/home/CleanserShowcase';
 import { ShadeFinderTeaser } from './components/home/ShadeFinderTeaser';
 import { FaqHomeSection } from './components/home/FaqHomeSection';
+import { HomeReviewsSection } from './components/home/HomeReviewsSection';
+import { ReviewsPage } from './components/content/ReviewsPage';
 import { ShopTheLook } from './components/home/ShopTheLook';
 import { GlamirkOnYou } from './components/social/GlamirkOnYou';
 import { JournalSection } from './components/home/JournalSection';
@@ -96,7 +98,7 @@ import {
   Order,
   Address,
   Review,
-  ReviewMedia,
+  SubmitReviewFn,
   ReturnRequest,
   DEFAULT_PROMO_NOTIFICATION_MESSAGES,
   applyPromoMessageTemplate,
@@ -112,8 +114,9 @@ import {
 import { updatePageSeo } from './utils/seo';
 import { trackEvent } from './utils/analytics';
 import { routeToPath, pathToRoute } from './utils/routing';
+import { TRY_ON_ENABLED } from './utils/features';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles } from 'lucide-react';
+import { ChevronDown, Sparkles } from 'lucide-react';
 
 function AppContent() {
   const { products: cmsProducts, pages: cmsPages, activeOffers, globalSettings } = useCMS();
@@ -440,6 +443,7 @@ function AppContent() {
       'social-commerce': 'Glamirk On You | Community & Creator Showcase',
       campaign: 'The Sovereign Velvet Festive Edit | Glamirk',
       'new-launch': 'New Launches | Glamirk Beauty',
+      reviews: 'Customer Reviews | Glamirk Beauty',
       legal: 'Legal & Client Governance Policies | Glamirk Beauty',
       '404': 'Page Not Found (404) | Glamirk Beauty',
     };
@@ -643,6 +647,16 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const navigateToProductById = (productId: string) => {
+    const product = allProducts.find((p) => p.id === productId);
+    if (product) navigateToProduct(product);
+  };
+
+  const navigateToReviews = () => {
+    setCurrentRoute({ page: 'reviews' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const navigateToSupport = () => {
     setCurrentRoute({ page: 'support' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -686,6 +700,8 @@ function AppContent() {
   };
 
   const openVirtualTryOn = (product?: Product, shade?: Shade) => {
+    // TRY-ON-PAUSED: safety net for any caller that slipped past the UI gates.
+    if (!TRY_ON_ENABLED) return;
     const prod = product || allProducts[0];
     setTryOnProductId(prod.id);
     if (shade) {
@@ -926,17 +942,11 @@ function AppContent() {
     return { success: false, error: res.error };
   };
 
-  const handleSubmitReview = async (
-    productId: string,
-    rating: number,
-    title: string,
-    comment: string,
-    media?: ReviewMedia[]
-  ) => {
-    const res = await commerceRef.current.submitReview(productId, rating, title, comment, media);
+  const handleSubmitReview: SubmitReviewFn = async (productId, rating, title, comment, media, details) => {
+    const res = await commerceRef.current.submitReview(productId, rating, title, comment, media, details);
     if (res.success && res.review) {
       setMyReviews((prev) => [res.review!, ...prev.filter((r) => r.productId !== productId)]);
-      showToast('Thank you — your review has been posted.');
+      showToast('Thank you! Your review will appear once our team approves it.');
       return { success: true };
     }
     return { success: false, error: res.error };
@@ -1137,7 +1147,13 @@ function AppContent() {
             */}
 
             {/* 6th: Frequently Asked Questions */}
-            <FaqHomeSection onOpenSupport={navigateToSupport} />
+            <FaqHomeSection />
+
+            {/* Customer reviews (replaced the "Still have questions?" bar); hidden until there are 4★+ reviews */}
+            <HomeReviewsSection
+              onSelectProduct={navigateToProductById}
+              onReadAll={navigateToReviews}
+            />
 
             {/* PERSONALIZED-BEAUTY-PAUSED: "Personalized Beauty" home section switched off for now — uncomment to restore.
             <PersonalizedHomeBanner
@@ -1181,6 +1197,18 @@ function AppContent() {
           </div>
         )}
 
+        {/* VIEW 1C: CUSTOMER REVIEWS PAGE */}
+        {currentRoute.page === 'reviews' && (
+          <ReviewsPage
+            onNavigateHome={navigateToHome}
+            onSelectProduct={navigateToProductById}
+            // Writing reuses the account Reviews flow: it lists only delivered
+            // products and the server sets the verified flag itself.
+            onWriteReview={() => requireLogin(() => navigateToAccount('reviews'))}
+            onRequireLogin={() => openAuth('login')}
+          />
+        )}
+
         {/* VIEW 1B: ABOUT US PAGE */}
         {currentRoute.page === 'about' && (
           <AboutPage
@@ -1215,6 +1243,7 @@ function AppContent() {
         {currentRoute.page === 'product' && activeProduct && (
           <FullProductPage
             product={activeProduct}
+            onRequireLogin={() => openAuth('login')}
             wishlist={wishlist}
             cartItems={cartItems}
             recentlyViewedIds={recentlyViewedIds}
@@ -1642,20 +1671,21 @@ function AppContent() {
       </main>
 
       {/* Floating AI Beauty Assistant Trigger Button (Optimized for Mobile and Desktop) */}
-      <div className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-40">
+      {/* Stays above the open concierge on wider screens (as its toggle);
+          the full-screen phone panel has its own close button instead. */}
+      <div className={`fixed bottom-20 right-4 sm:bottom-5 sm:right-5 ${isAssistantOpen ? 'z-[60] hidden sm:block' : 'z-40'}`}>
         <button
           id="glamirk-beauty-assistant-trigger"
-          onClick={() => setIsAssistantOpen(true)}
-          className="group relative flex items-center gap-2 px-3.5 py-3 sm:px-4 sm:py-3.5 bg-white/95 text-[#121212] border border-[#E8D5A8] rounded-full shadow-[0_8px_25px_rgba(240,90,126,0.18)] hover:border-[#F05A7E] hover:bg-[#FCE8ED] transition-all hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-md"
-          title="Open Glamirk Beauty Assistant"
+          onClick={() => setIsAssistantOpen((open) => !open)}
+          aria-expanded={isAssistantOpen}
+          aria-label={isAssistantOpen ? 'Close AI Beauty Concierge' : 'Open AI Beauty Concierge'}
+          className="group flex items-center gap-2.5 h-12 sm:h-[56px] px-3.5 sm:pl-5 sm:pr-5 bg-[#FFFDF9] text-[#211E1C] border border-[#F3C9D4] rounded-full shadow-[0_10px_28px_-10px_rgba(244,81,125,0.45)] hover:shadow-[0_14px_34px_-10px_rgba(244,81,125,0.6)] hover:border-[#F4517D] transition-[box-shadow,border-color] duration-200 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#F4517D]"
         >
-          <div className="relative">
-            <Sparkles className="w-4 h-4 text-[#F05A7E]" />
-            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#F05A7E] animate-ping" />
-          </div>
-          <span className="text-[11px] font-bold tracking-wider uppercase hidden sm:inline text-[#121212] group-hover:text-[#F05A7E] transition-colors">
-            AI ASSISTANT
+          <Sparkles className="w-5 h-5 text-[#F4517D] motion-safe:transition-transform motion-safe:group-hover:rotate-12" strokeWidth={1.75} aria-hidden="true" />
+          <span className="text-[12px] sm:text-[13px] font-bold tracking-[0.06em] uppercase hidden sm:inline">
+            AI Beauty Concierge
           </span>
+          {isAssistantOpen && <ChevronDown className="hidden sm:block w-4 h-4 text-[#F4517D]" aria-hidden="true" />}
         </button>
       </div>
 

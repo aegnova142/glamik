@@ -381,7 +381,7 @@
     transition: background-color var(--stl-duration) var(--stl-ease), color var(--stl-duration), border-color var(--stl-duration);
   }
   .stl-filter:hover { border-color: var(--stl-pink); color: var(--stl-pink); }
-  .stl-filter[aria-pressed='true'] { background: #0B0B0B; border-color: #0B0B0B; color: #FAF9F6; }
+  .stl-filter[aria-pressed='true'] { background: var(--stl-cta); border-color: transparent; color: #fff; box-shadow: 0 6px 16px -10px rgb(224 38 95 / 0.8); }
   .stl-filter:focus-visible { outline: none; box-shadow: var(--stl-focus-ring); }
 
   .stl-cta {

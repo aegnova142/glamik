@@ -6,7 +6,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Star, ImagePlus, Loader2, Video } from 'lucide-react';
-import { Order, OrderItem, ReviewMedia, REVIEW_MEDIA_MAX_ITEMS } from '@glamirk/shared/types';
+import {
+  Order,
+  OrderItem,
+  ReviewDetails,
+  ReviewMedia,
+  REVIEW_MEDIA_MAX_ITEMS,
+  REVIEW_SKIN_TONES,
+  REVIEW_UNDERTONES,
+  SubmitReviewFn,
+} from '@glamirk/shared/types';
+import { useCMS } from '@glamirk/shared/context/CMSContext';
 import { useAccount } from '../../../context/AccountContext';
 import { AccountButton, AccountFormMessage, AccountField, inputClass } from '../AccountUI';
 import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
@@ -270,14 +280,9 @@ export const WriteReviewModal: React.FC<{
   initialTitle?: string;
   initialComment?: string;
   initialMedia?: ReviewMedia[];
+  initialDetails?: ReviewDetails;
   onClose: () => void;
-  onConfirm: (
-    productId: string,
-    rating: number,
-    title: string,
-    comment: string,
-    media: ReviewMedia[]
-  ) => Promise<{ success: boolean; error?: string }>;
+  onConfirm: SubmitReviewFn;
   showToast: (message: string) => void;
 }> = ({
   target,
@@ -285,12 +290,17 @@ export const WriteReviewModal: React.FC<{
   initialTitle = '',
   initialComment = '',
   initialMedia,
+  initialDetails,
   onClose,
   onConfirm,
   showToast,
 }) => {
   const productId = target ? ('item' in target ? target.item.productId : target.productId) : '';
   const productName = target ? ('item' in target ? target.item.productName : target.productName) : '';
+  // From an order line we already know which shade was bought.
+  const orderShade = target && 'item' in target ? target.item.shade?.name : undefined;
+  const shadeOptions = (useCMS().products || []).find((p) => p.id === productId)?.shades?.map((s) => s.name) || [];
+  const [details, setDetails] = useState<ReviewDetails>({});
 
   const { uploadReviewMedia } = useAccount();
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -309,6 +319,7 @@ export const WriteReviewModal: React.FC<{
       setTitle(initialTitle);
       setComment(initialComment);
       setMedia(initialMedia || []);
+      setDetails({ shadeName: orderShade, ...initialDetails });
       setError(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -357,19 +368,15 @@ export const WriteReviewModal: React.FC<{
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!productId) return;
-    if (comment.trim().length < 5) {
-      setError('Please write a little more about the product.');
-      return;
-    }
     setSubmitting(true);
     setError(null);
-    const res = await onConfirm(productId, rating, title.trim(), comment.trim(), media);
+    const res = await onConfirm(productId, rating, title.trim(), comment.trim(), media, details);
     setSubmitting(false);
     if (!res.success) {
       setError(res.error || 'Could not submit your review.');
       return;
     }
-    showToast('Thank you — your review has been posted.');
+    showToast('Thank you! Your review will appear once our team approves it.');
     onClose();
   };
 
@@ -409,7 +416,7 @@ export const WriteReviewModal: React.FC<{
           />
         </AccountField>
 
-        <AccountField label="Your review" htmlFor="review-comment" required>
+        <AccountField label="Your review" htmlFor="review-comment" hint="Optional — a star rating on its own is fine.">
           <textarea
             id="review-comment"
             value={comment}
@@ -420,6 +427,30 @@ export const WriteReviewModal: React.FC<{
             placeholder="How did it wear? How was the shade match?"
           />
         </AccountField>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            { key: 'shadeName' as const, label: 'Shade', options: shadeOptions },
+            { key: 'skinTone' as const, label: 'Skin tone', options: REVIEW_SKIN_TONES },
+            { key: 'undertone' as const, label: 'Undertone', options: REVIEW_UNDERTONES },
+          ]
+            .filter((f) => f.options.length > 0)
+            .map((f) => (
+              <AccountField key={f.key} label={f.label} htmlFor={`review-${f.key}`}>
+                <select
+                  id={`review-${f.key}`}
+                  value={details[f.key] || ''}
+                  onChange={(e) => setDetails({ ...details, [f.key]: e.target.value || undefined })}
+                  className={inputClass}
+                >
+                  <option value="">Prefer not to say</option>
+                  {f.options.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </AccountField>
+            ))}
+        </div>
 
         <AccountField
           label="Photos & video"

@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Star, Pencil, Trash2, BadgeCheck, Video } from 'lucide-react';
-import { Review, ReviewableProduct, ReviewMedia } from '@glamirk/shared/types';
+import { Review, ReviewableProduct, ReviewStatus, SubmitReviewFn } from '@glamirk/shared/types';
 import { useAccount } from '../../../context/AccountContext';
 import { ProductImage } from '../../product/ProductImage';
 import {
@@ -22,15 +22,15 @@ import { cloudinaryImageUrl } from '@glamirk/shared/utils/cloudinaryImage';
 
 interface ReviewsSectionProps {
   onExploreShop: () => void;
-  onSubmitReview: (
-    productId: string,
-    rating: number,
-    title: string,
-    comment: string,
-    media?: ReviewMedia[]
-  ) => Promise<{ success: boolean; error?: string }>;
+  onSubmitReview: SubmitReviewFn;
   showToast: (message: string) => void;
 }
+
+const STATUS_BADGE: Record<ReviewStatus, { label: string; className: string }> = {
+  pending: { label: 'Awaiting approval', className: 'bg-[#FFF4E0] text-[#B26A00]' },
+  approved: { label: 'Live', className: 'bg-[#E8F5E9] text-[#2E7D32]' },
+  rejected: { label: 'Not published', className: 'bg-[#FDECEA] text-[#C0392B]' },
+};
 
 const Stars: React.FC<{ rating: number }> = ({ rating }) => (
   <span className="inline-flex items-center gap-0.5" aria-label={`${rating} out of 5 stars`}>
@@ -61,14 +61,8 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
     }
   };
 
-  const handleSubmit = async (
-    productId: string,
-    rating: number,
-    title: string,
-    comment: string,
-    media?: ReviewMedia[]
-  ) => {
-    const res = await onSubmitReview(productId, rating, title, comment, media);
+  const handleSubmit: SubmitReviewFn = async (productId, rating, title, comment, media, details) => {
+    const res = await onSubmitReview(productId, rating, title, comment, media, details);
     if (res.success) loadReviewableProducts(true);
     return res;
   };
@@ -100,7 +94,7 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
       <AccountSectionHeader
         kicker="Community"
         title="My Reviews"
-        description="You can review anything that has been delivered to you. Verified-purchase reviews earn 50 Glam points."
+        description="You can review anything that has been delivered to you. Reviews go live once our team approves them, and approved verified-purchase reviews earn 50 Glam points."
       />
 
       {items.length === 0 ? (
@@ -164,16 +158,39 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
                                 <span className="text-[11px] text-[#6B6B6B]">{formatDate(review.date)}</span>
                               </div>
                             </div>
-                            {review.isVerifiedPurchase && (
-                              <span className="inline-flex items-center gap-1 text-[9.5px] font-bold tracking-[0.12em] uppercase text-[#2E7D32] shrink-0">
-                                <BadgeCheck className="w-3.5 h-3.5" />
-                                Verified
-                              </span>
-                            )}
+                            <span className="flex items-center gap-2 shrink-0">
+                              {review.status && (
+                                <span className={`text-[9.5px] font-bold tracking-[0.08em] uppercase px-2 py-0.5 rounded-full ${STATUS_BADGE[review.status].className}`}>
+                                  {STATUS_BADGE[review.status].label}
+                                </span>
+                              )}
+                              {review.isVerifiedPurchase && (
+                                <span className="inline-flex items-center gap-1 text-[9.5px] font-bold tracking-[0.12em] uppercase text-[#2E7D32]">
+                                  <BadgeCheck className="w-3.5 h-3.5" />
+                                  Verified
+                                </span>
+                              )}
+                            </span>
                           </div>
 
+                          {review.status === 'pending' && (
+                            <p className="text-[11px] text-[#B26A00]">Only you can see this until our team approves it.</p>
+                          )}
+                          {review.status === 'rejected' && (
+                            <p className="text-[11px] text-[#C0392B]">
+                              Not published{review.moderationNote ? `: ${review.moderationNote}` : '.'} Edit it to submit again.
+                            </p>
+                          )}
+
                           {review.title && <p className="font-serif text-[14px] text-[#121212]">{review.title}</p>}
-                          <p className="text-[12.5px] text-[#6B6B6B] leading-relaxed">{review.comment}</p>
+                          {review.comment && <p className="text-[12.5px] text-[#6B6B6B] leading-relaxed">{review.comment}</p>}
+                          {(review.shadeName || review.skinTone || review.undertone) && (
+                            <p className="text-[11px] text-[#C9972B]">
+                              {[review.shadeName && `Shade: ${review.shadeName}`, review.skinTone && `${review.skinTone} skin`, review.undertone && `${review.undertone} undertone`]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </p>
+                          )}
 
                           {/* Reads `media` only — the server folds a legacy
                               photoUrl in as the first entry, so old reviews
@@ -243,6 +260,11 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ onExploreShop, o
         initialTitle={editing?.review?.title || ''}
         initialComment={editing?.review?.comment || ''}
         initialMedia={editing?.review?.media || []}
+        initialDetails={
+          editing?.review
+            ? { shadeName: editing.review.shadeName, skinTone: editing.review.skinTone, undertone: editing.review.undertone }
+            : undefined
+        }
         onClose={() => setEditing(null)}
         onConfirm={handleSubmit}
         showToast={showToast}

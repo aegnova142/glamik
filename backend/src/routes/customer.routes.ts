@@ -32,6 +32,8 @@ import { issueOtp, verifyOtp, otpPolicy } from '../services/otp.service';
 import { channelConfigured, OtpChannel, firebaseOtpSelected } from '../services/messaging.service';
 import { verifyFirebasePhoneToken } from '../services/firebaseAuth.service';
 import { grantSignupBonus, grantReviewPoints, recordCouponRedemption } from '../services/rewards.service';
+import { channelConfigured, OtpChannel } from '../services/messaging.service';
+import { grantSignupBonus, recordCouponRedemption } from '../services/rewards.service';
 import { resolveAvailableStock } from '../services/inventory.service';
 import {
   getPaymentGateway,
@@ -92,13 +94,14 @@ import {
 import {
   isVerifiedPurchase,
   mapReviewRow,
+  pickReviewDetails,
   recomputeProductRating,
   destroyReviewMedia,
   orphanedReviewMedia,
 } from '../services/reviews.service';
 // mapNotificationRow stays: the customer notification list endpoint reads
 // rows the engine writes, through the same shared mapper.
-import { mapNotificationRow } from '../services/notifications.service';
+import { mapNotificationRow, notifyAdminReviewSubmitted } from '../services/notifications.service';
 import { notifyOrderStatus } from '../services/orderNotifications.service';
 import { enqueueNotification } from '../services/notificationEngine.service';
 import '../services/notificationChannels.service';
@@ -2718,9 +2721,11 @@ function sanitizeReviewMedia(input: unknown): ReviewMedia[] | { error: string } 
 
 router.post('/reviews', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
   const { productId, rating, title, comment } = req.body || {};
-  if (!productId || !rating || !String(comment || '').trim()) {
-    return res.status(400).json({ error: 'A rating and a review comment are required.' });
+  // A star rating alone is a complete review; the text is optional.
+  if (!productId || !rating) {
+    return res.status(400).json({ error: 'Please choose a star rating.' });
   }
+  const commentText = String(comment || '').trim().slice(0, 1000);
 
   const media = sanitizeReviewMedia(req.body?.media);
   if (!Array.isArray(media)) return res.status(400).json({ error: media.error });
@@ -2728,6 +2733,19 @@ router.post('/reviews', requireCustomer, async (req: AuthenticatedCustomerReques
   const db = await loadDatabase();
   const product = findProduct(db.products, productId);
   if (!product) return res.status(404).json({ error: 'Product not found.' });
+
+  const { shadeName, skinTone, undertone } = pickReviewDetails(product, req.body);
+
+  // Our team may already have published this customer's off-site feedback for
+  // one of their orders; a second review of the same purchase would double-count.
+  const adminEntered = await pool.query(
+    `SELECT 1 FROM reviews r JOIN orders o ON o.id = r.order_id
+     WHERE r.source = 'admin' AND r.product_id = $1 AND o.user_id = $2 LIMIT 1`,
+    [productId, req.customer!.id]
+  );
+  if (adminEntered.rows[0]) {
+    return res.status(409).json({ error: 'Your feedback on this product is already published — thank you!' });
+  }
 
   const numericRating = Math.max(1, Math.min(5, Math.round(Number(rating))));
   const custRes = await pool.query('SELECT name FROM customers WHERE id = $1', [req.customer!.id]);
@@ -2741,41 +2759,74 @@ router.post('/reviews', requireCustomer, async (req: AuthenticatedCustomerReques
     productId,
     req.customer!.id,
   ]);
+  const isEdit = priorRes.rows.length > 0;
   const priorMedia: ReviewMedia[] = Array.isArray(priorRes.rows[0]?.media) ? priorRes.rows[0].media : [];
 
+  // Every write — new or edited — goes back to 'pending': an approved review
+  // can't be swapped for unreviewed text by editing it.
   const id = 'rev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   await pool.query(
-    `INSERT INTO reviews (id, product_id, customer_id, customer_name, rating, title, comment, is_verified_purchase, media)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+    `INSERT INTO reviews (id, product_id, customer_id, customer_name, rating, title, comment, is_verified_purchase, media,
+                          shade_name, skin_tone, undertone, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, 'pending')
      ON CONFLICT (product_id, customer_id) DO UPDATE SET
        rating = EXCLUDED.rating, title = EXCLUDED.title, comment = EXCLUDED.comment,
-       is_verified_purchase = EXCLUDED.is_verified_purchase, media = EXCLUDED.media, created_at = now()`,
+       is_verified_purchase = EXCLUDED.is_verified_purchase, media = EXCLUDED.media,
+       shade_name = EXCLUDED.shade_name, skin_tone = EXCLUDED.skin_tone, undertone = EXCLUDED.undertone,
+       status = 'pending', moderation_note = NULL, moderated_at = NULL, created_at = now()`,
     [
       id,
       productId,
       req.customer!.id,
       customerName,
       numericRating,
-      title || null,
-      String(comment).trim(),
+      String(title || '').trim().slice(0, 100) || null,
+      commentText,
       verified,
       JSON.stringify(media),
+      shadeName,
+      skinTone,
+      undertone,
     ]
   );
 
+  // An edit pulls a previously approved rating out of the average until it is
+  // re-approved. Reward points are granted on approval (admin route), not here.
   await recomputeProductRating(productId);
 
   await destroyReviewMedia(orphanedReviewMedia(priorMedia, media));
 
-  // Points are only awarded for a review of something actually delivered, and
-  // the ledger's unique (user, type, reference) constraint means editing the
-  // same review later can't award them a second time.
-  if (verified) {
-    await grantReviewPoints(req.customer!.id, productId, product.name);
-  }
+  await notifyAdminReviewSubmitted(product.name, numericRating, isEdit);
 
   const saved = await pool.query('SELECT * FROM reviews WHERE product_id = $1 AND customer_id = $2', [productId, req.customer!.id]);
   res.json({ review: mapReviewRow(saved.rows[0], product.name) });
+});
+
+// Helpful votes. A vote is a toggle; only approved reviews can be voted on,
+// and never your own.
+router.get('/reviews/helpful', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const result = await pool.query('SELECT review_id FROM review_helpful_votes WHERE customer_id = $1', [req.customer!.id]);
+  res.json({ reviewIds: result.rows.map((r) => r.review_id) });
+});
+
+router.post('/reviews/:id/helpful', requireCustomer, async (req: AuthenticatedCustomerRequest, res: Response) => {
+  const review = await pool.query("SELECT customer_id FROM reviews WHERE id = $1 AND status = 'approved'", [req.params.id]);
+  if (review.rows.length === 0) return res.status(404).json({ error: 'Review not found.' });
+  if (review.rows[0].customer_id === req.customer!.id) {
+    return res.status(400).json({ error: "You can't vote on your own review." });
+  }
+  const removed = await pool.query('DELETE FROM review_helpful_votes WHERE review_id = $1 AND customer_id = $2', [
+    req.params.id,
+    req.customer!.id,
+  ]);
+  if (removed.rowCount === 0) {
+    await pool.query('INSERT INTO review_helpful_votes (review_id, customer_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [
+      req.params.id,
+      req.customer!.id,
+    ]);
+  }
+  const count = await pool.query('SELECT COUNT(*)::int AS n FROM review_helpful_votes WHERE review_id = $1', [req.params.id]);
+  res.json({ helpful: removed.rowCount === 0, helpfulCount: count.rows[0].n });
 });
 
 // Products this customer has received and may therefore review, each paired

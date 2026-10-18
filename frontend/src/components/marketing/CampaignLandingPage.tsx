@@ -1,3 +1,4 @@
+import { TRY_ON_ENABLED } from '../../utils/features';
 import React, { useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
@@ -224,6 +225,8 @@ export const CampaignLandingPage: React.FC<CampaignLandingPageProps> = ({
                   <ShoppingBag className="w-3.5 h-3.5 text-[#C9972B]" />
                   <span>ADD TO BAG</span>
                 </button>
+                {/* TRY-ON-PAUSED */}
+                {TRY_ON_ENABLED && (
                 <button
                   onClick={() => onOpenTryOn(product.id)}
                   className="px-3 py-3 bg-[#FAF9F6] text-[#121212] text-xs hover:bg-[#E8D5A8] transition-colors cursor-pointer"
@@ -231,6 +234,7 @@ export const CampaignLandingPage: React.FC<CampaignLandingPageProps> = ({
                 >
                   <Camera className="w-4 h-4" />
                 </button>
+                )}
               </div>
             </div>
           ))}

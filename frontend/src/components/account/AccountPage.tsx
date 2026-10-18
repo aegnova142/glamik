@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { AccountSection, Address, Order, Product, Review, ReviewMedia, Shade } from '@glamirk/shared/types';
+import { AccountSection, Address, Order, Product, Review, Shade, SubmitReviewFn } from '@glamirk/shared/types';
 import { useAccount } from '../../context/AccountContext';
 import { useCommerce } from '../../context/CommerceContext';
 import { AccountLayout } from './AccountLayout';
@@ -57,13 +57,7 @@ export interface AccountPageProps {
   onSetDefaultAddress: (addressId: string) => Promise<void> | void;
 
   onCancelOrder: (orderId: string, reason: string) => Promise<{ success: boolean; error?: string }>;
-  onSubmitReview: (
-    productId: string,
-    rating: number,
-    title: string,
-    comment: string,
-    media?: ReviewMedia[]
-  ) => Promise<{ success: boolean; error?: string }>;
+  onSubmitReview: SubmitReviewFn;
   onSubmitReturn: (orderId: string, productId: string, reason: string, comment?: string) => Promise<{ success: boolean; error?: string }>;
 
   showToast: (message: string) => void;

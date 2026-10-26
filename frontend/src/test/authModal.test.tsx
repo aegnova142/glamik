@@ -7,10 +7,8 @@
  * what the toggles preserve, and that the registration form is genuinely
  * unreachable rather than merely hidden behind a style.
  *
- * Layout is asserted through the classes that produce it (the two-panel
- * breakpoint, the stacking behaviour) because that is the honest limit of
- * jsdom: it computes no layout. Treat these as "the right rules are applied",
- * not "it renders correctly".
+ * jsdom computes no layout, so treat the chrome checks as "the right
+ * structure is there", not "it renders correctly".
  */
 
 import React from 'react';
@@ -251,21 +249,25 @@ describe('auth modal — method toggle', () => {
 });
 
 describe('auth modal — chrome and layout rules', () => {
-  it('renders both panels, with the brand panel naming Login', async () => {
+  it('renders the atelier header naming Customer Sign In', async () => {
     renderModal();
     await screen.findByPlaceholderText('10 digit number');
 
-    expect(screen.getByText('GLAMIRK ATELIER')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /^login$/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /log in for the best experience/i })).toBeInTheDocument();
+    expect(screen.getByText('GLAMIRK ATELIER AUTHENTICATION')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^customer sign in$/i })).toBeInTheDocument();
   });
 
-  it('applies the side-by-side rule at the sm breakpoint and stacks below it', async () => {
-    const { container } = render(
-      <CustomerAuthProvider>
-        <AuthModal isOpen onClose={vi.fn()} />
-      </CustomerAuthProvider>
-    );
+  it('is a labelled modal dialog', async () => {
+    renderModal();
+    await screen.findByPlaceholderText('10 digit number');
+
+    expect(screen.getByRole('dialog', { name: /customer sign in/i })).toHaveAttribute('aria-modal', 'true');
+  });
+
+  it('closes on Escape', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderModal({ onClose });
     await screen.findByPlaceholderText('10 digit number');
 
     // jsdom computes no layout, so this asserts the RULES are present, not
@@ -299,6 +301,8 @@ describe('auth modal — chrome and layout rules', () => {
     expect(scroller?.className).toMatch(/min-h-0/);
     // The overlay itself must NOT be the scroller.
     expect(container.querySelector('.fixed.inset-0')?.className).not.toMatch(/overflow-y-auto/);
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('states the terms before a code is requested', async () => {

@@ -74,7 +74,7 @@ hash prefix, never its value.
 
 | Variable | Effect |
 |---|---|
-| `SMTP_HOST` / `_PORT` / `_USER` / `_PASS` | transport. Unconfigured → every send silently no-ops |
+| `SMTP_HOST` / `_PORT` / `_USER` / `_PASS` | transport. Unconfigured → every send silently no-ops. **Placeholder values count as unconfigured** — see below |
 | `SMTP_FROM` | must match the authenticated sender or a verified alias |
 | `EMAIL_DELIVERY_DISABLED` | forces the suppressed transport |
 | `NODE_ENV=test` | same effect — mail is captured, never transmitted |
@@ -87,6 +87,48 @@ real customers.
 
 Under test it returns a **capturing stub, not null**, so callers still run their
 templates and a broken email body is caught by the suite instead of in production.
+
+### Placeholders are not credentials
+
+The gate once asked only whether the three variables were non-empty, and
+`.env.example` shipped plausible fakes for all three. A deployment that copied
+it without filling the block in therefore looked configured: a real transport
+was built against the literal `smtp.example.com`, every send died on
+`getaddrinfo ENOTFOUND`, and each message burned five retries into `FAILED`.
+Production sat that way from 2026-10-14 to 2026-10-26 — twelve days of order
+confirmations going nowhere — because **a delivery failure and an absent mail
+server look identical in `notification_deliveries`**.
+
+So the gate fails closed: the shipped placeholder strings, and any host under
+the RFC 2606 reserved domains (`example.com` / `.org` / `.net`), count as
+unconfigured. The channel then reports `SKIPPED` with a reason naming the cause
+and opens no socket. Fill all of HOST/USER/PASS or none — a partial block is
+not a configuration.
+
+When debugging email, read `SKIPPED` as *"this deployment has no mail set up"*
+and `FAILED` as *"a real mail server refused us"*. They are now different
+things.
+
+### Setting up transactional email (Brevo)
+
+What production runs, recorded because the DNS half is easy to half-do:
+
+1. In Brevo, add the domain under *Senders, Domains & Dedicated IPs* and publish
+   the DKIM and DMARC records it issues. **Do not skip this** — without it Gmail
+   and Outlook bin the mail, and nothing in our logs will say so; the send looks
+   successful because Brevo accepted it.
+2. The sender address must be verified in Brevo separately from the domain.
+   `SMTP_FROM` has to be that address or a verified alias of it.
+3. Credentials come from *SMTP & API → SMTP*. The password is a generated
+   **SMTP key** (`xsmtpsib-…`), not the account password. The login is a
+   Brevo-issued relay address, not the sender address — they are different
+   values and swapping them fails authentication.
+4. Verify end to end rather than trusting the config: `transporter.verify()`
+   proves handshake and auth, and a real `sendMail` returning
+   `250 … queued as <id>` with an empty `rejected` array proves acceptance.
+
+Leave Brevo's *Activate for SMTP keys* (IP restriction) switched off unless you
+are prepared to re-authorise on every server move.
 
 ## Database
 
@@ -224,12 +266,16 @@ Verified on the VPS, 2026-10-26:
 | Razorpay | **LIVE** (`rzp_live_` key) — real payments are processed |
 | OTP sign-in | **live** — `SMS_PROVIDER=firebase`, Firebase Phone Auth |
 | WhatsApp | **not configured** — `WHATSAPP_ACCESS_TOKEN` empty, so WhatsApp OTP and order messages are `SKIPPED`, not failed |
-| SMTP | **not configured** — `SMTP_HOST` is still the `smtp.example.com` placeholder, so no order emails go out |
+| SMTP | **live** since 2026-10-26 — Brevo relay (`smtp-relay.brevo.com:587`), domain authenticated, handshake and a real send both verified |
 | Inventory | legacy authoritative, SQL mirrored (`INVENTORY_SQL_MODE` unset) |
 
-Two of these are worth not misreading. **Razorpay is live**, so anything
+One of these is worth not misreading: **Razorpay is live**, so anything
 purchasable on the storefront can take a real payment — there is no sandbox
-between a test product and a customer's card. And **SMTP is not live**: the
-notification outbox will mark email deliveries `SKIPPED` rather than failing,
-which is honest but easy to mistake for "sent" when scanning
-`notification_deliveries`.
+between a test product and a customer's card.
+
+Email carries a historical artefact. Three `FAILED` rows sit in
+`notification_deliveries` from 2026-10-14 at `attempts=5/5`, all with
+`getaddrinfo ENOTFOUND smtp.example.com`. They are the placeholder bug above,
+not a Brevo problem, and they are deliberately left alone: the retry endpoint
+would send twelve-day-old order confirmations to customers who have long since
+received their orders.

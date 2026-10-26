@@ -91,6 +91,15 @@ export function clearRecaptcha(): void {
     }
     verifier = null;
   }
+
+  // clear() detaches the verifier but leaves grecaptcha's own markup inside the
+  // container, and grecaptcha refuses to render a second widget into an element
+  // that already holds one — it throws "reCAPTCHA has already been rendered in
+  // this element". That throw surfaces as an opaque send failure, which is why
+  // the FIRST code arrived and every Resend after it did nothing. Emptying the
+  // container is what actually makes the verifier reusable.
+  const container = typeof document !== 'undefined' ? document.getElementById(RECAPTCHA_CONTAINER_ID) : null;
+  if (container) container.innerHTML = '';
 }
 
 /** Sends the code. `e164` must include the country code, e.g. "+919876543210". */

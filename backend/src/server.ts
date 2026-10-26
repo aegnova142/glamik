@@ -170,14 +170,33 @@ async function startServer() {
     purgeExpiredOtpCodes().catch((err) => console.error('OTP cleanup failed:', err));
   }, 24 * 60 * 60 * 1000).unref?.();
 
+  // How often the background sweeps are allowed to touch the database.
+  //
+  // This is a property of the HOSTING, not of how quickly any one job ought to
+  // run, which is why both sweeps share it rather than each picking a cadence
+  // that suits its own work.
+  //
+  // A serverless Postgres suspends its compute only after a fixed idle window
+  // — five minutes on Neon. Any loop that queries more often than that means
+  // the window never elapses and the compute bills around the clock. Until
+  // 2026-10-26 the outbox worker below ran every 60 seconds and this sweep
+  // every 5 minutes; the compute never slept, the account exhausted its
+  // allowance, and every connection was refused with SQLSTATE 53000 for three
+  // days.
+  //
+  // Ten minutes, not five: five would exactly equal the idle window, so a
+  // sweep would land just as it was about to be reached and reset it. The
+  // interval has to be comfortably LONGER than the provider's window for the
+  // database to ever get to sleep.
+  const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+
   // Payment and shipping reconciliation.
   //
   // Webhooks are the primary path; this is the safety net for the deliveries
-  // that never arrived or failed mid-processing. Runs every five minutes —
-  // frequent enough that a customer's paid order is never stuck for long,
-  // infrequent enough to be negligible load. Both sweeps are bounded (LIMIT
-  // 50/100 per run) so a backlog is worked through steadily rather than in one
-  // burst that would stall the event loop.
+  // that never arrived or failed mid-processing. The delay is therefore the
+  // worst case for an order whose webhook never showed up, not for a normal
+  // one. Both sweeps are bounded (LIMIT 50/100 per run) so a backlog is worked
+  // through steadily rather than in one burst that would stall the event loop.
   setInterval(() => {
     reconcileStuckWebhookEvents()
       .then(({ examined, recovered }) => {
@@ -200,7 +219,7 @@ async function startServer() {
         })
         .catch((err) => console.error('Reservation expiry sweep failed:', err));
     }
-  }, 5 * 60 * 1000).unref?.();
+  }, SWEEP_INTERVAL_MS).unref?.();
 
   // Notification outbox worker.
   //
@@ -209,12 +228,14 @@ async function startServer() {
   // leaves — an order would be placed, the event written, and the store never
   // told.
   //
-  // Every 60 seconds, bounded to 50 deliveries per pass. Faster than the
-  // reconciliation sweep because a customer waiting on a shipping email
-  // notices a five-minute delay, and the work is cheap: the due query is
-  // index-backed and usually returns nothing. The backoff schedule
-  // (~1m, 4m, 9m, 16m) is tuned for roughly this cadence — a slower loop
-  // would stretch every retry window with it.
+  // Bounded to 50 deliveries per pass, on the shared sweep interval above —
+  // this loop is the one that ran every 60 seconds and took the site down.
+  //
+  // The cost is real and accepted: a shipping email can now sit for up to ten
+  // minutes, and the retry backoff (~1m, 4m, 9m, 16m) is effectively rounded
+  // up to this cadence, since a retry cannot fire before the next pass. A
+  // delayed email is a worse experience than a prompt one; a database that
+  // refuses every connection is not an experience at all.
   //
   // A claim-before-send conditional UPDATE inside the processor makes an
   // overlapping pass harmless, so a slow provider cannot cause a double send.
@@ -224,7 +245,7 @@ async function startServer() {
         if (sent > 0 || failed > 0) console.log(`[notifications] ${sent} sent, ${failed} failed`);
       })
       .catch((err) => console.error('Notification delivery sweep failed:', err));
-  }, 60 * 1000).unref?.();
+  }, SWEEP_INTERVAL_MS).unref?.();
 
   // Continuous inventory consistency monitoring.
   //

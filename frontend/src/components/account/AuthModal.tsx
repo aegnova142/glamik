@@ -212,12 +212,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0B0B]/80 backdrop-blur-sm overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0B0B]/80 backdrop-blur-sm">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="relative w-full max-w-md sm:max-w-3xl bg-[#171717] border border-[#E8D5A8]/30 rounded-2xl shadow-2xl overflow-hidden my-8 sm:flex sm:items-stretch"
+          // Capped at the viewport and scrolled INSIDE, by the form column
+          // only. Letting the overlay scroll instead is what put the heading
+          // and the terms out of reach: a centred child taller than its
+          // scroll container has its top overflow clipped unreachably, so the
+          // form opened already cut off at both ends.
+          className="relative w-full max-w-md sm:max-w-3xl max-h-[var(--auth-modal-max-h)] bg-[#171717] border border-[#E8D5A8]/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col sm:flex-row sm:items-stretch"
         >
           {/* Close button */}
           <button
@@ -226,7 +231,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             // The icon carries no text, so without this the control is
             // announced as an unlabelled button.
             aria-label="Close"
-            className="absolute top-4 right-4 p-2 rounded-full text-[#6B6B6B] hover:text-[#FAF9F6] hover:bg-[#0B0B0B] transition-colors cursor-pointer z-10"
+            // Opaque, because the form now scrolls UNDER this button — left
+            // transparent it sat on top of the number field and the two read
+            // as one smudge. The two backgrounds are the panel it actually
+            // overlaps at each breakpoint: the dark header when stacked, the
+            // form column once they sit side by side.
+            className="absolute top-4 right-4 p-2 rounded-full bg-[#0B0B0B] sm:bg-[#171717] text-[#6B6B6B] hover:text-[#FAF9F6] hover:bg-[#0B0B0B] transition-colors cursor-pointer z-10"
           >
             <X className="w-5 h-5" aria-hidden />
           </button>
@@ -234,7 +244,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {/* Left panel: why signing in is worth it. Static — it carries no
               state and no controls, so on a phone it collapses to a compact
               header instead of pushing the form below the fold. */}
-          <div className="sm:w-[44%] sm:shrink-0 bg-[#0B0B0B] border-b sm:border-b-0 sm:border-r border-[#E8D5A8]/20 p-6 sm:p-8 sm:flex sm:flex-col sm:justify-center">
+          <div className="shrink-0 sm:w-[44%] bg-[#0B0B0B] border-b sm:border-b-0 sm:border-r border-[#E8D5A8]/20 p-6 sm:p-8 sm:flex sm:flex-col sm:justify-center">
             <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-[#C9972B]">
               GLAMIRK ATELIER
             </span>
@@ -253,8 +263,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </p>
           </div>
 
-          {/* Right panel: the form itself. */}
-          <div className="flex-1 min-w-0">
+          {/* Right panel: the form itself, and the only part that scrolls —
+              min-h-0 so it may shrink below its content inside the flex
+              column rather than stretching the modal past the viewport. */}
+          <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">
           <div className="px-6 pt-6 sm:pt-8">
             <h3 className="font-serif text-lg text-[#FAF9F6]">
               {customerFormMode === 'forgot' ? 'Reset your password' : 'Log in for the best experience'}

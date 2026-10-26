@@ -618,8 +618,14 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
               >
                 Mobile Number
               </label>
-              <div className="flex flex-col min-[420px]:flex-row gap-3 sm:gap-4">
-                <div className="auth-control relative flex items-center w-full min-[420px]:w-[150px] sm:w-[188px] shrink-0">
+              {/* The country box is deliberately the SMALLER half. It holds a
+                  dial code and a name that never grow; the number beside it is
+                  what gets typed and read back, and at the old 188px it was
+                  left with ~100px of text area inside a 44/56 modal column —
+                  not enough for its own placeholder, which rendered clipped
+                  mid-word. */}
+              <div className="flex flex-col min-[420px]:flex-row gap-3">
+                <div className="auth-control relative flex items-center w-full min-[420px]:w-[150px] shrink-0">
                   {countryCode === '+91' ? (
                     <IndiaFlag className="absolute left-3 w-[30px] h-5 pointer-events-none" />
                   ) : (
@@ -636,7 +642,7 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                         setPhone((prev) => normalizePhoneInput(prev, e.target.value));
                       setError(null);
                     }}
-                    className="appearance-none w-full h-full bg-transparent pl-[52px] pr-10 text-[15px] sm:text-[17px] text-[var(--auth-text)] truncate rounded-[inherit] cursor-pointer focus:outline-none"
+                    className="appearance-none w-full h-full bg-transparent pl-[48px] pr-9 text-[15px] text-[var(--auth-text)] truncate rounded-[inherit] cursor-pointer focus:outline-none"
                   >
                     {COUNTRY_PHONE_RULES.filter(
                       (c) => !channels?.countryCodes?.length || channels.countryCodes.includes(c.code)
@@ -648,8 +654,8 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                   </select>
                   <ChevronDown className="absolute right-3.5 w-5 h-5 text-[var(--auth-text)] pointer-events-none" strokeWidth={1.75} />
                 </div>
-                <div className="auth-control relative min-[420px]:flex-1 flex items-center">
-                  <Phone className="absolute left-4 w-[22px] h-[22px] text-[var(--auth-gold)] pointer-events-none" strokeWidth={1.5} />
+                <div className="auth-control relative min-[420px]:flex-1 min-w-0 flex items-center">
+                  <Phone className="absolute left-3.5 w-5 h-5 text-[var(--auth-gold)] pointer-events-none" strokeWidth={1.5} />
                   <input
                     id="otp-mobile"
                     type="tel"
@@ -678,7 +684,11 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
                       setError(null);
                       setDailyLimitReached(false);
                     }}
-                    className="w-full h-full bg-transparent pl-[60px] pr-4 text-[16px] sm:text-[17px] tracking-[0.08em] tabular-nums text-[var(--auth-text)] placeholder:text-[#A39E97] rounded-[inherit] focus:outline-none"
+                    // Tracking is loosened only for the DIGITS being typed,
+                    // where it aids reading a 10-digit run; the placeholder is
+                    // prose and the extra letter-spacing is what pushed it
+                    // past the field.
+                    className="w-full h-full bg-transparent pl-[46px] pr-3 text-[16px] tracking-[0.06em] tabular-nums text-[var(--auth-text)] placeholder:tracking-normal placeholder:text-[#A39E97] rounded-[inherit] focus:outline-none"
                   />
                 </div>
               </div>

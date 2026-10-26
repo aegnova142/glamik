@@ -270,10 +270,35 @@ describe('auth modal — chrome and layout rules', () => {
 
     // jsdom computes no layout, so this asserts the RULES are present, not
     // that the browser honours them.
-    const panel = container.querySelector('.sm\\:flex');
+    const panel = container.querySelector('.sm\\:flex-row');
     expect(panel).not.toBeNull();
     expect(panel?.className).toMatch(/max-w-md/); // narrow, stacked, on a phone
     expect(panel?.className).toMatch(/sm:max-w-3xl/); // wide, two-up, from sm
+    expect(panel?.className).toMatch(/flex-col/); // stacked below sm
+  });
+
+  it('caps the modal at the viewport and scrolls the form, not the overlay', async () => {
+    const { container } = render(
+      <CustomerAuthProvider>
+        <AuthModal isOpen onClose={vi.fn()} />
+      </CustomerAuthProvider>
+    );
+    await screen.findByPlaceholderText('10 digit number');
+
+    // A panel taller than the viewport centred in a scrolling overlay has its
+    // top overflow clipped out of reach — the heading and the terms were both
+    // unreachable. The height cap plus an internal scroller is what prevents
+    // that, so both halves are pinned here.
+    const panel = container.querySelector('.sm\\:flex-row');
+    expect(panel?.className).toMatch(/max-h-\[var\(--auth-modal-max-h\)\]/);
+
+    const scroller = container.querySelector('.overflow-y-auto');
+    expect(scroller).not.toBeNull();
+    // It must be allowed to shrink inside the flex column, or it stretches the
+    // modal past the cap instead of scrolling.
+    expect(scroller?.className).toMatch(/min-h-0/);
+    // The overlay itself must NOT be the scroller.
+    expect(container.querySelector('.fixed.inset-0')?.className).not.toMatch(/overflow-y-auto/);
   });
 
   it('states the terms before a code is requested', async () => {

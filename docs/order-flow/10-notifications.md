@@ -47,7 +47,7 @@ flowchart TD
     M --> E[("notification_events<br/>UNIQUE dedupe_key")]
     E --> D[("notification_deliveries<br/>one row per channel")]
 
-    D -.->|"every 60s, 50 at a time"| W[processPendingNotifications]
+    D -.->|"every 10 min, 50 at a time"| W[processPendingNotifications]
     W --> CL{claim row<br/>conditional UPDATE}
     CL -->|lost race| X[skip, another worker has it]
     CL -->|won| CH[channel adapter]
@@ -178,9 +178,33 @@ in.
 
 ## 6. Delivery, retries, backoff
 
-`processPendingNotifications` (`notificationEngine.service.ts:227`), run every
-60 seconds by `server.ts:207`, bounded to 50 rows a pass so a backlog is
-worked through steadily rather than in one burst that stalls the event loop.
+`processPendingNotifications` (`notificationEngine.service.ts:227`), run on
+`SWEEP_INTERVAL_MS` in `server.ts` — **every 10 minutes** — bounded to 50 rows
+a pass so a backlog is worked through steadily rather than in one burst that
+stalls the event loop.
+
+> **Why ten minutes, when the work is cheap and an email ought to go out fast?**
+>
+> Because the interval is a property of the hosting, not of this job. A
+> serverless Postgres suspends its compute only after a fixed idle window —
+> five minutes on Neon — and a loop that queries more often than that means the
+> window never elapses, so the compute bills around the clock.
+>
+> This loop ran every **60 seconds** until 2026-10-26. The compute never slept,
+> the account exhausted its allowance, and Neon refused every connection with
+> `SQLSTATE 53000` for three days. The running process survived on its
+> established pool, so the site kept returning 200 while every database-backed
+> feature failed — which is why nobody noticed until a restart forced the
+> boot-time schema check against a database that would no longer answer.
+>
+> Ten and not five: five exactly *equals* the idle window, so a sweep lands
+> just as it is about to be reached and resets it. The interval has to clear
+> the window, not merely match it. The reconciliation sweep shares the same
+> constant for the same reason — setting the two independently is what let a
+> 60-second loop quietly undo a 5-minute one.
+>
+> The consequence is real and accepted: a notification can now sit for up to
+> ten minutes before its first attempt.
 
 Up to **six deliveries are attempted concurrently** (`DELIVERY_CONCURRENCY`).
 Not fifty: these are outbound provider calls, and the point is to stop one
@@ -227,6 +251,13 @@ message.
 **Backoff** is `min(60 × n², 3600)` seconds — ~1m, 4m, 9m, 16m, 25m. Squared
 rather than doubled so the early retries, which catch most transient failures,
 stay close together without the tail running away.
+
+Those are the times a row becomes *due*, not when it is *tried*: a retry cannot
+fire before the next sweep, so with a 10-minute interval the early steps are
+effectively rounded up to it and the schedule reads more like 10m, 10m, 10m,
+20m, 30m. The squaring still matters for the tail; it no longer buys anything
+at the front. Worth knowing before concluding a retry "didn't happen" — check
+`next_attempt_at` against the sweep clock, not against the wall clock.
 
 **SKIPPED is never SENT.** This matters most for WhatsApp: a message not sent
 because no provider is configured is not a delivery, and the row says so.

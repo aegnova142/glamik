@@ -45,6 +45,7 @@ process.env.DATABASE_URL = 'postgres://envconfig:unused@127.0.0.1:1/envconfig_ne
 
 const { emailCodePolicy, EMAIL_CODE_LENGTH } = await import('../services/emailVerification.service');
 const { otpPolicy } = await import('../services/otp.service');
+const { emailDeliveryEnabled, __resetMailTransportForTests } = await import('../services/mailer');
 
 let passed = 0;
 let failed = 0;
@@ -67,6 +68,11 @@ const TOUCHED = [
   'EMAIL_CODE_MAX_ATTEMPTS',
   'EMAIL_CODE_RESEND_COOLDOWN_SECONDS',
   'OTP_EXPIRY_SECONDS',
+  'SMTP_HOST',
+  'SMTP_USER',
+  'SMTP_PASS',
+  'EMAIL_DELIVERY_DISABLED',
+  'NODE_ENV',
 ] as const;
 
 const saved = new Map<string, string | undefined>();
@@ -202,8 +208,75 @@ function main(): void {
 
   restore();
 
+  // ==========================================
+  // 5. THE SMTP GATE MUST FAIL CLOSED
+  //
+  // This gate once asked only "are the three variables non-empty". A
+  // deployment that copied .env.example without filling the mail block in
+  // answered yes — SMTP_HOST was the literal `smtp.example.com` — so a real
+  // transport was built and every message died on `getaddrinfo ENOTFOUND`
+  // after burning five retries. Production carried three such FAILED rows from
+  // 2026-10-14 and nobody noticed, because a failed delivery and a mail server
+  // that never existed look identical in the table.
+  //
+  // Half-filled config has to read as UNCONFIGURED, so the channel skips with
+  // a reason instead of failing with one.
+  // ==========================================
+  section('5. SMTP placeholders count as unconfigured');
+  {
+    // The gate also closes under NODE_ENV=test and EMAIL_DELIVERY_DISABLED,
+    // which are covered in delhivery.e2e.ts. Both are neutralised here so what
+    // is measured is the placeholder rule alone.
+    set('NODE_ENV', 'development');
+    set('EMAIL_DELIVERY_DISABLED', undefined);
+
+    /** The transport is cached, so the cache has to go between cases. */
+    const gateWith = (host?: string, user?: string, pass?: string): boolean => {
+      set('SMTP_HOST', host);
+      set('SMTP_USER', user);
+      set('SMTP_PASS', pass);
+      __resetMailTransportForTests();
+      return emailDeliveryEnabled();
+    };
+
+    const REAL = ['smtp.sendgrid.net', 'apikey', 'SG.real-looking-not-a-secret'] as const;
+
+    check('real-looking credentials open the gate', gateWith(...REAL) === true);
+
+    // The exact trio .env.example used to ship — the case that actually bit.
+    check(
+      'the shipped .env.example block does NOT',
+      gateWith('smtp.example.com', 'apikey_or_username', 'smtp_password_or_api_key') === false
+    );
+
+    check('an unset block does not', gateWith(undefined, undefined, undefined) === false);
+    check('an empty-string block does not', gateWith('', '', '') === false);
+    check('whitespace is not a credential', gateWith('   ', '  ', ' ') === false);
+
+    // RFC 2606 reserves the example domains, so no real mail host can end in
+    // one. Matching the suffix catches every copied template, not just ours.
+    check('any .example.com host is rejected', gateWith('mail.example.com', ...REAL.slice(1)) === false);
+    check('and .example.org / .example.net too', gateWith('smtp.example.net', ...REAL.slice(1)) === false);
+    check('a bare "example.com" host is rejected', gateWith('example.com', ...REAL.slice(1)) === false);
+
+    // The suffix rule must not swallow a legitimate host that merely contains
+    // the word — `example.com.br` and `myexample.com` are real-world shapes.
+    check('but a host that only CONTAINS "example" is fine', gateWith('smtp.myexample.com', ...REAL.slice(1)) === true);
+    check('and a different TLD after it is fine', gateWith('smtp.example.com.br', ...REAL.slice(1)) === true);
+
+    // One placeholder anywhere is enough — a partial block is not a config.
+    check('a placeholder USER alone closes it', gateWith(REAL[0], 'apikey_or_username', REAL[2]) === false);
+    check('a placeholder PASS alone closes it', gateWith(REAL[0], REAL[1], 'smtp_password_or_api_key') === false);
+    check('placeholder matching ignores case', gateWith(REAL[0], 'APIKEY_OR_USERNAME', REAL[2]) === false);
+
+    __resetMailTransportForTests();
+  }
+
+  restore();
+  __resetMailTransportForTests();
+
   // The suite must not leak its own settings into whatever runs next.
-  section('5. The environment is left as it was found');
+  section('6. The environment is left as it was found');
   {
     const clean = TOUCHED.every((k) => process.env[k] === saved.get(k));
     check('every variable this suite touched is restored', clean);

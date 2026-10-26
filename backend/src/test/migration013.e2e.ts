@@ -8,6 +8,18 @@
  * thing that actually matters: that the backfilled rows make the order state
  * machine work again.
  *
+ * REQUIRES A HAND-BUILT FIXTURE DATABASE. Unlike the other suites this one
+ * seeds nothing: it reads orders `GLM-DUP`/`GLM-DEL`/`GLM-CAN`/`GLM-RTO`/
+ * `GLM-GONE` and an inventory row for `lipstick`, which have to exist BEFORE
+ * migration 013 runs so that its backfill is what produces the reservations
+ * being asserted on. Nothing in the repository creates them.
+ *
+ * So on a database freshly migrated from 001 to HEAD there is nothing to
+ * backfill and this fails at the first check with `0` reservations, then
+ * crashes reading `available_stock` of an absent `lipstick` row. That is the
+ * fixture missing, NOT a regression in the inventory code — worth knowing
+ * before chasing it.
+ *
  * Before 013, an in-flight order had reserved_stock behind it but no
  * reservation rows — so cancelling released nothing and the stock was stranded
  * in `reserved` forever, and delivering committed nothing so it never became

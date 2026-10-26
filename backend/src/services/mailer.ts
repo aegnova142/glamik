@@ -42,8 +42,39 @@ function deliverySuppressed(): boolean {
   return process.env.NODE_ENV === 'test' || process.env.EMAIL_DELIVERY_DISABLED === 'true';
 }
 
+/**
+ * The values .env.example ships, which are NOT credentials.
+ *
+ * This gate used to ask only "are the three variables non-empty", and a
+ * deployment that copied .env.example without filling the mail block in
+ * answered yes: SMTP_HOST was the literal `smtp.example.com`. So a real
+ * transport was built, every send failed with `getaddrinfo ENOTFOUND
+ * smtp.example.com`, the failure was retryable, and each message burned five
+ * attempts before landing in FAILED. Production carried three of those from
+ * 2026-10-14 and nobody saw them, because nothing distinguishes "the mail
+ * server rejected us" from "there was never a mail server".
+ *
+ * Failing CLOSED is the honest answer to a half-filled config: with no
+ * transport the channel reports `skip` with a reason that names the cause, the
+ * row says SKIPPED rather than FAILED, and no socket is opened. An operator
+ * reading notification_deliveries then sees the truth — email was never set up
+ * here — instead of a delivery problem that does not exist.
+ *
+ * `.example.com`/`.example.org`/`.example.net` are reserved by RFC 2606 and can
+ * never be a real mail host, so matching the suffix catches the whole family of
+ * copied-template hosts rather than just the one string we happened to ship.
+ */
+const SMTP_PLACEHOLDERS = new Set(['apikey_or_username', 'smtp_password_or_api_key']);
+
+function isPlaceholder(value: string | undefined): boolean {
+  const v = (value || '').trim();
+  if (!v) return true;
+  if (SMTP_PLACEHOLDERS.has(v.toLowerCase())) return true;
+  return /(^|\.)example\.(com|org|net)$/i.test(v);
+}
+
 function smtpConfigured(): boolean {
-  return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  return ![process.env.SMTP_HOST, process.env.SMTP_USER, process.env.SMTP_PASS].some(isPlaceholder);
 }
 
 /**

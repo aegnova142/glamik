@@ -90,11 +90,52 @@ templates and a broken email body is caught by the suite instead of in productio
 
 ## Database
 
+Production is **Neon** (serverless Postgres 18), reached over the pooler
+endpoint.
+
 Auto-migration is decided by the **target URL, not `NODE_ENV`**. The case that
 went wrong twice was `NODE_ENV=development` on a laptop whose `.env` pointed at
 production. A remote host is assumed production and refuses to auto-migrate;
 `ALLOW_REMOTE_AUTO_MIGRATE=true` is the explicit opt-in for a genuine remote
 dev/staging database, and it cannot override an explicit `DATABASE_ENV=production`.
+
+### The idle window — read this before adding a periodic job
+
+A serverless Postgres suspends its compute after a fixed idle window — **five
+minutes on Neon**. Cost is driven by whether that window is ever reached, not
+by how expensive each query is. So:
+
+> **Every recurring job that touches the database must run less often than the
+> provider's idle window.** One loop that doesn't is enough to keep the compute
+> awake for all of them.
+
+This is enforced by a single `SWEEP_INTERVAL_MS` (10 minutes) in `server.ts`,
+shared by the reconciliation sweep and the notification outbox worker. It is
+deliberately one constant rather than a per-job setting: independent intervals
+are exactly how a 60-second loop silently undid a 5-minute one.
+
+Ten and not five — five *equals* the window, so a sweep lands just as it is
+about to be reached and resets it. Clear the window, don't match it.
+
+**What happens if you get this wrong**, from the 2026-10-23 outage: the outbox
+worker was on 60 seconds, the compute never slept, the account exhausted its
+allowance, and Neon began refusing every connection with `SQLSTATE 53000` —
+including `SELECT 1`. The running process kept serving from its established
+pool, so the site returned 200 while every database-backed feature failed. It
+stayed invisible for three days, until a restart put the boot-time schema check
+in front of a database that would no longer answer and the site went to 502.
+
+Two lessons worth keeping: a healthy HTTP status is not a healthy application,
+and quota exhaustion is a *latent* failure that detonates on the next restart.
+
+The jobs currently in `server.ts`, all clear of the window:
+
+| Job | Interval |
+|---|---|
+| Scheduled account deletions | 24 h |
+| Inventory consistency check | 1 h |
+| Reconciliation sweep | `SWEEP_INTERVAL_MS` (10 min) |
+| Notification outbox worker | `SWEEP_INTERVAL_MS` (10 min) |
 
 ## Runbook
 
@@ -135,17 +176,60 @@ unreachable from where you are, `dns.lookup` may pick it and fail. Resolve IPv4
 explicitly and keep `servername` set to the original host — Neon routes by SNI,
 so dropping it reaches the wrong project.
 
+### When the database refuses every connection
+
+Symptom: `SQLSTATE 53000`, *"Your account or project has exceeded the quota."*
+It comes from Neon's proxy, so the network and the connection string are fine —
+this is an account-level flag, not a routing problem.
+
+Confirm it is account-wide rather than endpoint-specific before doing anything
+else: run a bare `SELECT 1` against **both** the pooler host and the same host
+with `-pooler` removed. If both refuse, no connection-string change will help.
+
+What does *not* work: `pg_dump` (it needs a connection, so the data cannot be
+exported out of the problem), restoring an old dump over production (you would
+be overwriting live data with stale data), and waiting quietly — the compute
+stays suspended.
+
+What works: clear the quota, either by upgrading the plan or by waiting for the
+allowance to reset at the start of the next calendar month. The data is
+suspended, never deleted; access returns intact.
+
+Two things to be careful about while it is down:
+
+- **A running process can mask it completely.** The boot-time schema check runs
+  once at startup, so a process that started before the quota hit keeps serving
+  from its established pool and the site still returns 200. The outage only
+  becomes visible on the next restart. Do not read a healthy homepage as a
+  healthy database — check `logs/glamirk-error.log` for `53000`.
+- **Do not cut over to a replacement database to "get the site up".** It
+  produces a storefront with no catalogue while Razorpay is live, and every
+  order taken on the replacement then has to be reconciled by hand against the
+  originals. If the outage must be visible to customers, a maintenance page is
+  the cheaper mistake.
+
+Afterwards, find the loop that caused it — see **The idle window** above.
+
 ## Current production state
 
-As of the Delhivery go-live:
+Verified on the VPS, 2026-10-26:
 
 | | |
 |---|---|
+| Database | **Neon**, Postgres 18.6, paid plan, pooler endpoint |
 | `DELHIVERY_LIVE_MODE` | `true` |
 | `DELHIVERY_PICKUP_NAME` | `GLAMIRK BEAUTY PRIVATE LIMITED` |
 | Delhivery API | verified — shipment, pickup and label all succeed |
 | Scan Push | **not yet enabled by Delhivery** |
-| Razorpay | **not configured** — COD only |
-| SMTP | **not configured** — no order emails |
-| OTP (SMS/WhatsApp) | **not configured** — no mobile sign-in |
-| Inventory | legacy authoritative, SQL mirrored |
+| Razorpay | **LIVE** (`rzp_live_` key) — real payments are processed |
+| OTP sign-in | **live** — `SMS_PROVIDER=firebase`, Firebase Phone Auth |
+| WhatsApp | **not configured** — `WHATSAPP_ACCESS_TOKEN` empty, so WhatsApp OTP and order messages are `SKIPPED`, not failed |
+| SMTP | **not configured** — `SMTP_HOST` is still the `smtp.example.com` placeholder, so no order emails go out |
+| Inventory | legacy authoritative, SQL mirrored (`INVENTORY_SQL_MODE` unset) |
+
+Two of these are worth not misreading. **Razorpay is live**, so anything
+purchasable on the storefront can take a real payment — there is no sandbox
+between a test product and a customer's card. And **SMTP is not live**: the
+notification outbox will mark email deliveries `SKIPPED` rather than failing,
+which is honest but easy to mistake for "sent" when scanning
+`notification_deliveries`.

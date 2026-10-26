@@ -267,7 +267,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   return (
     <MotionConfig reducedMotion="user">
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0B0B]/80 backdrop-blur-sm">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -283,13 +282,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           tabIndex={-1}
           initial={{ opacity: 0, scale: 0.97, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          // Capped at the viewport and scrolled INSIDE, by the form column
-          // only. Letting the overlay scroll instead is what put the heading
-          // and the terms out of reach: a centred child taller than its
-          // scroll container has its top overflow clipped unreachably, so the
-          // form opened already cut off at both ends.
-          className="relative w-full max-w-md sm:max-w-3xl max-h-[var(--auth-modal-max-h)] bg-[#171717] border border-[#E8D5A8]/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col sm:flex-row sm:items-stretch"
           transition={{ duration: 0.28, ease: [0.2, 0.7, 0.2, 1] }}
           className="relative w-full max-w-[var(--auth-modal-w)] my-auto bg-[radial-gradient(120%_60%_at_50%_0%,#161412_0%,var(--auth-bg)_55%)] border-[1.5px] border-[var(--auth-border)] rounded-[var(--auth-radius-modal)] shadow-[var(--auth-shadow)] overflow-hidden font-sans text-[var(--auth-text)] focus:outline-none"
         >
@@ -299,27 +291,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            // The icon carries no text, so without this the control is
-            // announced as an unlabelled button.
-            aria-label="Close"
-            // Opaque, because the form now scrolls UNDER this button — left
-            // transparent it sat on top of the number field and the two read
-            // as one smudge. The two backgrounds are the panel it actually
-            // overlaps at each breakpoint: the dark header when stacked, the
-            // form column once they sit side by side.
-            className="absolute top-4 right-4 p-2 rounded-full bg-[#0B0B0B] sm:bg-[#171717] text-[#6B6B6B] hover:text-[#FAF9F6] hover:bg-[#0B0B0B] transition-colors cursor-pointer z-10"
             aria-label="Close sign in"
             className="auth-focus absolute top-4 right-4 sm:top-6 sm:right-6 z-20 p-2 rounded-full text-[var(--auth-text)] hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer"
           >
             <X className="w-6 h-6" strokeWidth={1.75} />
           </button>
 
-          {/* Left panel: why signing in is worth it. Static — it carries no
-              state and no controls, so on a phone it collapses to a compact
-              header instead of pushing the form below the fold. */}
-          <div className="shrink-0 sm:w-[44%] bg-[#0B0B0B] border-b sm:border-b-0 sm:border-r border-[#E8D5A8]/20 p-6 sm:p-8 sm:flex sm:flex-col sm:justify-center">
-            <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-[#C9972B]">
-              GLAMIRK ATELIER
           {/* Header */}
           <div className="relative z-10 px-9 sm:px-20 pt-9 sm:pt-[34px] pb-6 sm:pb-[22px] text-center border-b border-[var(--auth-divider)]">
             <span className="block text-xs sm:text-[13px] font-medium uppercase tracking-[0.28em] sm:tracking-[0.32em] text-[var(--auth-gold)]">
@@ -334,24 +311,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <p id="auth-modal-desc" className="text-[15px] sm:text-[17px] text-[#D9D4CD] mt-2 leading-snug">
               {customerFormMode === 'forgot'
                 ? 'We’ll help you get back into your account'
-                : 'Access your orders, saved shades and rewards'}
-            </p>
-          </div>
-
-          {/* Right panel: the form itself, and the only part that scrolls —
-              min-h-0 so it may shrink below its content inside the flex
-              column rather than stretching the modal past the viewport. */}
-          <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">
-          <div className="px-6 pt-6 sm:pt-8">
-            <h3 className="font-serif text-lg text-[#FAF9F6]">
-              {customerFormMode === 'forgot' ? 'Reset your password' : 'Log in for the best experience'}
-            </h3>
-            <p className="text-xs text-[#6B6B6B] mt-1">
-              {customerFormMode === 'forgot'
-                ? 'Enter the email address on your account'
-                : customerFormMode === 'otp'
-                  ? 'Enter your phone number to continue'
-                  : 'Continue with your email ID'}
                 : 'Access your beauty profile, saved shades, and Privé points'}
             </p>
           </div>

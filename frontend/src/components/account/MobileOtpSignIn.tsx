@@ -70,6 +70,28 @@ const OTP_LENGTH = 6;
 /** Session-scoped on purpose: a sign-in attempt should not outlive the tab. */
 const CHALLENGE_STORAGE_KEY = 'glamirk_otp_challenge';
 
+/**
+ * How long a Firebase code is treated as live, and how soon a new one may be
+ * asked for.
+ *
+ * Firebase owns the real windows and neither is 60 seconds. The code is good
+ * for far longer than that, and the countdown starts the moment
+ * signInWithPhoneNumber resolves — which is BEFORE the SMS leaves Google.
+ * Showing the server-side path's 60-second expiry here meant a customer who
+ * waited ten seconds for the message and then typed six digits watched the
+ * boxes disable themselves under a perfectly valid code: the OTP arrived and
+ * sign-in was impossible. Ten minutes is comfortably inside Google's window
+ * and still short enough to be an expiry.
+ *
+ * The resend cooldown stays at 60s to match OTP_RESEND_COOLDOWN_SECONDS, so
+ * the two paths throttle alike — but it is no longer also the deadline.
+ */
+const FIREBASE_CODE_TTL_MS = 10 * 60_000;
+const FIREBASE_RESEND_COOLDOWN_MS = 60_000;
+
+/** Marks the Firebase path's stand-in challenge. Never a server challenge id. */
+const FIREBASE_CHALLENGE_ID = 'firebase';
+
 type Step = 'phone' | 'method' | 'code';
 
 interface PersistedChallenge {
@@ -181,7 +203,10 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
   const restored = useMemo(() => {
     const saved = readPersisted();
     if (!saved) return null;
-    const live = new Date(saved.expiresAt).getTime() > Date.now() || new Date(saved.resendAvailableAt).getTime() > Date.now();
+    const live =
+      saved.challengeId !== FIREBASE_CHALLENGE_ID &&
+      (new Date(saved.expiresAt).getTime() > Date.now() ||
+        new Date(saved.resendAvailableAt).getTime() > Date.now());
     if (!live) {
       // Challenge is dead and resend is already free — nothing to resume, but
       // the number is still worth keeping so they don't retype it.
@@ -348,10 +373,11 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
             success: true,
             // Firebase owns the real windows; these drive the same countdown
             // UI the server-side path uses so the screen behaves identically.
-            challengeId: 'firebase',
+            // They are NOT the same two numbers — see FIREBASE_CODE_TTL_MS.
+            challengeId: FIREBASE_CHALLENGE_ID,
             maskedPhone: `${countryCode} ${'*'.repeat(Math.max(0, phone.replace(/\D/g, '').length - 4))}${phone.replace(/\D/g, '').slice(-4)}`,
-            expiresAt: new Date(Date.now() + 60_000).toISOString(),
-            resendAvailableAt: new Date(Date.now() + 60_000).toISOString(),
+            expiresAt: new Date(Date.now() + FIREBASE_CODE_TTL_MS).toISOString(),
+            resendAvailableAt: new Date(Date.now() + FIREBASE_RESEND_COOLDOWN_MS).toISOString(),
           } as Awaited<ReturnType<typeof requestOtp>>)
         : await requestOtp({ phone, countryCode, method: chosen });
       setSending(false);
@@ -390,7 +416,12 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
       setStep('code');
       if (isResend) setNotice('A new OTP has been sent.');
 
-      if (result.challengeId) {
+      // Only the server-side challenge is resumable. Firebase's half of the
+      // challenge is the ConfirmationResult, which lives in a ref and cannot be
+      // serialised — persisting the stand-in id would restore the code screen
+      // after a refresh with nothing behind it, so every digit typed there was
+      // answered with "this sign-in attempt has expired".
+      if (result.challengeId && result.challengeId !== FIREBASE_CHALLENGE_ID) {
         writePersisted({
           challengeId: result.challengeId,
           maskedPhone: result.maskedPhone || fullNumberForDisplay,
@@ -404,7 +435,7 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
 
       window.setTimeout(() => inputsRef.current[0]?.focus(), 50);
     },
-    [countryCode, phone, requestOtp, fullNumberForDisplay, smsAvailable]
+    [countryCode, phone, requestOtp, fullNumberForDisplay, smsAvailable, firebaseMode]
   );
 
   // ------------------------------------------
@@ -467,7 +498,10 @@ export const MobileOtpSignIn: React.FC<MobileOtpSignInProps> = ({
       setSucceeded(true);
       window.setTimeout(() => onSuccess({ isNewAccount: !!result.isNewAccount }), 700);
     },
-    [challengeId, remember, verifyOtp, verifying, onSuccess]
+    // phone/countryCode are read inside the Firebase branch, so they belong
+    // here: without them a number corrected through Edit could be verified
+    // against the one typed before it.
+    [challengeId, remember, verifyOtp, verifying, onSuccess, firebaseMode, phone, countryCode, verifyFirebaseToken]
   );
 
   const setDigit = (index: number, raw: string) => {
